@@ -19,18 +19,29 @@ def recuento(
     sexo: int | None = Query(None),
     fecha_desde: date | None = Query(None),
     fecha_hasta: date | None = Query(None),
+    edad_min: int | None = Query(None),
+    edad_max: int | None = Query(None),
 ):
     con = request.app.state.con
+    edad = "date_part('year', age(current_date, p.fecha_nacimiento))"
     total = con.execute(
-        """
+        f"""
         SELECT COUNT(DISTINCT p.ipf)
         FROM personas p
         JOIN afiliacion a ON p.ipf = a.ipf
         WHERE (? IS NULL OR p.sexo = ?)
           AND (? IS NULL OR a.fecha_alta_real_afil >= ?)
           AND (? IS NULL OR a.fecha_alta_real_afil <= ?)
+          AND (? IS NULL OR {edad} >= ?)
+          AND (? IS NULL OR {edad} <= ?)
         """,
-        [sexo, sexo, fecha_desde, fecha_desde, fecha_hasta, fecha_hasta],
+        [
+            sexo, sexo,
+            fecha_desde, fecha_desde,
+            fecha_hasta, fecha_hasta,
+            edad_min, edad_min,
+            edad_max, edad_max,
+        ],
     ).fetchone()[0]
 
     return {
@@ -38,6 +49,8 @@ def recuento(
             "sexo": sexo,
             "fecha_desde": fecha_desde,
             "fecha_hasta": fecha_hasta,
+            "edad_min": edad_min,
+            "edad_max": edad_max,
         },
         "recuento": total,
     }
