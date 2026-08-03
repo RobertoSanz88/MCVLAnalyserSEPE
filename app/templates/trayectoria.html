@@ -17,8 +17,9 @@
             return {
                 x: [ep.inicio, ep.fin || hoy],
                 y: [fila, fila],
-                mode: "lines",
+                mode: "lines+markers",
                 line: { width: 20 },
+                marker: { size: 14 },
                 name: fila,
                 text: "Contrato: " + (ep.tipo_contrato ?? "?") +
                       "<br>Regimen: " + (ep.regimen ?? "?") +
@@ -31,6 +32,7 @@
             title: "Episodios de afiliacion",
             xaxis: { type: "date" },
             yaxis: { type: "category", autorange: "reversed" },
+            margin: { l: 180 },
             showlegend: false,
         });
     </script>
