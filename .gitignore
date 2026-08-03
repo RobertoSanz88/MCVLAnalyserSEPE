@@ -1,5 +1,6 @@
 data/
 build/dist/
+build/work/
 *.parquet
 .env
 __pycache__/
