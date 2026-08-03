@@ -21,6 +21,7 @@ def recuento(
     fecha_hasta: date | None = Query(None),
     edad_min: int | None = Query(None),
     edad_max: int | None = Query(None),
+    provincia: int | None = Query(None),
 ):
     con = request.app.state.con
     edad = "date_part('year', age(current_date, p.fecha_nacimiento))"
@@ -34,6 +35,7 @@ def recuento(
           AND (? IS NULL OR a.fecha_alta_real_afil <= ?)
           AND (? IS NULL OR {edad} >= ?)
           AND (? IS NULL OR {edad} <= ?)
+          AND (? IS NULL OR a.provincia_domic_cc_ppal = ?)
         """,
         [
             sexo, sexo,
@@ -41,6 +43,7 @@ def recuento(
             fecha_hasta, fecha_hasta,
             edad_min, edad_min,
             edad_max, edad_max,
+            provincia, provincia,
         ],
     ).fetchone()[0]
 
@@ -51,6 +54,7 @@ def recuento(
             "fecha_hasta": fecha_hasta,
             "edad_min": edad_min,
             "edad_max": edad_max,
+            "provincia": provincia,
         },
         "recuento": total,
     }
