@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Trayectoria IPF {{ ipf }}</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+    <h1>Trayectoria laboral &mdash; IPF {{ ipf }}</h1>
+    <div id="gantt"></div>
+    <script>
+        const episodios = {{ episodios_json | safe }};
+        const hoy = new Date().toISOString().slice(0, 10);
+
+        const traces = episodios.map((ep) => ({
+            x: [ep.inicio, ep.fin || hoy],
+            y: [ep.empresa, ep.empresa],
+            mode: "lines",
+            line: { width: 20 },
+            name: ep.empresa,
+            text: "Contrato: " + (ep.tipo_contrato ?? "?") +
+                  "<br>Regimen: " + (ep.regimen ?? "?") +
+                  "<br>Grupo cotizacion: " + (ep.grupo_cotizacion ?? "?"),
+            hoverinfo: "text+x",
+        }));
+
+        Plotly.newPlot("gantt", traces, {
+            title: "Episodios de afiliacion",
+            xaxis: { type: "date" },
+            showlegend: false,
+        });
+    </script>
+</body>
+</html>
