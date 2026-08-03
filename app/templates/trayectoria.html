@@ -12,21 +12,25 @@
         const episodios = {{ episodios_json | safe }};
         const hoy = new Date().toISOString().slice(0, 10);
 
-        const traces = episodios.map((ep) => ({
-            x: [ep.inicio, ep.fin || hoy],
-            y: [ep.empresa, ep.empresa],
-            mode: "lines",
-            line: { width: 20 },
-            name: ep.empresa,
-            text: "Contrato: " + (ep.tipo_contrato ?? "?") +
-                  "<br>Regimen: " + (ep.regimen ?? "?") +
-                  "<br>Grupo cotizacion: " + (ep.grupo_cotizacion ?? "?"),
-            hoverinfo: "text+x",
-        }));
+        const traces = episodios.map((ep, i) => {
+            const fila = (i + 1) + ". " + ep.empresa;
+            return {
+                x: [ep.inicio, ep.fin || hoy],
+                y: [fila, fila],
+                mode: "lines",
+                line: { width: 20 },
+                name: fila,
+                text: "Contrato: " + (ep.tipo_contrato ?? "?") +
+                      "<br>Regimen: " + (ep.regimen ?? "?") +
+                      "<br>Grupo cotizacion: " + (ep.grupo_cotizacion ?? "?"),
+                hoverinfo: "text+x",
+            };
+        });
 
         Plotly.newPlot("gantt", traces, {
             title: "Episodios de afiliacion",
             xaxis: { type: "date" },
+            yaxis: { type: "category", autorange: "reversed" },
             showlegend: false,
         });
     </script>
