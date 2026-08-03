@@ -22,6 +22,7 @@ def recuento(
     edad_min: int | None = Query(None),
     edad_max: int | None = Query(None),
     provincia: int | None = Query(None),
+    tipo_contrato: int | None = Query(None),
 ):
     con = request.app.state.con
     edad = "date_part('year', age(current_date, p.fecha_nacimiento))"
@@ -36,6 +37,7 @@ def recuento(
           AND (? IS NULL OR {edad} >= ?)
           AND (? IS NULL OR {edad} <= ?)
           AND (? IS NULL OR a.provincia_domic_cc_ppal = ?)
+          AND (? IS NULL OR a.tipo_contrato = ?)
         """,
         [
             sexo, sexo,
@@ -44,6 +46,7 @@ def recuento(
             edad_min, edad_min,
             edad_max, edad_max,
             provincia, provincia,
+            tipo_contrato, tipo_contrato,
         ],
     ).fetchone()[0]
 
@@ -55,6 +58,7 @@ def recuento(
             "edad_min": edad_min,
             "edad_max": edad_max,
             "provincia": provincia,
+            "tipo_contrato": tipo_contrato,
         },
         "recuento": total,
     }
