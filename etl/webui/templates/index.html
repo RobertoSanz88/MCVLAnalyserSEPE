@@ -4,18 +4,28 @@
     <meta charset="utf-8">
     <title>MCVL ETL</title>
     <style>
-        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
-        h1 { font-size: 1.4rem; }
-        fieldset { margin-bottom: 1.5rem; }
+        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem;
+               font-size: 1.15rem; }
+        h1 { font-size: 1.6rem; }
+        fieldset { margin-bottom: 1.5rem; font-size: 1rem; }
         label { display: inline-block; min-width: 11rem; }
-        input[type=text] { width: 22rem; }
+        input[type=text] { width: 22rem; font-size: 1rem; }
         .fila { margin-bottom: 0.5rem; }
         .acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
-        button { padding: 0.5rem 0.9rem; cursor: pointer; }
+        button { padding: 0.6rem 1rem; cursor: pointer; font-size: 1rem; }
         button.final { background: #2b5; color: white; font-weight: bold; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
-        #log { background: #111; color: #ddd; padding: 1rem; height: 24rem; overflow-y: auto;
-               font-family: ui-monospace, monospace; font-size: 0.85rem; white-space: pre-wrap; }
+        #barra-contenedor { background: #333; border-radius: 4px; height: 1.6rem; margin-bottom: 0.5rem;
+                             overflow: hidden; display: none; }
+        #barra { background: #2b5; height: 100%; width: 0%; transition: width 0.4s ease;
+                  color: white; font-size: 0.9rem; line-height: 1.6rem; text-align: center;
+                  white-space: nowrap; }
+        #barra.indeterminada { width: 40% !important; animation: mover 1.4s infinite linear;
+                                background: repeating-linear-gradient(45deg, #2b5, #2b5 10px, #1a3 10px, #1a3 20px); }
+        @keyframes mover { from { margin-left: -40%; } to { margin-left: 100%; } }
+        #barra.error { background: #c33; animation: none; }
+        #log { background: #111; color: #ddd; padding: 1rem; height: 22rem; overflow-y: auto;
+               font-family: ui-monospace, monospace; font-size: 0.95rem; white-space: pre-wrap; }
         .ok { color: #6f6; } .err { color: #f66; }
     </style>
 </head>
@@ -41,6 +51,7 @@
         <button class="final" onclick="ejecutar('personas_extendida')">Construir tabla personas extendida (Fase 3)</button>
     </div>
 
+    <div id="barra-contenedor"><div id="barra">0%</div></div>
     <div id="log">Esperando...</div>
 
 <script>
@@ -58,9 +69,49 @@ for (const c of campos) {
 }
 
 let fuenteActual = null;
+let terminadoLimpio = false;
+
+// Duracion aproximada (segundos) de cada grupo de la Fase 3, medida hoy en una ejecucion real
+// completa. Solo sirve para "personas_extendida": las 6 tablas individuales dependen del
+// tamanyo real de cada TXT en la maquina de turno, no hay forma fiable de estimarlas -> barra
+// indeterminada para esas.
+const ETAPAS_PERSONAS_EXTENDIDA = [
+    { marca: 'Bootstrap',        seg: 1 },
+    { marca: 'Grupo A',          seg: 18 },
+    { marca: 'Grupo B',          seg: 17 },
+    { marca: 'Grupo C',          seg: 23 },
+    { marca: 'Grupo D',          seg: 36 },
+    { marca: 'Grupo E',          seg: 189 },
+    { marca: 'Grupo F',          seg: 12 },
+    { marca: 'Grupo G',          seg: 96 },
+    { marca: 'Grupo H',          seg: 45 },
+];
+const TOTAL_SEGUNDOS = ETAPAS_PERSONAS_EXTENDIDA.reduce((s, e) => s + e.seg, 0);
+// % acumulado a la ENTRADA de cada etapa
+let acumulado = 0;
+for (const etapa of ETAPAS_PERSONAS_EXTENDIDA) {
+    etapa.pctInicio = (acumulado / TOTAL_SEGUNDOS) * 100;
+    acumulado += etapa.seg;
+}
+
+function actualizarBarraPesada(linea) {
+    for (const etapa of ETAPAS_PERSONAS_EXTENDIDA) {
+        if (linea.includes(etapa.marca)) {
+            fijarBarra(etapa.pctInicio);
+            return;
+        }
+    }
+}
+
+function fijarBarra(pct) {
+    const barra = document.getElementById('barra');
+    barra.style.width = pct.toFixed(0) + '%';
+    barra.textContent = pct.toFixed(0) + '%';
+}
 
 function ejecutar(accion) {
     if (fuenteActual) fuenteActual.close();
+    terminadoLimpio = false;
 
     const raw = encodeURIComponent(document.getElementById('raw').value);
     const parquet = encodeURIComponent(document.getElementById('parquet').value);
@@ -78,25 +129,47 @@ function ejecutar(accion) {
     const log = document.getElementById('log');
     log.textContent = `=== ${accion} ===\n`;
 
+    const contenedor = document.getElementById('barra-contenedor');
+    const barra = document.getElementById('barra');
+    contenedor.style.display = 'block';
+    barra.classList.remove('error');
+    const esPersonasExtendida = accion === 'personas_extendida';
+    barra.classList.toggle('indeterminada', !esPersonasExtendida);
+    fijarBarra(0);
+
     const url = `/ejecutar?accion=${accion}&raw=${raw}&parquet=${parquet}&year=${year}&borrar_txt=${borrarTxt}`;
     fuenteActual = new EventSource(url);
 
     fuenteActual.onmessage = (ev) => {
         log.textContent += ev.data + '\n';
         log.scrollTop = log.scrollHeight;
+        if (esPersonasExtendida) actualizarBarraPesada(ev.data);
     };
 
     fuenteActual.addEventListener('fin', (ev) => {
+        terminadoLimpio = true;
         log.textContent += (ev.data === 'OK' ? '\n✔ ' : '\n✘ ') + ev.data + '\n';
         log.scrollTop = log.scrollHeight;
         botones.forEach(b => b.disabled = false);
+        barra.classList.remove('indeterminada');
+        if (ev.data === 'OK') {
+            fijarBarra(100);
+        } else {
+            barra.classList.add('error');
+        }
         fuenteActual.close();
         fuenteActual = null;
     });
 
     fuenteActual.onerror = () => {
+        // EventSource dispara onerror tambien cuando el servidor cierra la conexion de forma
+        // normal al terminar el stream (no tiene una senyal de "hemos acabado, no reconectes").
+        // Si ya nos llego el evento 'fin', este error es ese cierre normal, no un fallo real.
+        if (terminadoLimpio) return;
         log.textContent += '\n✘ Conexión perdida con el servidor.\n';
         botones.forEach(b => b.disabled = false);
+        barra.classList.remove('indeterminada');
+        barra.classList.add('error');
         if (fuenteActual) fuenteActual.close();
         fuenteActual = null;
     };
