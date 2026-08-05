@@ -90,31 +90,54 @@ const ETAPAS_PERSONAS_EXTENDIDA = [
     { marca: 'Grupo H',          seg: 45 },
 ];
 const TOTAL_SEGUNDOS = ETAPAS_PERSONAS_EXTENDIDA.reduce((s, e) => s + e.seg, 0);
-// % acumulado a la ENTRADA de cada etapa
+// % acumulado a la ENTRADA y a la SALIDA de cada etapa
 let acumulado = 0;
 for (const etapa of ETAPAS_PERSONAS_EXTENDIDA) {
     etapa.pctInicio = (acumulado / TOTAL_SEGUNDOS) * 100;
     acumulado += etapa.seg;
+    etapa.pctFin = (acumulado / TOTAL_SEGUNDOS) * 100;
 }
+
+// Mientras dura una etapa, la barra avanza sola con el tiempo (no solo salta al llegar la
+// siguiente marca): interpola desde el % de inicio de la etapa hasta su % de fin segun el
+// tiempo transcurrido frente a la duracion esperada, tope en el 97% del tramo para no marcar
+// nunca la etapa como acabada antes de que llegue de verdad la siguiente marca (si tarda mas
+// de lo esperado, la barra se queda cerca del final del tramo esperando, no lo pasa).
+let etapaActual = null;
+let etapaInicioTs = null;
+let temporizador = null;
 
 function actualizarBarraPesada(linea) {
     for (const etapa of ETAPAS_PERSONAS_EXTENDIDA) {
         if (linea.includes(etapa.marca)) {
+            etapaActual = etapa;
+            etapaInicioTs = Date.now();
             fijarBarra(etapa.pctInicio);
             return;
         }
     }
 }
 
+function tick() {
+    if (!etapaActual) return;
+    const transcurridoMs = Date.now() - etapaInicioTs;
+    const fraccion = Math.min(transcurridoMs / (etapaActual.seg * 1000), 0.97);
+    const pct = etapaActual.pctInicio + fraccion * (etapaActual.pctFin - etapaActual.pctInicio);
+    fijarBarra(pct);
+}
+
 function fijarBarra(pct) {
     const barra = document.getElementById('barra');
-    barra.style.width = pct.toFixed(0) + '%';
+    barra.style.width = pct.toFixed(1) + '%';
     barra.textContent = pct.toFixed(0) + '%';
 }
 
 function ejecutar(accion) {
     if (fuenteActual) fuenteActual.close();
+    if (temporizador) clearInterval(temporizador);
     terminadoLimpio = false;
+    etapaActual = null;
+    etapaInicioTs = null;
 
     const raw = encodeURIComponent(document.getElementById('raw').value);
     const parquet = encodeURIComponent(document.getElementById('parquet').value);
@@ -139,6 +162,7 @@ function ejecutar(accion) {
     const esPersonasExtendida = accion === 'personas_extendida';
     barra.classList.toggle('indeterminada', !esPersonasExtendida);
     fijarBarra(0);
+    if (esPersonasExtendida) temporizador = setInterval(tick, 200);
 
     const url = `/ejecutar?accion=${accion}&raw=${raw}&parquet=${parquet}&year=${year}&borrar_txt=${borrarTxt}`;
     fuenteActual = new EventSource(url);
@@ -151,6 +175,7 @@ function ejecutar(accion) {
 
     fuenteActual.addEventListener('fin', (ev) => {
         terminadoLimpio = true;
+        if (temporizador) { clearInterval(temporizador); temporizador = null; }
         log.textContent += (ev.data === 'OK' ? '\n✔ ' : '\n✘ ') + ev.data + '\n';
         log.scrollTop = log.scrollHeight;
         botones.forEach(b => b.disabled = false);
@@ -169,6 +194,7 @@ function ejecutar(accion) {
         // normal al terminar el stream (no tiene una senyal de "hemos acabado, no reconectes").
         // Si ya nos llego el evento 'fin', este error es ese cierre normal, no un fallo real.
         if (terminadoLimpio) return;
+        if (temporizador) { clearInterval(temporizador); temporizador = null; }
         log.textContent += '\n✘ Conexión perdida con el servidor.\n';
         botones.forEach(b => b.disabled = false);
         barra.classList.remove('indeterminada');
