@@ -1,64 +1,108 @@
-"""Constructor de colectivos: filtros + recuento de personas distintas.
+"""Constructor de colectivos por cruce de 2 filtros.
 
-Un colectivo es el conjunto de personas con al menos un episodio de
-afiliacion que cumple los filtros. Primer corte minimo: sexo y rango
-de fechas de alta. Mas filtros y estadisticas se anaden en commits
-sucesivos.
+Cada filtro define un colectivo (columna + criterio) y su complementario
+(el resto). Cruzando 2 filtros se obtienen 4 subgrupos, p.ej.:
+
+    filtro1 = nacionalidad_agrupado in ["espana"]   -> espanoles / extranjeros
+    filtro2 = sexo in ["2"]                          -> mujeres / hombres
+
+    subgrupos: espanoles+mujeres, espanoles+hombres,
+               extranjeros+mujeres, extranjeros+hombres
+
+Un filtro numerico usa un operador de comparacion (umbral y su
+complementario); un filtro categorico usa un conjunto de valores (esos
+valores y su complementario). Las estadisticas por subgrupo se anaden en
+un commit posterior.
 """
 
-from datetime import date
+from typing import Literal
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 router = APIRouter()
 
+# Columnas derivadas que no existen tal cual en el Parquet pero son utiles
+# como filtro (p.ej. "mayores de 45 anos" no es una columna real).
+COLUMNAS_VIRTUALES = {
+    "edad_actual": "date_part('year', age(current_date, fecha_nacimiento))",
+}
 
-@router.get("/colectivos/recuento")
-def recuento(
-    request: Request,
-    sexo: int | None = Query(None),
-    fecha_desde: date | None = Query(None),
-    fecha_hasta: date | None = Query(None),
-    edad_min: int | None = Query(None),
-    edad_max: int | None = Query(None),
-    provincia: int | None = Query(None),
-    tipo_contrato: int | None = Query(None),
-):
+
+class FiltroNumerico(BaseModel):
+    columna: str
+    tipo: Literal["numerica"] = "numerica"
+    operador: Literal[">=", ">", "<=", "<", "=="]
+    valor: float
+
+
+class FiltroCategorico(BaseModel):
+    columna: str
+    tipo: Literal["categorica"] = "categorica"
+    categorias: list[str]
+
+
+Filtro = FiltroNumerico | FiltroCategorico
+
+
+class SubgruposRequest(BaseModel):
+    filtro1: Filtro
+    filtro2: Filtro
+
+
+def _columnas_personas(con) -> dict[str, str]:
+    filas = con.execute("DESCRIBE personas").fetchall()
+    return {nombre: tipo for nombre, tipo, *_ in filas}
+
+
+def _columna_sql(nombre: str, columnas_validas: dict[str, str]) -> str:
+    if nombre in COLUMNAS_VIRTUALES:
+        return COLUMNAS_VIRTUALES[nombre]
+    if nombre not in columnas_validas:
+        raise HTTPException(400, f"Columna desconocida: {nombre}")
+    return nombre
+
+
+def _condicion_sql(filtro: Filtro, columnas_validas: dict[str, str]) -> tuple[str, list]:
+    col = _columna_sql(filtro.columna, columnas_validas)
+    if filtro.tipo == "numerica":
+        return f"{col} {filtro.operador} ?", [filtro.valor]
+    placeholders = ", ".join("?" for _ in filtro.categorias)
+    if not filtro.categorias:
+        raise HTTPException(400, "El filtro categorico necesita al menos una categoria")
+    return f"{col} IN ({placeholders})", list(filtro.categorias)
+
+
+@router.post("/colectivos/subgrupos")
+def subgrupos(request: Request, body: SubgruposRequest):
     con = request.app.state.con
-    edad = "date_part('year', age(current_date, p.fecha_nacimiento))"
-    total = con.execute(
-        f"""
-        SELECT COUNT(DISTINCT p.ipf)
-        FROM personas p
-        JOIN afiliacion a ON p.ipf = a.ipf
-        WHERE (? IS NULL OR p.sexo = ?)
-          AND (? IS NULL OR a.fecha_alta_real_afil >= ?)
-          AND (? IS NULL OR a.fecha_alta_real_afil <= ?)
-          AND (? IS NULL OR {edad} >= ?)
-          AND (? IS NULL OR {edad} <= ?)
-          AND (? IS NULL OR a.provincia_domic_cc_ppal = ?)
-          AND (? IS NULL OR a.tipo_contrato = ?)
-        """,
-        [
-            sexo, sexo,
-            fecha_desde, fecha_desde,
-            fecha_hasta, fecha_hasta,
-            edad_min, edad_min,
-            edad_max, edad_max,
-            provincia, provincia,
-            tipo_contrato, tipo_contrato,
-        ],
-    ).fetchone()[0]
+    columnas_validas = _columnas_personas(con)
+
+    cond1, params1 = _condicion_sql(body.filtro1, columnas_validas)
+    cond2, params2 = _condicion_sql(body.filtro2, columnas_validas)
+
+    # IS TRUE / IS NOT TRUE en vez de NOT(...) para que los NULL caigan
+    # siempre en el "no cumple" en lugar de desaparecer de ambos lados.
+    cumple1, no_cumple1 = f"(({cond1}) IS TRUE)", f"(({cond1}) IS NOT TRUE)"
+    cumple2, no_cumple2 = f"(({cond2}) IS TRUE)", f"(({cond2}) IS NOT TRUE)"
+
+    combos = {
+        "filtro1_si__filtro2_si": (cumple1, cumple2),
+        "filtro1_si__filtro2_no": (cumple1, no_cumple2),
+        "filtro1_no__filtro2_si": (no_cumple1, cumple2),
+        "filtro1_no__filtro2_no": (no_cumple1, no_cumple2),
+    }
+
+    resultados = {}
+    for nombre, (parte1, parte2) in combos.items():
+        total = con.execute(
+            f"SELECT COUNT(*) FROM personas WHERE {parte1} AND {parte2}",
+            params1 + params2,
+        ).fetchone()[0]
+        resultados[nombre] = total
 
     return {
-        "filtros": {
-            "sexo": sexo,
-            "fecha_desde": fecha_desde,
-            "fecha_hasta": fecha_hasta,
-            "edad_min": edad_min,
-            "edad_max": edad_max,
-            "provincia": provincia,
-            "tipo_contrato": tipo_contrato,
-        },
-        "recuento": total,
+        "filtro1": body.filtro1,
+        "filtro2": body.filtro2,
+        "subgrupos": resultados,
     }
