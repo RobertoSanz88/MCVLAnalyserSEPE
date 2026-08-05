@@ -11,8 +11,13 @@ Cada filtro define un colectivo (columna + criterio) y su complementario
 
 Un filtro numerico usa un operador de comparacion (umbral y su
 complementario); un filtro categorico usa un conjunto de valores (esos
-valores y su complementario). Las estadisticas por subgrupo se anaden en
-un commit posterior.
+valores y su complementario).
+
+Para cada subgrupo se calculan ademas estadisticas del resto de columnas
+de personas: numericas (media, desviacion, mediana) y categoricas
+(conteo y porcentaje por valor). Las columnas de fecha y las de tipo
+lista (historicos por anyo) no tienen una estadistica directa asi que se
+omiten.
 """
 
 from typing import Literal
@@ -27,6 +32,23 @@ router = APIRouter()
 COLUMNAS_VIRTUALES = {
     "edad_actual": "date_part('year', age(current_date, fecha_nacimiento))",
 }
+
+# Clasificacion de columnas de personas para las estadisticas por subgrupo.
+# TINYINT son codigos (sexo, provincia...) -> se tratan como categoricas,
+# no como numeros con los que tenga sentido calcular una media.
+TIPOS_NUMERICOS = {"DOUBLE", "INTEGER", "BIGINT", "FLOAT", "SMALLINT", "HUGEINT"}
+TIPOS_CATEGORICOS = {"VARCHAR", "BOOLEAN", "TINYINT"}
+
+
+def _clasificar_columnas(columnas: dict[str, str]) -> tuple[list[str], list[str]]:
+    numericas, categoricas = [], []
+    for nombre, tipo in columnas.items():
+        if tipo in TIPOS_NUMERICOS:
+            numericas.append(nombre)
+        elif tipo in TIPOS_CATEGORICOS:
+            categoricas.append(nombre)
+        # TIMESTAMP y los tipos lista (VARCHAR[], BIGINT[]) se omiten.
+    return numericas, categoricas
 
 
 class FiltroNumerico(BaseModel):
@@ -73,10 +95,60 @@ def _condicion_sql(filtro: Filtro, columnas_validas: dict[str, str]) -> tuple[st
     return f"{col} IN ({placeholders})", list(filtro.categorias)
 
 
+def _stats_numericas(con, where: str, params: list, columnas: list[str]) -> list[dict]:
+    if not columnas:
+        return []
+
+    def _limpio(c: str) -> str:
+        # Algunos promedios del ETL (num_altas_anual_promedio y similares) dan
+        # inf cuando dividen por 0 anyos. STDDEV_SAMP desborda con inf/nan de
+        # por medio, asi que se tratan como NULL en las estadisticas.
+        d = f"CAST({c} AS DOUBLE)"
+        return f"CASE WHEN isinf({d}) OR isnan({d}) THEN NULL ELSE {d} END"
+
+    select = ", ".join(
+        f"AVG({_limpio(c)}), STDDEV_SAMP({_limpio(c)}), MEDIAN({_limpio(c)})" for c in columnas
+    )
+    fila = con.execute(f"SELECT {select} FROM personas WHERE {where}", params).fetchone()
+    return [
+        {
+            "columna": columnas[i],
+            "media": fila[i * 3],
+            "desviacion": fila[i * 3 + 1],
+            "mediana": fila[i * 3 + 2],
+        }
+        for i in range(len(columnas))
+    ]
+
+
+def _stats_categoricas(con, where: str, params: list, columnas: list[str], total: int) -> list[dict]:
+    resultado = []
+    for c in columnas:
+        filas = con.execute(
+            f"SELECT {c}, COUNT(*) FROM personas WHERE {where} GROUP BY {c} ORDER BY 2 DESC",
+            params,
+        ).fetchall()
+        resultado.append(
+            {
+                "columna": c,
+                "valores": [
+                    {
+                        "valor": valor,
+                        "conteo": conteo,
+                        "porcentaje": round(100 * conteo / total, 1) if total else 0.0,
+                    }
+                    for valor, conteo in filas
+                ],
+            }
+        )
+    return resultado
+
+
 @router.post("/colectivos/subgrupos")
 def subgrupos(request: Request, body: SubgruposRequest):
     con = request.app.state.con
     columnas_validas = _columnas_personas(con)
+    numericas, categoricas = _clasificar_columnas(columnas_validas)
 
     cond1, params1 = _condicion_sql(body.filtro1, columnas_validas)
     cond2, params2 = _condicion_sql(body.filtro2, columnas_validas)
@@ -95,11 +167,14 @@ def subgrupos(request: Request, body: SubgruposRequest):
 
     resultados = {}
     for nombre, (parte1, parte2) in combos.items():
-        total = con.execute(
-            f"SELECT COUNT(*) FROM personas WHERE {parte1} AND {parte2}",
-            params1 + params2,
-        ).fetchone()[0]
-        resultados[nombre] = total
+        where = f"{parte1} AND {parte2}"
+        params = params1 + params2
+        total = con.execute(f"SELECT COUNT(*) FROM personas WHERE {where}", params).fetchone()[0]
+        resultados[nombre] = {
+            "recuento": total,
+            "numericas": _stats_numericas(con, where, params, numericas),
+            "categoricas": _stats_categoricas(con, where, params, categoricas, total),
+        }
 
     return {
         "filtro1": body.filtro1,
