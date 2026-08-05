@@ -479,3 +479,51 @@ def process_table(config, year, raw_root, parquet_folder):
     print("Guardado completado.")
 
     return df_final
+
+
+def process_table_grande(config, year, raw_root, parquet_folder, con, chunksize=100_000, borrar_txt=False):
+    """Version de process_table() para tablas multi-fichero que no caben enteras en RAM
+    (Afiliacion, Bases de cotizacion cuenta ajena): cada fichero se lee por trozos a un
+    parquet temporal (leer_csv_por_trozos_a_parquet) y los temporales se combinan con DuckDB
+    (combinar_temporales), que decide el tipo final de cada columna sobre el conjunto
+    completo sin cargar nada en pandas.
+
+    borrar_txt=False por defecto: en una maquina con RAM/disco de sobra no hace falta borrar
+    los TXT de origen para poder seguir. Se activa explicitamente solo si hace falta.
+    """
+    separador = "=" * 80
+    print(f"\n{separador}\nProcesando tabla (por trozos): {config['nombre']}\n{separador}")
+
+    rutas, faltantes = [], []
+    for template in config["file_templates"]:
+        nombre_esperado = template.format(year=year)
+        ruta = encontrar_fichero(raw_root, nombre_esperado)
+        (rutas if ruta else faltantes).append(ruta or nombre_esperado)
+    if faltantes:
+        raise FileNotFoundError(
+            f"No se han encontrado estos ficheros dentro de '{raw_root}': {faltantes}. "
+            f"Revisa que la carpeta de {year} contenga todos los ficheros esperados."
+        )
+
+    os.makedirs(parquet_folder, exist_ok=True)
+    columnas_fecha = tuple(
+        c for c in ("06 FECHA_ALTA_REAL_AFIL", "07 FECHA_BAJA_REAL_AFIL") if c in config["column_names"]
+    )
+
+    temps = []
+    for i, ruta in enumerate(rutas):
+        print(f"\n=== Fichero {i + 1}/{len(rutas)}: {os.path.basename(ruta)} ===")
+        temp_path = os.path.join(parquet_folder, f"_tmp_{config['output_parquet']}_part{i}.parquet")
+        leer_csv_por_trozos_a_parquet(ruta, config["column_names"], columnas_fecha, temp_path, chunksize=chunksize)
+        temps.append(temp_path)
+        if borrar_txt:
+            os.remove(ruta)
+            print(f"  TXT borrado: {ruta}")
+
+    print("\nCombinando temporales con DuckDB...")
+    output_path = os.path.join(parquet_folder, config["output_parquet"])
+    combinar_temporales(con, temps, output_path)
+    for t in temps:
+        os.remove(t)
+    print(f"Guardado: {output_path}")
+    return output_path

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>MCVL ETL</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { font-size: 1.4rem; }
+        fieldset { margin-bottom: 1.5rem; }
+        label { display: inline-block; min-width: 11rem; }
+        input[type=text] { width: 22rem; }
+        .fila { margin-bottom: 0.5rem; }
+        .acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+        button { padding: 0.5rem 0.9rem; cursor: pointer; }
+        button.final { background: #2b5; color: white; font-weight: bold; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #log { background: #111; color: #ddd; padding: 1rem; height: 24rem; overflow-y: auto;
+               font-family: ui-monospace, monospace; font-size: 0.85rem; white-space: pre-wrap; }
+        .ok { color: #6f6; } .err { color: #f66; }
+    </style>
+</head>
+<body>
+    <h1>MCVL ETL — construcción de Parquet</h1>
+    <p>Herramienta interna (no forma parte de la app de análisis). Cada botón lanza el paso correspondiente y muestra el progreso en vivo.</p>
+
+    <fieldset>
+        <legend>Configuración</legend>
+        <div class="fila"><label for="raw">Carpeta TXT brutos</label><input type="text" id="raw" placeholder="C:\ruta\a\MCVL 2024 TXT"></div>
+        <div class="fila"><label for="parquet">Carpeta de salida Parquet</label><input type="text" id="parquet" placeholder="C:\ruta\a\parquet"></div>
+        <div class="fila"><label for="year">Año</label><input type="text" id="year" value="2024" style="width:5rem"></div>
+        <div class="fila"><label for="borrar_txt">Borrar TXT tras procesar</label><input type="checkbox" id="borrar_txt"></div>
+    </fieldset>
+
+    <div class="acciones">
+        {% for id, nombre, destino in acciones %}
+        <button onclick="ejecutar('{{ id }}')" title="{{ destino }}">{{ nombre }}</button>
+        {% endfor %}
+        <button onclick="ejecutar('todas')">Construir todas</button>
+    </div>
+    <div class="acciones">
+        <button class="final" onclick="ejecutar('personas_extendida')">Construir tabla personas extendida (Fase 3)</button>
+    </div>
+
+    <div id="log">Esperando...</div>
+
+<script>
+const campos = ['raw', 'parquet', 'year', 'borrar_txt'];
+for (const c of campos) {
+    const el = document.getElementById(c);
+    const guardado = localStorage.getItem('mcvl_etl_' + c);
+    if (guardado !== null) {
+        if (el.type === 'checkbox') el.checked = guardado === 'true';
+        else el.value = guardado;
+    }
+    el.addEventListener('change', () => {
+        localStorage.setItem('mcvl_etl_' + c, el.type === 'checkbox' ? el.checked : el.value);
+    });
+}
+
+let fuenteActual = null;
+
+function ejecutar(accion) {
+    if (fuenteActual) fuenteActual.close();
+
+    const raw = encodeURIComponent(document.getElementById('raw').value);
+    const parquet = encodeURIComponent(document.getElementById('parquet').value);
+    const year = encodeURIComponent(document.getElementById('year').value);
+    const borrarTxt = document.getElementById('borrar_txt').checked;
+
+    if (!raw.replace(/%20/g, '') || !parquet.replace(/%20/g, '')) {
+        alert('Rellena la carpeta de TXT brutos y la de salida Parquet.');
+        return;
+    }
+
+    const botones = document.querySelectorAll('button');
+    botones.forEach(b => b.disabled = true);
+
+    const log = document.getElementById('log');
+    log.textContent = `=== ${accion} ===\n`;
+
+    const url = `/ejecutar?accion=${accion}&raw=${raw}&parquet=${parquet}&year=${year}&borrar_txt=${borrarTxt}`;
+    fuenteActual = new EventSource(url);
+
+    fuenteActual.onmessage = (ev) => {
+        log.textContent += ev.data + '\n';
+        log.scrollTop = log.scrollHeight;
+    };
+
+    fuenteActual.addEventListener('fin', (ev) => {
+        log.textContent += (ev.data === 'OK' ? '\n✔ ' : '\n✘ ') + ev.data + '\n';
+        log.scrollTop = log.scrollHeight;
+        botones.forEach(b => b.disabled = false);
+        fuenteActual.close();
+        fuenteActual = null;
+    });
+
+    fuenteActual.onerror = () => {
+        log.textContent += '\n✘ Conexión perdida con el servidor.\n';
+        botones.forEach(b => b.disabled = false);
+        if (fuenteActual) fuenteActual.close();
+        fuenteActual = null;
+    };
+}
+</script>
+</body>
+</html>
