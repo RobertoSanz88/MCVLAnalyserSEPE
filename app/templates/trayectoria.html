@@ -2,12 +2,73 @@
 <html lang="es">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trayectoria IPF {{ ipf }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+        :root {
+          --verde-dk:    #00815A;
+          --verde-claro: #9BDAC5;
+          --amarillo:    #F3CD00;
+          --bg:          #F4F6F4;
+          --bg2:         #FFFFFF;
+          --border:      #C8DDD6;
+          --text:        #1A2E26;
+          --muted:       #7A9A8E;
+          --header-h:    64px;
+          --font:        'Nunito Sans', Calibri, sans-serif;
+          --mono:        'Source Code Pro', 'Courier New', monospace;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body { font-family: var(--font); margin: 0; display: flex; flex-direction: column;
+               height: 100vh; overflow: hidden; color: var(--text); background: var(--bg); }
+
+        header { height: var(--header-h); min-height: var(--header-h); flex: none;
+                 background: var(--verde-dk); display: flex; align-items: center;
+                 padding: 0 1.25rem; gap: 0.75rem; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+        .logo { width: 36px; height: 36px; background: var(--amarillo); border-radius: 8px;
+                display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+                flex-shrink: 0; }
+        .header-text h1 { color: #fff; font-size: 1.2rem; font-weight: 800; line-height: 1.2; margin: 0; }
+        .header-text p { color: var(--verde-claro); font-size: 0.72rem; margin: 0.1rem 0 0; }
+        .header-badges { margin-left: auto; display: flex; gap: 0.4rem; }
+        .badge { border: 1px solid rgba(255,255,255,0.3); color: rgba(255,255,255,0.85);
+                 border-radius: 12px; padding: 0.15rem 0.65rem; font-size: 0.65rem; font-weight: 600;
+                 font-family: var(--mono); }
+
+        main { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 1rem; }
+        .card { flex: 1; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+                display: flex; flex-direction: column; overflow: hidden; padding: 1rem 1.1rem; }
+        .card h2 { font-size: 0.95rem; font-weight: 800; color: var(--text); margin: 0 0 0.75rem;
+                    padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+        .card h2 span { color: var(--muted); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+        #gantt { flex: 1; min-height: 0; }
+    </style>
 </head>
 <body>
-    <h1>Trayectoria laboral &mdash; IPF {{ ipf }}</h1>
-    <div id="gantt"></div>
+    <header>
+        <div class="logo">🧭</div>
+        <div class="header-text">
+            <h1>MCVL Analyser SEPE</h1>
+            <p>Observatorio de las Ocupaciones · SEPE</p>
+        </div>
+        <div class="header-badges">
+            <span class="badge">v0.1</span>
+            <span class="badge">Trayectorias</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="card">
+            <h2>Trayectoria laboral &mdash; <span>IPF {{ ipf }}</span></h2>
+            <div id="gantt"></div>
+        </div>
+    </main>
+
     <script>
         const episodios = {{ episodios_json | safe }};
         const hoy = new Date().toISOString().slice(0, 10);
@@ -18,8 +79,8 @@
                 x: [ep.inicio, ep.fin || hoy],
                 y: [fila, fila],
                 mode: "lines+markers",
-                line: { width: 20 },
-                marker: { size: 14 },
+                line: { width: 20, color: "#00815A" },
+                marker: { size: 14, color: "#00815A" },
                 name: fila,
                 text: "Contrato: " + (ep.tipo_contrato ?? "?") +
                       "<br>Regimen: " + (ep.regimen ?? "?") +
@@ -34,7 +95,10 @@
             yaxis: { type: "category", autorange: "reversed" },
             margin: { l: 180 },
             showlegend: false,
-        });
+            font: { family: "Nunito Sans, Calibri, sans-serif", color: "#1A2E26" },
+            paper_bgcolor: "#FFFFFF",
+            plot_bgcolor: "#FFFFFF",
+        }, { responsive: true });
     </script>
 </body>
 </html>
