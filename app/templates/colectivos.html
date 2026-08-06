@@ -2,146 +2,225 @@
 <html lang="es">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MCVL Analyser SEPE — Análisis de colectivos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+          --verde-dk:    #00815A;
+          --verde-acc:   #04A06E;
+          --verde-claro: #9BDAC5;
+          --amarillo:    #F3CD00;
+          --azul-marino: #154481;
+          --bg:          #F4F6F4;
+          --bg2:         #FFFFFF;
+          --bg3:         #EDF3F0;
+          --border:      #C8DDD6;
+          --text:        #1A2E26;
+          --muted:       #7A9A8E;
+          --nav-w:       190px;
+          --sidebar-w:   340px;
+          --header-h:    64px;
+          --font:        'Nunito Sans', Calibri, sans-serif;
+          --mono:        'Source Code Pro', 'Courier New', monospace;
+        }
         * { box-sizing: border-box; }
         /* Base mas grande: todo lo demas usa rem, que es relativo a esto (no a body), asi
            que subir aqui escala la pagina entera de forma coherente de una sola vez. */
         html { font-size: 118.75%; }
-        body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh;
-               color: #222; }
+        html, body { height: 100%; }
+        body { font-family: var(--font); margin: 0; display: flex; flex-direction: column;
+               height: 100vh; overflow: hidden; color: var(--text); background: var(--bg); }
 
-        /* --- Sidebar --- */
-        #sidebar { width: 210px; flex: none; background: #1e2a38; color: #cdd7e1;
-                   padding: 1rem 0; display: flex; flex-direction: column; }
-        #sidebar h1 { font-size: 1.15rem; color: #fff; margin: 0 1rem 1.5rem; }
-        .pestana { padding: 0.7rem 1rem; cursor: pointer; border-left: 3px solid transparent; }
-        .pestana.activa { background: #2c3e50; color: #fff; border-left-color: #4da3ff; }
-        .pestana.deshabilitada { color: #6b7a8a; cursor: default; }
-        .pestana .nota-futuro { display: block; font-size: 0.75rem; color: #6b7a8a; }
+        /* --- Cabecera --- */
+        header { height: var(--header-h); min-height: var(--header-h); flex: none;
+                 background: var(--verde-dk); display: flex; align-items: center;
+                 padding: 0 1.25rem; gap: 0.75rem; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+        .logo { width: 36px; height: 36px; background: var(--amarillo); border-radius: 8px;
+                display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+                flex-shrink: 0; }
+        .header-text h1 { color: #fff; font-size: 1.2rem; font-weight: 800; line-height: 1.2; margin: 0; }
+        .header-text p { color: var(--verde-claro); font-size: 0.72rem; margin: 0.1rem 0 0; }
+        .header-badges { margin-left: auto; display: flex; gap: 0.4rem; }
+        .badge { border: 1px solid rgba(255,255,255,0.3); color: rgba(255,255,255,0.85);
+                 border-radius: 12px; padding: 0.15rem 0.65rem; font-size: 0.65rem; font-weight: 600; }
+
+        /* --- Layout general --- */
+        #app { flex: 1; display: flex; overflow: hidden; }
+
+        /* --- Rail de navegacion --- */
+        #sidebar { width: var(--nav-w); flex: none; background: var(--bg2);
+                   border-right: 1px solid var(--border); padding: 0.9rem 0.6rem;
+                   display: flex; flex-direction: column; overflow-y: auto; }
+        .pestana { margin-bottom: 0.35rem; padding: 0.55rem 0.7rem; cursor: pointer;
+                   border-radius: 7px; font-size: 0.85rem; font-weight: 700; color: var(--muted);
+                   border: 1.5px solid transparent; transition: all .15s; }
+        .pestana.activa { background: rgba(0,129,90,0.08); color: var(--verde-dk); border-color: var(--verde-dk); }
+        .pestana.deshabilitada { color: var(--border); cursor: default; }
+        .pestana .nota-futuro { display: block; font-size: 0.66rem; font-weight: 400; color: var(--border); margin-top: 0.1rem; }
 
         /* --- Contenido --- */
         #contenido { flex: 1; display: flex; overflow: hidden; }
-        .panel { padding: 1rem; overflow-y: auto; }
-        #panel-filtros { width: 340px; flex: none; border-right: 1px solid #ddd; }
-        #panel-numericas { flex: 1; min-width: 320px; border-right: 1px solid #ddd; }
-        #panel-categoricas { flex: 1; min-width: 320px; }
+        .panel { padding: 1rem 1.1rem; overflow-y: auto; }
+        #panel-filtros { width: var(--sidebar-w); flex: none; background: var(--bg2);
+                          border-right: 1px solid var(--border); }
+        #panel-numericas { flex: 1; min-width: 320px; background: var(--bg2); border-right: 1px solid var(--border); }
+        #panel-categoricas { flex: 1; min-width: 320px; background: var(--bg2); }
 
-        h2 { font-size: 1rem; margin: 0 0 0.75rem; }
-        h3 { font-size: 0.9rem; margin: 1rem 0 0.4rem; color: #444; }
+        .panel::-webkit-scrollbar, #sidebar::-webkit-scrollbar,
+        #lista-columnas::-webkit-scrollbar, #lista-categorias::-webkit-scrollbar { width: 6px; }
+        .panel::-webkit-scrollbar-thumb, #sidebar::-webkit-scrollbar-thumb,
+        #lista-columnas::-webkit-scrollbar-thumb, #lista-categorias::-webkit-scrollbar-thumb {
+            background: var(--border); border-radius: 3px; }
+
+        h2 { font-size: 0.95rem; font-weight: 800; color: var(--text); margin: 0 0 0.9rem;
+             padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+        h3 { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+             letter-spacing: 0.05em; margin: 1.1rem 0 0.5rem; }
 
         /* --- Selector de atributo --- */
-        .tipos-filtro { margin-bottom: 0.5rem; }
-        .tipos-filtro label { margin-right: 1rem; font-size: 0.85rem; }
-        #lista-columnas { max-height: 220px; overflow-y: auto; border: 1px solid #ccc;
-                           border-radius: 4px; }
-        .fila-columna { padding: 0.35rem 0.6rem; cursor: pointer; display: flex;
-                         justify-content: space-between; }
-        .fila-columna:hover { background: #f0f4f8; }
-        .fila-columna.seleccionada { background: #dbeafe; font-weight: bold; }
-        .fila-columna .tipo { color: #888; font-size: 0.75rem; }
+        .tipos-filtro { margin-bottom: 0.6rem; }
+        .tipos-filtro label { margin-right: 1rem; font-size: 0.82rem; color: var(--muted); font-weight: 600; }
+        #lista-columnas { max-height: 220px; overflow-y: auto; border: 1.5px solid var(--border);
+                           border-radius: 7px; background: var(--bg); }
+        .fila-columna { padding: 0.4rem 0.65rem; cursor: pointer; display: flex;
+                         justify-content: space-between; font-size: 0.85rem; border-left: 3px solid transparent; }
+        .fila-columna:hover { background: rgba(4,160,110,0.06); }
+        .fila-columna.seleccionada { background: rgba(0,129,90,0.08); font-weight: 700;
+                                       color: var(--verde-dk); border-left-color: var(--verde-dk); }
+        .fila-columna .tipo { color: var(--muted); font-size: 0.7rem; font-family: var(--mono); }
 
-        #config-filtro { margin-top: 0.75rem; padding: 0.6rem; background: #f7f9fb;
-                          border-radius: 4px; display: none; }
-        #config-filtro select, #config-filtro input[type=number] { font-size: 0.9rem;
-                                                                     padding: 0.2rem; }
-        #lista-categorias { max-height: 150px; overflow-y: auto; margin: 0.4rem 0; }
-        #lista-categorias label { display: block; font-size: 0.85rem; padding: 0.1rem 0; }
-        .destino-filtro { margin: 0.5rem 0; }
-        .destino-filtro label { margin-right: 1rem; font-size: 0.85rem; }
-        button { cursor: pointer; padding: 0.4rem 0.9rem; font-size: 0.9rem; }
+        #config-filtro { margin-top: 0.8rem; padding: 0.7rem 0.75rem; background: var(--bg);
+                          border: 1.5px solid var(--border); border-radius: 7px; display: none; }
+        #config-filtro select, #config-filtro input[type=number] {
+            font-family: var(--font); font-size: 0.85rem; padding: 0.3rem 0.45rem;
+            border: 1.5px solid var(--border); border-radius: 5px; background: var(--bg2); color: var(--text); }
+        #config-filtro select:focus, #config-filtro input[type=number]:focus { outline: none; border-color: var(--verde-acc); }
+        #lista-categorias { max-height: 150px; overflow-y: auto; margin: 0.5rem 0; }
+        #lista-categorias label { display: block; font-size: 0.82rem; padding: 0.15rem 0; }
+        .destino-filtro { margin: 0.6rem 0; font-size: 0.82rem; color: var(--muted); }
+        .destino-filtro label { margin-right: 1rem; font-weight: 600; }
 
-        .bloque-filtro { margin-top: 0.75rem; padding: 0.6rem; border: 1px solid #ddd;
-                          border-radius: 4px; font-size: 0.85rem; }
-        .bloque-filtro .vacio { color: #999; font-style: italic; }
+        button { cursor: pointer; padding: 0.45rem 0.9rem; font-size: 0.85rem; font-family: var(--font);
+                 font-weight: 700; border-radius: 7px; border: 1.5px solid var(--border);
+                 background: var(--bg); color: var(--muted); transition: all .15s; }
+        button:hover:not(:disabled) { border-color: var(--verde-acc); color: var(--verde-dk); }
+
+        .bloque-filtro { margin-top: 0.6rem; padding: 0.65rem 0.75rem; background: var(--bg3);
+                          border-radius: 7px; font-size: 0.82rem; }
+        .bloque-filtro .vacio { color: var(--muted); font-style: italic; }
         .bloque-filtro .colectivo { margin: 0.2rem 0; }
-        .bloque-filtro .colectivo b { color: #1e5aa8; }
+        .bloque-filtro .colectivo b { color: var(--azul-marino); }
 
-        #boton-calcular { margin-top: 1rem; width: 100%; background: #2b5; color: white;
-                           border: none; border-radius: 4px; padding: 0.6rem; font-weight: bold; }
-        #boton-calcular:disabled { background: #aaa; cursor: not-allowed; }
-        #boton-exportar { margin-top: 0.5rem; width: 100%; background: #1e5aa8; color: white;
-                           border: none; border-radius: 4px; padding: 0.5rem; }
-        #boton-exportar:disabled { background: #aaa; cursor: not-allowed; }
+        #boton-calcular { margin-top: 1.1rem; width: 100%; background: var(--verde-dk); color: #fff;
+                           border: none; padding: 0.7rem; font-weight: 800; letter-spacing: 0.02em;
+                           box-shadow: 0 4px 14px rgba(0,129,90,0.32); }
+        #boton-calcular:hover:not(:disabled) { background: var(--verde-acc); box-shadow: 0 6px 18px rgba(4,160,110,0.38); color: #fff; }
+        #boton-calcular:disabled { background: var(--border); color: var(--muted); box-shadow: none; cursor: not-allowed; }
+        #boton-exportar { margin-top: 0.5rem; width: 100%; background: rgba(0,129,90,0.08);
+                           border: 1.5px solid var(--verde-dk); color: var(--verde-dk); padding: 0.55rem; }
+        #boton-exportar:hover:not(:disabled) { background: rgba(0,129,90,0.15); }
+        #boton-exportar:disabled { background: var(--bg3); border-color: var(--border); color: var(--muted); cursor: not-allowed; }
 
         /* --- Tabla numericas --- */
         table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
-        #tabla-numericas th, #tabla-numericas td { border: 1px solid #ddd; padding: 0.3rem 0.4rem;
+        #tabla-numericas th, #tabla-numericas td { border: 1px solid var(--border); padding: 0.35rem 0.45rem;
                                                      text-align: right; }
-        #tabla-numericas th { background: #f0f4f8; text-align: center; }
-        #tabla-numericas td:first-child, #tabla-numericas th:first-child { text-align: left; }
+        #tabla-numericas th { background: var(--bg3); color: var(--muted); text-align: center;
+                               font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
+        #tabla-numericas td { font-family: var(--mono); }
+        #tabla-numericas td:first-child, #tabla-numericas th:first-child { text-align: left; font-family: var(--font); }
+        #tabla-numericas tbody tr:hover { background: rgba(4,160,110,0.05); }
 
         /* --- Tablas categoricas apiladas --- */
-        .tabla-categorica { margin-bottom: 1.2rem; }
-        .tabla-categorica th, .tabla-categorica td { border: 1px solid #ddd; padding: 0.25rem 0.4rem;
+        .tabla-categorica { margin-bottom: 1.3rem; }
+        .tabla-categorica th, .tabla-categorica td { border: 1px solid var(--border); padding: 0.3rem 0.45rem;
                                                        text-align: right; }
-        .tabla-categorica th { background: #f0f4f8; text-align: center; }
-        .tabla-categorica td:first-child, .tabla-categorica th:first-child { text-align: left; }
+        .tabla-categorica th { background: var(--bg3); color: var(--muted); text-align: center;
+                                font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
+        .tabla-categorica td { font-family: var(--mono); }
+        .tabla-categorica td:first-child, .tabla-categorica th:first-child { text-align: left; font-family: var(--font); }
+        .tabla-categorica tbody tr:hover { background: rgba(4,160,110,0.05); }
 
-        .aviso-vacio { color: #888; font-style: italic; }
+        .aviso-vacio { color: var(--muted); font-style: italic; font-size: 0.85rem; }
     </style>
 </head>
 <body>
-    <div id="sidebar">
-        <h1>MCVL Analyser SEPE</h1>
-        <div class="pestana activa">Análisis de colectivos</div>
-        <div class="pestana deshabilitada">Cluster
-            <span class="nota-futuro">(próximamente)</span>
+    <header>
+        <div class="logo">👥</div>
+        <div class="header-text">
+            <h1>MCVL Analyser SEPE</h1>
+            <p>Observatorio de las Ocupaciones · SEPE</p>
         </div>
-    </div>
+        <div class="header-badges">
+            <span class="badge">v0.1</span>
+            <span class="badge">Colectivos</span>
+        </div>
+    </header>
 
-    <div id="contenido">
-        <div id="panel-filtros" class="panel">
-            <h2>Selección de colectivo</h2>
-
-            <div class="tipos-filtro">
-                <label><input type="checkbox" id="mostrar-numericas" checked> Numéricas</label>
-                <label><input type="checkbox" id="mostrar-categoricas" checked> Categóricas</label>
+    <div id="app">
+        <div id="sidebar">
+            <div class="pestana activa">Análisis de colectivos</div>
+            <div class="pestana deshabilitada">Cluster
+                <span class="nota-futuro">(próximamente)</span>
             </div>
-            <div id="lista-columnas"></div>
+        </div>
 
-            <div id="config-filtro">
-                <div id="config-numerica" style="display:none">
-                    <label>Operador:
-                        <select id="operador-numerico">
-                            <option value=">=">&gt;=</option>
-                            <option value=">">&gt;</option>
-                            <option value="<=">&lt;=</option>
-                            <option value="<">&lt;</option>
-                            <option value="==">=</option>
-                        </select>
-                    </label>
-                    <label>Valor: <input type="number" id="valor-numerico" step="any"></label>
+        <div id="contenido">
+            <div id="panel-filtros" class="panel">
+                <h2>Selección de colectivo</h2>
+
+                <div class="tipos-filtro">
+                    <label><input type="checkbox" id="mostrar-numericas" checked> Numéricas</label>
+                    <label><input type="checkbox" id="mostrar-categoricas" checked> Categóricas</label>
                 </div>
-                <div id="config-categorica" style="display:none">
-                    <div id="lista-categorias"></div>
+                <div id="lista-columnas"></div>
+
+                <div id="config-filtro">
+                    <div id="config-numerica" style="display:none">
+                        <label>Operador:
+                            <select id="operador-numerico">
+                                <option value=">=">&gt;=</option>
+                                <option value=">">&gt;</option>
+                                <option value="<=">&lt;=</option>
+                                <option value="<">&lt;</option>
+                                <option value="==">=</option>
+                            </select>
+                        </label>
+                        <label>Valor: <input type="number" id="valor-numerico" step="any"></label>
+                    </div>
+                    <div id="config-categorica" style="display:none">
+                        <div id="lista-categorias"></div>
+                    </div>
+                    <div class="destino-filtro">
+                        Asignar a:
+                        <label><input type="radio" name="destino" value="1" checked> Filtro 1</label>
+                        <label><input type="radio" name="destino" value="2"> Filtro 2</label>
+                    </div>
+                    <button id="boton-seleccionar" onclick="aplicarFiltro()">Seleccionar</button>
                 </div>
-                <div class="destino-filtro">
-                    Asignar a:
-                    <label><input type="radio" name="destino" value="1" checked> Filtro 1</label>
-                    <label><input type="radio" name="destino" value="2"> Filtro 2</label>
-                </div>
-                <button id="boton-seleccionar" onclick="aplicarFiltro()">Seleccionar</button>
+
+                <h3>Filtro 1</h3>
+                <div id="resumen-filtro1" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+
+                <h3>Filtro 2</h3>
+                <div id="resumen-filtro2" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+
+                <button id="boton-calcular" onclick="calcular()" disabled>Calcular</button>
+                <button id="boton-exportar" onclick="exportarExcel()" disabled>Exportar a Excel</button>
             </div>
 
-            <h3>Filtro 1</h3>
-            <div id="resumen-filtro1" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+            <div id="panel-numericas" class="panel">
+                <h2>Estadísticas numéricas</h2>
+                <div id="contenedor-numericas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
+            </div>
 
-            <h3>Filtro 2</h3>
-            <div id="resumen-filtro2" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
-
-            <button id="boton-calcular" onclick="calcular()" disabled>Calcular</button>
-            <button id="boton-exportar" onclick="exportarExcel()" disabled>Exportar a Excel</button>
-        </div>
-
-        <div id="panel-numericas" class="panel">
-            <h2>Estadísticas numéricas</h2>
-            <div id="contenedor-numericas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
-        </div>
-
-        <div id="panel-categoricas" class="panel">
-            <h2>Distribución categórica</h2>
-            <div id="contenedor-categoricas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
+            <div id="panel-categoricas" class="panel">
+                <h2>Distribución categórica</h2>
+                <div id="contenedor-categoricas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
+            </div>
         </div>
     </div>
 
