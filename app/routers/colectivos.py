@@ -1,13 +1,30 @@
-"""Constructor de colectivos por cruce de 2 filtros.
+"""Constructor de colectivos por cruce de 2 ejes.
 
-Cada filtro define un colectivo (columna + criterio) y su complementario
-(el resto). Cruzando 2 filtros se obtienen 4 subgrupos, p.ej.:
+Cada eje enfrenta dos opciones y se obtienen 4 subgrupos cruzando el eje A
+con el eje B (2x2). Por defecto cada eje sale de un unico filtro y su
+complementario (el resto), p.ej.:
 
-    filtro1 = nacionalidad_agrupado in ["espana"]   -> espanoles / extranjeros
-    filtro2 = sexo in ["2"]                          -> mujeres / hombres
+    eje A = filtro1: nacionalidad_agrupado in ["espana"] -> espanoles / extranjeros
+    eje B = filtro2: sexo in ["2"]                         -> mujeres / hombres
 
     subgrupos: espanoles+mujeres, espanoles+hombres,
                extranjeros+mujeres, extranjeros+hombres
+
+Opcionalmente, cada eje puede desactivar ese complementario automatico y
+usar en su lugar un segundo filtro independiente (filtro3 para el eje A,
+filtro4 para el eje B) con SU PROPIO complementario. Cuando eso pasa,
+filtro1 (o filtro2) deja de variar: se aplica fijo, siempre cumplido, a
+los 4 subgrupos, y el eje pasa a variar segun filtro3 (o filtro4). P.ej.:
+
+    filtro1 = sexo in ["1"] (Hombres), sin contracolectivo -> fijo, siempre Hombres
+    filtro3 = tipo_paro in ["LD"]                          -> eje A: ParadosLD / Resto
+    filtro2 = nacionalidad in ["espana"] (Espanoles), sin contracolectivo -> fijo
+    filtro4 = edad_actual >= 45                            -> eje B: Mayores 45 / Resto
+
+    subgrupos: Hombres+Espanoles+ParadosLD+Mayores45, Hombres+Espanoles+ParadosLD+Resto,
+               Hombres+Espanoles+Resto+Mayores45,      Hombres+Espanoles+Resto+Resto
+
+Ver _eje().
 
 Un filtro numerico usa un operador de comparacion (umbral y su
 complementario); un filtro categorico usa un conjunto de valores (esos
@@ -88,6 +105,8 @@ Filtro = FiltroNumerico | FiltroCategorico
 class SubgruposRequest(BaseModel):
     filtro1: Filtro
     filtro2: Filtro
+    filtro3: Filtro | None = None  # si se da, sustituye al complementario automatico de filtro1
+    filtro4: Filtro | None = None  # si se da, sustituye al complementario automatico de filtro2
 
 
 def _columnas_personas(con) -> dict[str, str]:
@@ -203,35 +222,73 @@ def _etiqueta_filtro(filtro: Filtro, cumple: bool) -> str:
     return f"Resto de {filtro.columna}"
 
 
-def _calcular_subgrupos(con, filtro1: Filtro, filtro2: Filtro) -> dict:
-    """Cruza filtro1 x filtro2 en 4 subgrupos y calcula recuento + estadisticas
+def _lado_filtro(filtro: Filtro, columnas_validas: dict[str, str]) -> tuple[tuple, tuple]:
+    """Las 2 opciones (SQL where, params, etiqueta) de un filtro y su propio
+    complementario automatico. IS TRUE / IS NOT TRUE en vez de NOT(...) para
+    que los NULL caigan siempre del lado "no cumple" en vez de desaparecer
+    de ambos lados."""
+    cond, params = _condicion_sql(filtro, columnas_validas)
+    opcion_si = (f"(({cond}) IS TRUE)", params, _etiqueta_filtro(filtro, True))
+    opcion_no = (f"(({cond}) IS NOT TRUE)", params, _etiqueta_filtro(filtro, False))
+    return opcion_si, opcion_no
+
+
+def _eje(
+    filtro_principal: Filtro, filtro_secundario: Filtro | None, columnas_validas: dict[str, str]
+) -> tuple[Filtro | None, tuple[tuple, tuple]]:
+    """(filtro_fijo, (opcion_si, opcion_no)) de un eje del cruce.
+
+    Sin filtro_secundario (contracolectivo automatico activo): el eje varia
+    entre cumplir/no cumplir filtro_principal, como antes. Con
+    filtro_secundario (contracolectivo desactivado): filtro_principal deja
+    de variar (se devuelve como filtro_fijo, para aplicarse siempre cumplido
+    a los 4 subgrupos) y el eje pasa a variar segun filtro_secundario y SU
+    propio complementario."""
+    if filtro_secundario is None:
+        return None, _lado_filtro(filtro_principal, columnas_validas)
+    return filtro_principal, _lado_filtro(filtro_secundario, columnas_validas)
+
+
+def _calcular_subgrupos(
+    con,
+    filtro1: Filtro,
+    filtro2: Filtro,
+    filtro3: Filtro | None = None,
+    filtro4: Filtro | None = None,
+) -> dict:
+    """Cruza eje A (filtro1, o filtro3 con filtro1 fijo) x eje B (filtro2, o
+    filtro4 con filtro2 fijo) en 4 subgrupos y calcula recuento + estadisticas
     (numericas y categoricas) de cada uno. Compartido entre el endpoint JSON y
     el de exportacion a Excel para no calcular las cosas de dos formas distintas."""
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
 
-    cond1, params1 = _condicion_sql(filtro1, columnas_validas)
-    cond2, params2 = _condicion_sql(filtro2, columnas_validas)
+    fijo_a, (eje_a_si, eje_a_no) = _eje(filtro1, filtro3, columnas_validas)
+    fijo_b, (eje_b_si, eje_b_no) = _eje(filtro2, filtro4, columnas_validas)
 
-    # IS TRUE / IS NOT TRUE en vez de NOT(...) para que los NULL caigan
-    # siempre en el "no cumple" en lugar de desaparecer de ambos lados.
-    cumple1, no_cumple1 = f"(({cond1}) IS TRUE)", f"(({cond1}) IS NOT TRUE)"
-    cumple2, no_cumple2 = f"(({cond2}) IS TRUE)", f"(({cond2}) IS NOT TRUE)"
+    condiciones_fijas, params_fijos, etiquetas_fijas = [], [], []
+    for filtro_fijo in (fijo_a, fijo_b):
+        if filtro_fijo is not None:
+            cond, params = _condicion_sql(filtro_fijo, columnas_validas)
+            condiciones_fijas.append(f"(({cond}) IS TRUE)")
+            params_fijos += params
+            etiquetas_fijas.append(_etiqueta_filtro(filtro_fijo, True))
 
     combos = {
-        "filtro1_si__filtro2_si": (cumple1, True, cumple2, True),
-        "filtro1_si__filtro2_no": (cumple1, True, no_cumple2, False),
-        "filtro1_no__filtro2_si": (no_cumple1, False, cumple2, True),
-        "filtro1_no__filtro2_no": (no_cumple1, False, no_cumple2, False),
+        "filtro1_si__filtro2_si": (eje_a_si, eje_b_si),
+        "filtro1_si__filtro2_no": (eje_a_si, eje_b_no),
+        "filtro1_no__filtro2_si": (eje_a_no, eje_b_si),
+        "filtro1_no__filtro2_no": (eje_a_no, eje_b_no),
     }
 
     resultados = {}
-    for nombre, (parte1, si1, parte2, si2) in combos.items():
-        where = f"{parte1} AND {parte2}"
-        params = params1 + params2
+    for nombre, ((parte_a, params_a, etiq_a), (parte_b, params_b, etiq_b)) in combos.items():
+        where = " AND ".join(condiciones_fijas + [parte_a, parte_b])
+        params = params_fijos + params_a + params_b
+        etiqueta = " + ".join(etiquetas_fijas + [etiq_a, etiq_b])
         total = con.execute(f"SELECT COUNT(*) FROM personas WHERE {where}", params).fetchone()[0]
         resultados[nombre] = {
-            "etiqueta": f"{_etiqueta_filtro(filtro1, si1)} + {_etiqueta_filtro(filtro2, si2)}",
+            "etiqueta": etiqueta,
             "recuento": total,
             "numericas": _stats_numericas(con, where, params, numericas),
             "categoricas": _stats_categoricas(con, where, params, categoricas, total),
@@ -245,7 +302,7 @@ def subgrupos(request: Request, body: SubgruposRequest):
     return {
         "filtro1": body.filtro1,
         "filtro2": body.filtro2,
-        "subgrupos": _calcular_subgrupos(con, body.filtro1, body.filtro2),
+        "subgrupos": _calcular_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4),
     }
 
 
@@ -337,7 +394,7 @@ def _construir_excel(resultados: dict) -> bytes:
 @router.post("/colectivos/exportar")
 def exportar(request: Request, body: SubgruposRequest):
     con = request.app.state.con
-    resultados = _calcular_subgrupos(con, body.filtro1, body.filtro2)
+    resultados = _calcular_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
     contenido = _construir_excel(resultados)
     return StreamingResponse(
         io.BytesIO(contenido),

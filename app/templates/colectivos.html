@@ -104,6 +104,12 @@
         .destino-filtro { margin: 0.6rem 0; font-size: 0.82rem; color: var(--muted); }
         .destino-filtro .destino-titulo { display: block; margin-bottom: 0.35rem; }
         .destino-filtro label { margin-right: 1rem; font-weight: 600; }
+        .destino-filtro label:has(input:disabled) { color: var(--border); font-weight: 400; }
+
+        .check-contracolectivo { display: block; margin: 0.35rem 0 0; font-size: 0.72rem;
+                                   color: var(--muted); font-weight: 600; }
+        h3 .nota-eje { display: block; font-size: 0.62rem; font-weight: 400; text-transform: none;
+                        letter-spacing: normal; color: var(--border); margin-top: 0.1rem; }
 
         button { cursor: pointer; padding: 0.45rem 0.9rem; font-size: 0.85rem; font-family: var(--font);
                  font-weight: 700; border-radius: 7px; border: 1.5px solid var(--border);
@@ -202,15 +208,35 @@
                         <span class="destino-titulo">Asignar a:</span>
                         <label><input type="radio" name="destino" value="1" checked> Filtro 1</label>
                         <label><input type="radio" name="destino" value="2"> Filtro 2</label>
+                        <label><input type="radio" name="destino" value="3" id="radio-destino-3" disabled> Filtro 3</label>
+                        <label><input type="radio" name="destino" value="4" id="radio-destino-4" disabled> Filtro 4</label>
                     </div>
                     <button id="boton-seleccionar" onclick="aplicarFiltro()">Seleccionar</button>
                 </div>
 
                 <h3>Filtro 1</h3>
                 <div id="resumen-filtro1" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+                <label class="check-contracolectivo">
+                    <input type="checkbox" id="contracolectivo-1" checked onchange="toggleContracolectivo(1)">
+                    Contracolectivo automático
+                </label>
 
                 <h3>Filtro 2</h3>
                 <div id="resumen-filtro2" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+                <label class="check-contracolectivo">
+                    <input type="checkbox" id="contracolectivo-2" checked onchange="toggleContracolectivo(2)">
+                    Contracolectivo automático
+                </label>
+
+                <div id="bloque-filtro3-contenedor" style="display:none">
+                    <h3>Filtro 3 <span class="nota-eje">(nuevo eje; Filtro 1 queda fijo)</span></h3>
+                    <div id="resumen-filtro3" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+                </div>
+
+                <div id="bloque-filtro4-contenedor" style="display:none">
+                    <h3>Filtro 4 <span class="nota-eje">(nuevo eje; Filtro 2 queda fijo)</span></h3>
+                    <div id="resumen-filtro4" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+                </div>
 
                 <button id="boton-calcular" onclick="calcular()" disabled>Calcular</button>
                 <button id="boton-exportar" onclick="exportarExcel()" disabled>Exportar a Excel</button>
@@ -234,7 +260,35 @@ const ORDEN_SUBGRUPOS = ["filtro1_si__filtro2_si", "filtro1_si__filtro2_no",
 
 let columnasDisponibles = { numericas: [], categoricas: [] };
 let columnaSeleccionada = null; // { nombre, tipo }
-let filtros = { 1: null, 2: null }; // Filtro tal cual lo espera el backend
+let filtros = { 1: null, 2: null, 3: null, 4: null }; // Filtro tal cual lo espera el backend
+// Eje A = Filtro 1 (+ Filtro 3 si se desactiva su contracolectivo automatico).
+// Eje B = Filtro 2 (+ Filtro 4 si se desactiva su contracolectivo automatico).
+let contracolectivo = { 1: true, 2: true };
+
+function toggleContracolectivo(n) {
+    const activo = document.getElementById('contracolectivo-' + n).checked;
+    contracolectivo[n] = activo;
+    const extra = n === 1 ? 3 : 4;
+
+    document.getElementById('radio-destino-' + extra).disabled = activo;
+    document.getElementById('bloque-filtro' + extra + '-contenedor').style.display = activo ? 'none' : 'block';
+
+    if (activo) {
+        // Se reactiva el automatico: el filtro extra deja de usarse aunque se
+        // mantenga su valor, por si el usuario lo desactiva otra vez despues.
+        const radioExtra = document.getElementById('radio-destino-' + extra);
+        if (radioExtra.checked) document.querySelector(`input[name=destino][value="${n}"]`).checked = true;
+    }
+
+    renderizarResumenFiltro(n);
+    actualizarBotonCalcular();
+}
+
+function actualizarBotonCalcular() {
+    const ejeA = filtros[1] && (contracolectivo[1] || filtros[3]);
+    const ejeB = filtros[2] && (contracolectivo[2] || filtros[4]);
+    document.getElementById('boton-calcular').disabled = !(ejeA && ejeB);
+}
 
 async function cargarColumnas() {
     const resp = await fetch('/colectivos/columnas');
@@ -310,7 +364,7 @@ function aplicarFiltro() {
 
     filtros[destino] = filtro;
     renderizarResumenFiltro(destino);
-    document.getElementById('boton-calcular').disabled = !(filtros[1] && filtros[2]);
+    actualizarBotonCalcular();
 }
 
 function etiquetaFiltro(filtro, cumple) {
@@ -326,13 +380,29 @@ function renderizarResumenFiltro(n) {
     const filtro = filtros[n];
     const cont = document.getElementById('resumen-filtro' + n);
     if (!filtro) { cont.innerHTML = '<span class="vacio">Sin configurar</span>'; return; }
-    cont.innerHTML = `
-        <div class="colectivo"><b>Colectivo:</b> ${etiquetaFiltro(filtro, true)}</div>
-        <div class="colectivo"><b>Contracolectivo:</b> ${etiquetaFiltro(filtro, false)}</div>
-    `;
+
+    let html = `<div class="colectivo"><b>Colectivo:</b> ${etiquetaFiltro(filtro, true)}</div>`;
+    // Filtro 1/2 con el contracolectivo desactivado pasan a ser un filtro fijo
+    // (se aplican siempre, sin variar) y el eje lo define Filtro 3/4 en su
+    // lugar - estos ultimos si tienen su propio contracolectivo automatico.
+    if ((n === 1 || n === 2) && !contracolectivo[n]) {
+        html += `<div class="colectivo"><i>Filtro fijo: se aplica a todo el colectivo. El eje pasa a Filtro ${n + 2}.</i></div>`;
+    } else {
+        html += `<div class="colectivo"><b>Contracolectivo:</b> ${etiquetaFiltro(filtro, false)}</div>`;
+    }
+    cont.innerHTML = html;
 }
 
 let ultimoResultado = null;
+
+// Filtro 3/4 solo viajan al backend si su eje tiene el contracolectivo
+// automatico desactivado; si no, el backend calcula el complementario solo.
+function cuerpoPeticion() {
+    const body = { filtro1: filtros[1], filtro2: filtros[2] };
+    if (!contracolectivo[1]) body.filtro3 = filtros[3];
+    if (!contracolectivo[2]) body.filtro4 = filtros[4];
+    return body;
+}
 
 async function calcular() {
     const boton = document.getElementById('boton-calcular');
@@ -342,7 +412,7 @@ async function calcular() {
     const resp = await fetch('/colectivos/subgrupos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filtro1: filtros[1], filtro2: filtros[2] }),
+        body: JSON.stringify(cuerpoPeticion()),
     });
     boton.disabled = false;
     boton.textContent = 'Calcular';
@@ -437,7 +507,7 @@ async function exportarExcel() {
     const resp = await fetch('/colectivos/exportar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filtro1: filtros[1], filtro2: filtros[2] }),
+        body: JSON.stringify(cuerpoPeticion()),
     });
     if (!resp.ok) { alert('Error al exportar: ' + (await resp.text())); return; }
     const blob = await resp.blob();
