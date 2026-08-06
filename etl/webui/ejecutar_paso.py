@@ -38,6 +38,18 @@ def _nueva_conexion(hilos):
     return con
 
 
+def _borrar_optimizada(parquet_folder, nombre_tabla):
+    """Borra tabla_<nombre_tabla>_optimizada.parquet una vez que su extendida ya existe:
+    en los tres casos donde se usa (personas, pensiones, afiliacion) la extendida parte de
+    un SELECT * / COPY sobre la optimizada y solo anade columnas nuevas, nunca modifica ni
+    quita las originales - la optimizada queda entonces totalmente redundante y no se quiere
+    (un solo fichero por tabla, no dos)."""
+    ruta = os.path.join(parquet_folder, f"tabla_{nombre_tabla}_optimizada.parquet")
+    if os.path.exists(ruta):
+        os.remove(ruta)
+        print(f"Borrado {os.path.basename(ruta)} (ya incluido entero en la extendida)")
+
+
 def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv, cnae_csv):
     ram_gb = ram_total_gb()
     hilos = threads_optimos(ram_gb)
@@ -58,10 +70,12 @@ def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv,
         df = process_table(TABLE_CONFIGS["5"], year, raw_root, parquet_folder)
         del df
         fase2_pensiones_extendida(parquet_folder)
+        _borrar_optimizada(parquet_folder, "pensiones")
 
     elif accion == "afiliacion":
         process_table_grande(TABLE_CONFIGS["1"], year, raw_root, parquet_folder, con, borrar_txt=borrar_txt)
         fase1_afiliacion_extendida_duckdb(con, parquet_folder)
+        _borrar_optimizada(parquet_folder, "afiliacion")
 
     elif accion == "todas":
         for sub in TODAS_LAS_TABLAS:
@@ -71,6 +85,7 @@ def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv,
     elif accion == "personas_extendida":
         print("Bootstrap...")
         bootstrap_personas_extendida(con, parquet_folder)
+        _borrar_optimizada(parquet_folder, "personas")
 
         print("Grupo A (afiliacion: regimen/grupo/contrato)...")
         fusionar_grupo(parquet_folder, extraer_grupo_a(con, parquet_folder))
