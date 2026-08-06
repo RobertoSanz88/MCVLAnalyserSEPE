@@ -52,12 +52,20 @@
 
         /* --- Rail de navegacion --- */
         #sidebar { width: var(--nav-w); flex: none; background: var(--bg2);
-                   border-right: 1px solid var(--border); padding: 0.9rem 0.6rem;
-                   display: flex; flex-direction: column; overflow-y: auto; }
-        .pestana { margin-bottom: 0.35rem; padding: 0.55rem 0.7rem; cursor: pointer;
-                   border-radius: 7px; font-size: 0.85rem; font-weight: 700; color: var(--muted);
-                   border: 1.5px solid transparent; transition: all .15s; }
+                   border-right: 1px solid var(--border); padding: 0.9rem 0 0.9rem 0.6rem;
+                   display: flex; flex-direction: column; overflow-y: auto; position: relative; }
+        /* La pestana activa no es una caja cerrada: solo tiene borde arriba/izquierda/abajo
+           (forma de "U" tumbada, abierta a la derecha) y sus dos brazos horizontales se
+           prolongan hasta fundirse con la linea vertical que separa sidebar y contenido -
+           el pseudo-elemento ::after tapa ese tramo del border-right del sidebar, como si
+           la pestana "perforase" la linea para conectar con el panel de al lado. */
+        .pestana { margin: 0 0 0.35rem; padding: 0.55rem 0.7rem; cursor: pointer;
+                   border-radius: 7px 0 0 7px; font-size: 0.85rem; font-weight: 700; color: var(--muted);
+                   border: 1.5px solid transparent; border-right: none; position: relative;
+                   transition: all .15s; }
         .pestana.activa { background: rgba(0,129,90,0.08); color: var(--verde-dk); border-color: var(--verde-dk); }
+        .pestana.activa::after { content: ''; position: absolute; top: -1.5px; bottom: -1.5px;
+                                   right: -2px; width: 2px; background: var(--bg2); }
         .pestana.deshabilitada { color: var(--border); cursor: default; }
         .pestana .nota-futuro { display: block; font-size: 0.66rem; font-weight: 400; color: var(--border); margin-top: 0.1rem; }
 
@@ -444,11 +452,18 @@ async function calcular() {
 
 // 1 decimal para unidades/decenas, sin decimales a partir de centenas (el decimal
 // deja de aportar precision util cuando la cifra ya es grande).
+// Convencion espanola: coma decimal, punto de millar (toLocaleString('es-ES')
+// ya lo hace nativo, sin tener que montar el separador a mano).
 function fmt(n) {
     if (n === null || n === undefined) return '';
     const num = Number(n);
     const decimales = Math.abs(num) >= 100 ? 0 : 1;
-    return num.toFixed(decimales);
+    return num.toLocaleString('es-ES', { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+}
+
+function fmtEntero(n) {
+    if (n === null || n === undefined) return '';
+    return Number(n).toLocaleString('es-ES');
 }
 
 // Decide que estadistico destacar por fila: si la dispersion (desviacion/media)
@@ -510,7 +525,7 @@ function renderizarCategoricas(subgrupos) {
             html += `<tr><td>${valor}</td>`;
             for (const nombre of ORDEN_SUBGRUPOS) {
                 const entrada = mapas[nombre].get(valor);
-                html += entrada ? `<td>${entrada.conteo}</td><td>${fmt(entrada.porcentaje)}</td>` : '<td></td><td></td>';
+                html += entrada ? `<td>${fmtEntero(entrada.conteo)}</td><td>${fmt(entrada.porcentaje)}</td>` : '<td></td><td></td>';
             }
             html += '</tr>';
         }
