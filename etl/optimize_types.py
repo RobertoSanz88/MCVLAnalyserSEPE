@@ -15,6 +15,8 @@ import warnings
 import numpy as np
 import pandas as pd
 
+from etl.recursos import chunksize_optimo
+
 # view_name -> (nombre, plantillas de fichero, columnas, parquet de salida)
 TABLE_CONFIGS = {
     "1": {
@@ -277,7 +279,7 @@ def _leer_csv_seguro(ruta, column_names):
 
 
 def leer_csv_por_trozos_a_parquet(
-    ruta, column_names, columnas_fecha_completa, temp_path, chunksize=100_000,
+    ruta, column_names, columnas_fecha_completa, temp_path, chunksize=None,
 ):
     """Lee un CSV/TXT grande en trozos de `chunksize` filas y los va escribiendo directamente
     a un Parquet temporal, sin mantener nunca mas de un trozo en memoria a la vez.
@@ -290,9 +292,16 @@ def leer_csv_por_trozos_a_parquet(
     se parsean solo las columnas de fecha, que no dependen de nada global. El resto de columnas
     se decide (entero mas pequenyo que quepa, categorica o texto) en un paso posterior que ve el
     fichero completo (o los varios ficheros de la tabla juntos) via DuckDB, sin cargarlo en pandas.
+
+    `chunksize=None` (por defecto) deja que `chunksize_optimo()` decida segun la RAM real del
+    equipo (ver etl/recursos.py): trozos mas grandes en una maquina con RAM de sobra, menos
+    vueltas y mas rapido, sin cambiar la logica.
     """
     import pyarrow as pa
     import pyarrow.parquet as pq
+
+    if chunksize is None:
+        chunksize = chunksize_optimo()
 
     writer = None
     total_filas = 0
@@ -481,7 +490,7 @@ def process_table(config, year, raw_root, parquet_folder):
     return df_final
 
 
-def process_table_grande(config, year, raw_root, parquet_folder, con, chunksize=100_000, borrar_txt=False):
+def process_table_grande(config, year, raw_root, parquet_folder, con, chunksize=None, borrar_txt=False):
     """Version de process_table() para tablas multi-fichero que no caben enteras en RAM
     (Afiliacion, Bases de cotizacion cuenta ajena): cada fichero se lee por trozos a un
     parquet temporal (leer_csv_por_trozos_a_parquet) y los temporales se combinan con DuckDB
@@ -490,6 +499,8 @@ def process_table_grande(config, year, raw_root, parquet_folder, con, chunksize=
 
     borrar_txt=False por defecto: en una maquina con RAM/disco de sobra no hace falta borrar
     los TXT de origen para poder seguir. Se activa explicitamente solo si hace falta.
+
+    chunksize=None deja que leer_csv_por_trozos_a_parquet decida segun la RAM real del equipo.
     """
     separador = "=" * 80
     print(f"\n{separador}\nProcesando tabla (por trozos): {config['nombre']}\n{separador}")

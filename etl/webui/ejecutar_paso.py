@@ -23,6 +23,7 @@ from etl.personas_extendida import (
     fase1_afiliacion_extendida_duckdb, fase2_pensiones_extendida, fusionar_grupo,
     fusionar_grupo_d, fusionar_grupo_e, fusionar_grupo_f, fusionar_grupo_g, grupo_h_final,
 )
+from etl.recursos import ram_total_gb, threads_optimos
 
 TABLAS_SIMPLES = {"personas": "2", "fiscal": "6", "bases_cp": "4"}
 TABLAS_GRANDES = {"bases_ca": "3"}
@@ -30,15 +31,19 @@ TABLAS_GRANDES = {"bases_ca": "3"}
 TODAS_LAS_TABLAS = ["personas", "fiscal", "bases_cp", "bases_ca", "pensiones", "afiliacion"]
 
 
-def _nueva_conexion():
+def _nueva_conexion(hilos):
     con = duckdb.connect(":memory:")
     con.execute("SET preserve_insertion_order=false")
-    con.execute("SET threads=2")
+    con.execute(f"SET threads={hilos}")
     return con
 
 
 def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv, cnae_csv):
-    con = _nueva_conexion()
+    ram_gb = ram_total_gb()
+    hilos = threads_optimos(ram_gb)
+    print(f"RAM detectada: {ram_gb:.1f} GB -> hilos DuckDB={hilos}"
+          f"{' (modo rapido, RAM de sobra)' if hilos > 2 else ' (modo conservador)'}")
+    con = _nueva_conexion(hilos)
 
     if accion in TABLAS_SIMPLES:
         df = process_table(TABLE_CONFIGS[TABLAS_SIMPLES[accion]], year, raw_root, parquet_folder)
