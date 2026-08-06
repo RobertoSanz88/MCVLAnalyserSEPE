@@ -212,14 +212,18 @@ _OPERADOR_OPUESTO = {">=": "<", ">": "<=", "<=": ">", "<": ">=", "==": "!="}
 
 def _etiqueta_filtro(filtro: Filtro, cumple: bool) -> str:
     """Texto legible para un lado (cumple/no cumple) de un filtro, usado como
-    parte del nombre de cada subgrupo en la UI y en el Excel exportado."""
+    parte del nombre de cada subgrupo en la UI y en el Excel exportado.
+    Incluye siempre el nombre de columna (tambien en el lado "cumple" de un
+    filtro categorico) porque una cabecera puede combinar varios filtros y
+    "SI" o "TRUE" solos no dicen a que columna pertenecen."""
     if filtro.tipo == "numerica":
         operador = filtro.operador if cumple else _OPERADOR_OPUESTO[filtro.operador]
         valor = f"{filtro.valor:g}"
         return f"{filtro.columna} {operador} {valor}"
+    valores = "/".join(filtro.categorias)
     if cumple:
-        return "/".join(filtro.categorias)
-    return f"Resto de {filtro.columna}"
+        return f"{filtro.columna} {valores}"
+    return f"Resto {filtro.columna} {valores}"
 
 
 def _lado_filtro(filtro: Filtro, columnas_validas: dict[str, str]) -> tuple[tuple, tuple]:

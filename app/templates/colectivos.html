@@ -103,6 +103,8 @@
         #lista-categorias label { display: block; font-size: 0.82rem; padding: 0.15rem 0; }
         .destino-filtro { margin: 0.6rem 0; font-size: 0.82rem; color: var(--muted); }
         .destino-filtro .destino-titulo { display: block; margin-bottom: 0.35rem; }
+        .destino-filtro .destino-fila { margin-top: 0.3rem; }
+        .destino-filtro .destino-fila:first-of-type { margin-top: 0; }
         .destino-filtro label { margin-right: 1rem; font-weight: 600; }
         .destino-filtro label:has(input:disabled) { color: var(--border); font-weight: 400; }
 
@@ -206,10 +208,14 @@
                     </div>
                     <div class="destino-filtro">
                         <span class="destino-titulo">Asignar a:</span>
-                        <label><input type="radio" name="destino" value="1" checked> Filtro 1</label>
-                        <label><input type="radio" name="destino" value="2"> Filtro 2</label>
-                        <label><input type="radio" name="destino" value="3" id="radio-destino-3" disabled> Filtro 3</label>
-                        <label><input type="radio" name="destino" value="4" id="radio-destino-4" disabled> Filtro 4</label>
+                        <div class="destino-fila">
+                            <label><input type="radio" name="destino" value="1" checked> Filtro 1</label>
+                            <label><input type="radio" name="destino" value="2"> Filtro 2</label>
+                        </div>
+                        <div class="destino-fila">
+                            <label><input type="radio" name="destino" value="3" id="radio-destino-3" disabled> Filtro 3</label>
+                            <label><input type="radio" name="destino" value="4" id="radio-destino-4" disabled> Filtro 4</label>
+                        </div>
                     </div>
                     <button id="boton-seleccionar" onclick="aplicarFiltro()">Seleccionar</button>
                 </div>
@@ -373,7 +379,8 @@ function etiquetaFiltro(filtro, cumple) {
         const operador = cumple ? filtro.operador : OPUESTO[filtro.operador];
         return `${filtro.columna} ${operador} ${filtro.valor}`;
     }
-    return cumple ? filtro.categorias.join('/') : `Resto de ${filtro.columna}`;
+    const valores = filtro.categorias.join('/');
+    return cumple ? `${filtro.columna} ${valores}` : `Resto ${filtro.columna} ${valores}`;
 }
 
 function renderizarResumenFiltro(n) {
