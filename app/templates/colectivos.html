@@ -266,6 +266,7 @@ const ORDEN_SUBGRUPOS = ["filtro1_si__filtro2_si", "filtro1_si__filtro2_no",
 
 let columnasDisponibles = { numericas: [], categoricas: [] };
 let columnaSeleccionada = null; // { nombre, tipo }
+let valoresPorColumna = {}; // columna -> lista de valores distintos (para el label del complementario)
 let filtros = { 1: null, 2: null, 3: null, 4: null }; // Filtro tal cual lo espera el backend
 // Eje A = Filtro 1 (+ Filtro 3 si se desactiva su contracolectivo automatico).
 // Eje B = Filtro 2 (+ Filtro 4 si se desactiva su contracolectivo automatico).
@@ -339,6 +340,7 @@ async function seleccionarColumna(nombre, tipo) {
         lista.innerHTML = 'Cargando...';
         const resp = await fetch('/colectivos/valores/' + encodeURIComponent(nombre));
         const data = await resp.json();
+        valoresPorColumna[nombre] = data.valores; // cache para el label del complementario
         lista.innerHTML = '';
         for (const valor of data.valores) {
             const label = document.createElement('label');
@@ -380,7 +382,16 @@ function etiquetaFiltro(filtro, cumple) {
         return `${filtro.columna} ${operador} ${filtro.valor}`;
     }
     const valores = filtro.categorias.join('/');
-    return cumple ? `${filtro.columna} ${valores}` : `Resto ${filtro.columna} ${valores}`;
+    if (cumple) return `${filtro.columna} ${valores}`;
+
+    // Con exactamente 2 valores posibles y 1 sola categoria marcada, usar el
+    // otro valor tal cual (p.ej. "discap NO") es mas claro que "Resto discap SI".
+    const todos = valoresPorColumna[filtro.columna];
+    if (filtro.categorias.length === 1 && todos && todos.length === 2) {
+        const restante = todos.find(v => !filtro.categorias.includes(String(v)));
+        if (restante !== undefined) return `${filtro.columna} ${String(restante)}`;
+    }
+    return `Resto ${filtro.columna} ${valores}`;
 }
 
 function renderizarResumenFiltro(n) {

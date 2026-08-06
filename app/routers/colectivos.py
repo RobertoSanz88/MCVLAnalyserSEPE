@@ -210,7 +210,38 @@ def valores(request: Request, columna: str):
 _OPERADOR_OPUESTO = {">=": "<", ">": "<=", "<=": ">", "<": ">=", "==": "!="}
 
 
-def _etiqueta_filtro(filtro: Filtro, cumple: bool) -> str:
+def _valor_str(v) -> str:
+    # bool en minusculas ("true"/"false"), igual que el checkbox en el
+    # frontend (JS stringifica un booleano en minusculas); el resto de tipos
+    # (texto, codigos) se deja tal cual, sin tocar mayusculas/minusculas.
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return str(v)
+
+
+def _valor_complementario_categorico(con, filtro: FiltroCategorico) -> str | None:
+    """Si la columna del filtro tiene exactamente 2 valores distintos y se
+    selecciono solo 1 como colectivo, devuelve el otro valor (p.ej. "NO"
+    para un filtro "SI") para usarlo como etiqueta del lado "no cumple" en
+    vez del generico "Resto columna valor" - mas claro cuando hay una
+    alternativa binaria natural. None si no aplica (mas de 2 valores en la
+    columna, o mas de una categoria seleccionada)."""
+    if len(filtro.categorias) != 1:
+        return None
+    col = filtro.columna
+    total = con.execute(
+        f"SELECT COUNT(DISTINCT {col}) FROM personas WHERE {col} IS NOT NULL"
+    ).fetchone()[0]
+    if total != 2:
+        return None
+    fila = con.execute(
+        f"SELECT DISTINCT {col} FROM personas WHERE {col} IS NOT NULL AND {col} NOT IN (?)",
+        list(filtro.categorias),
+    ).fetchone()
+    return _valor_str(fila[0]) if fila else None
+
+
+def _etiqueta_filtro(con, filtro: Filtro, cumple: bool) -> str:
     """Texto legible para un lado (cumple/no cumple) de un filtro, usado como
     parte del nombre de cada subgrupo en la UI y en el Excel exportado.
     Incluye siempre el nombre de columna (tambien en el lado "cumple" de un
@@ -223,22 +254,25 @@ def _etiqueta_filtro(filtro: Filtro, cumple: bool) -> str:
     valores = "/".join(filtro.categorias)
     if cumple:
         return f"{filtro.columna} {valores}"
+    complementario = _valor_complementario_categorico(con, filtro)
+    if complementario is not None:
+        return f"{filtro.columna} {complementario}"
     return f"Resto {filtro.columna} {valores}"
 
 
-def _lado_filtro(filtro: Filtro, columnas_validas: dict[str, str]) -> tuple[tuple, tuple]:
+def _lado_filtro(con, filtro: Filtro, columnas_validas: dict[str, str]) -> tuple[tuple, tuple]:
     """Las 2 opciones (SQL where, params, etiqueta) de un filtro y su propio
     complementario automatico. IS TRUE / IS NOT TRUE en vez de NOT(...) para
     que los NULL caigan siempre del lado "no cumple" en vez de desaparecer
     de ambos lados."""
     cond, params = _condicion_sql(filtro, columnas_validas)
-    opcion_si = (f"(({cond}) IS TRUE)", params, _etiqueta_filtro(filtro, True))
-    opcion_no = (f"(({cond}) IS NOT TRUE)", params, _etiqueta_filtro(filtro, False))
+    opcion_si = (f"(({cond}) IS TRUE)", params, _etiqueta_filtro(con, filtro, True))
+    opcion_no = (f"(({cond}) IS NOT TRUE)", params, _etiqueta_filtro(con, filtro, False))
     return opcion_si, opcion_no
 
 
 def _eje(
-    filtro_principal: Filtro, filtro_secundario: Filtro | None, columnas_validas: dict[str, str]
+    con, filtro_principal: Filtro, filtro_secundario: Filtro | None, columnas_validas: dict[str, str]
 ) -> tuple[Filtro | None, tuple[tuple, tuple]]:
     """(filtro_fijo, (opcion_si, opcion_no)) de un eje del cruce.
 
@@ -249,8 +283,8 @@ def _eje(
     a los 4 subgrupos) y el eje pasa a variar segun filtro_secundario y SU
     propio complementario."""
     if filtro_secundario is None:
-        return None, _lado_filtro(filtro_principal, columnas_validas)
-    return filtro_principal, _lado_filtro(filtro_secundario, columnas_validas)
+        return None, _lado_filtro(con, filtro_principal, columnas_validas)
+    return filtro_principal, _lado_filtro(con, filtro_secundario, columnas_validas)
 
 
 def _calcular_subgrupos(
@@ -267,8 +301,8 @@ def _calcular_subgrupos(
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
 
-    fijo_a, (eje_a_si, eje_a_no) = _eje(filtro1, filtro3, columnas_validas)
-    fijo_b, (eje_b_si, eje_b_no) = _eje(filtro2, filtro4, columnas_validas)
+    fijo_a, (eje_a_si, eje_a_no) = _eje(con, filtro1, filtro3, columnas_validas)
+    fijo_b, (eje_b_si, eje_b_no) = _eje(con, filtro2, filtro4, columnas_validas)
 
     condiciones_fijas, params_fijos, etiquetas_fijas = [], [], []
     for filtro_fijo in (fijo_a, fijo_b):
@@ -276,7 +310,7 @@ def _calcular_subgrupos(
             cond, params = _condicion_sql(filtro_fijo, columnas_validas)
             condiciones_fijas.append(f"(({cond}) IS TRUE)")
             params_fijos += params
-            etiquetas_fijas.append(_etiqueta_filtro(filtro_fijo, True))
+            etiquetas_fijas.append(_etiqueta_filtro(con, filtro_fijo, True))
 
     combos = {
         "filtro1_si__filtro2_si": (eje_a_si, eje_b_si),
