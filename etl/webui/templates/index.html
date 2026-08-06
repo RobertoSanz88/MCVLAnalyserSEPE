@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <title>MCVL ETL</title>
     <style>
-        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem;
+        body { font-family: system-ui, sans-serif; max-width: 1150px; margin: 2rem auto; padding: 0 1rem;
                font-size: 1.15rem; }
         h1 { font-size: 1.6rem; }
         fieldset { margin-bottom: 1.5rem; font-size: 1rem; }
@@ -28,6 +28,8 @@
         #log { background: #111; color: #ddd; padding: 1rem; height: 22rem; overflow-y: auto;
                font-family: ui-monospace, monospace; font-size: 0.95rem; white-space: pre-wrap; }
         .ok { color: #6f6; } .err { color: #f66; }
+        .nota { color: #888; font-size: 0.85rem; margin-left: 0.5rem; }
+        .aviso { color: #b70; font-size: 0.85rem; margin-left: 0.5rem; }
     </style>
 </head>
 <body>
@@ -42,14 +44,19 @@
         <div class="fila"><label for="raw">Carpeta TXT brutos</label><input type="text" id="raw" placeholder="C:\ruta\a\MCVL 2024 TXT"></div>
         <div class="fila"><label for="parquet">Carpeta de salida Parquet</label><input type="text" id="parquet" placeholder="C:\ruta\a\parquet"></div>
         <div class="fila"><label for="year">Año</label><input type="text" id="year" value="2024" style="width:5rem"></div>
-        <div class="fila"><label for="borrar_txt">Borrar TXT tras procesar</label><input type="checkbox" id="borrar_txt"></div>
+        <div class="fila"><label for="borrar_txt">Borrar TXT tras procesar</label><input type="checkbox" id="borrar_txt">
+            <span class="aviso">Marcar sólo si existe una copia de los TXT y el ordenador tiene menos de 10 GB de RAM</span>
+        </div>
     </fieldset>
 
     <div class="acciones">
         {% for id, nombre, destino in acciones %}
         <button id="boton-{{ id }}" onclick="ejecutar('{{ id }}')" title="{{ destino }}">{{ nombre }}</button>
         {% endfor %}
+    </div>
+    <div class="acciones">
         <button id="boton-todas" onclick="ejecutar('todas')">Construir todas</button>
+        <span class="nota">≈30 min</span>
     </div>
     <div class="acciones">
         <button id="boton-personas_extendida" class="final" onclick="ejecutar('personas_extendida')">Construir tabla de personas extendida</button>
