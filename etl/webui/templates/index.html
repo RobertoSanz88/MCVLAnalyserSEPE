@@ -15,6 +15,7 @@
         button { padding: 0.6rem 1rem; cursor: pointer; font-size: 1rem; }
         button.final { background: #2b5; color: white; font-weight: bold; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.procesando { outline: 3px solid #fa0; outline-offset: -3px; opacity: 1 !important; }
         #barra-contenedor { background: #333; border-radius: 4px; height: 1.6rem; margin-bottom: 0.5rem;
                              overflow: hidden; display: none; }
         #barra { background: #2b5; height: 100%; width: 0%; transition: width 0.4s ease;
@@ -46,12 +47,12 @@
 
     <div class="acciones">
         {% for id, nombre, destino in acciones %}
-        <button onclick="ejecutar('{{ id }}')" title="{{ destino }}">{{ nombre }}</button>
+        <button id="boton-{{ id }}" onclick="ejecutar('{{ id }}')" title="{{ destino }}">{{ nombre }}</button>
         {% endfor %}
-        <button onclick="ejecutar('todas')">Construir todas</button>
+        <button id="boton-todas" onclick="ejecutar('todas')">Construir todas</button>
     </div>
     <div class="acciones">
-        <button class="final" onclick="ejecutar('personas_extendida')">Construir tabla personas extendida (Fase 3)</button>
+        <button id="boton-personas_extendida" class="final" onclick="ejecutar('personas_extendida')">Construir tabla personas extendida (Fase 3)</button>
     </div>
 
     <div id="barra-contenedor"><div id="barra">0%</div></div>
@@ -73,6 +74,18 @@ for (const c of campos) {
 
 let fuenteActual = null;
 let terminadoLimpio = false;
+
+// IDs de las 6 acciones de tabla individual (coinciden con los botones id="boton-<id>").
+// "Construir todas" imprime, por cada una, una linea "# NOMBRE" (ver ejecutar_paso.py) que
+// usamos aqui para saber cual esta en curso y resaltar su boton.
+const IDS_TABLAS = [{% for id, nombre, destino in acciones %}'{{ id }}', {% endfor %}];
+
+function marcarProcesando(id) {
+    document.querySelectorAll('.acciones button').forEach(b => b.classList.remove('procesando'));
+    if (!id) return;
+    const boton = document.getElementById('boton-' + id);
+    if (boton) boton.classList.add('procesando');
+}
 
 // Duracion aproximada (segundos) de cada grupo de la Fase 3, medida hoy en una ejecucion real
 // completa. Solo sirve para "personas_extendida": las 6 tablas individuales dependen del
@@ -132,6 +145,15 @@ function fijarBarra(pct) {
     barra.textContent = pct.toFixed(0) + '%';
 }
 
+// Coincide con una linea "# NOMBRE" (el separador que imprime ejecutar_paso.py entre tablas
+// al ejecutar "Construir todas") y devuelve el id de tabla si corresponde a una conocida.
+function idTablaEnLinea(linea) {
+    const m = linea.match(/^#\s+([A-Z_]+)\s*$/);
+    if (!m) return null;
+    const id = m[1].toLowerCase();
+    return IDS_TABLAS.includes(id) ? id : null;
+}
+
 function ejecutar(accion) {
     if (fuenteActual) fuenteActual.close();
     if (temporizador) clearInterval(temporizador);
@@ -162,7 +184,12 @@ function ejecutar(accion) {
     const esPersonasExtendida = accion === 'personas_extendida';
     barra.classList.toggle('indeterminada', !esPersonasExtendida);
     fijarBarra(0);
+    if (!esPersonasExtendida) barra.textContent = '';
     if (esPersonasExtendida) temporizador = setInterval(tick, 200);
+
+    // Si la accion es una tabla individual ya sabemos cual es; si es "todas" se ira marcando
+    // segun lleguen las lineas "# NOMBRE" del log (ver idTablaEnLinea).
+    marcarProcesando(IDS_TABLAS.includes(accion) ? accion : null);
 
     const url = `/ejecutar?accion=${accion}&raw=${raw}&parquet=${parquet}&year=${year}&borrar_txt=${borrarTxt}`;
     fuenteActual = new EventSource(url);
@@ -171,6 +198,10 @@ function ejecutar(accion) {
         log.textContent += ev.data + '\n';
         log.scrollTop = log.scrollHeight;
         if (esPersonasExtendida) actualizarBarraPesada(ev.data);
+        if (accion === 'todas') {
+            const id = idTablaEnLinea(ev.data);
+            if (id) marcarProcesando(id);
+        }
     };
 
     fuenteActual.addEventListener('fin', (ev) => {
@@ -179,6 +210,7 @@ function ejecutar(accion) {
         log.textContent += (ev.data === 'OK' ? '\n✔ ' : '\n✘ ') + ev.data + '\n';
         log.scrollTop = log.scrollHeight;
         botones.forEach(b => b.disabled = false);
+        marcarProcesando(null);
         barra.classList.remove('indeterminada');
         if (ev.data === 'OK') {
             fijarBarra(100);
@@ -197,6 +229,7 @@ function ejecutar(accion) {
         if (temporizador) { clearInterval(temporizador); temporizador = null; }
         log.textContent += '\n✘ Conexión perdida con el servidor.\n';
         botones.forEach(b => b.disabled = false);
+        marcarProcesando(null);
         barra.classList.remove('indeterminada');
         barra.classList.add('error');
         if (fuenteActual) fuenteActual.close();
