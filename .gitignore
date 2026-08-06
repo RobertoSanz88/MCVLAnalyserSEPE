@@ -1,4 +1,5 @@
 data/
+/parquet/
 build/dist/
 build/work/
 *.parquet
@@ -6,3 +7,4 @@ build/work/
 __pycache__/
 *.pyc
 .claude/
+log_etl.txt
