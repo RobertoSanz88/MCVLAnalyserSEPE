@@ -98,9 +98,11 @@
             font-family: var(--font); font-size: 0.85rem; padding: 0.3rem 0.45rem;
             border: 1.5px solid var(--border); border-radius: 5px; background: var(--bg2); color: var(--text); }
         #config-filtro select:focus, #config-filtro input[type=number]:focus { outline: none; border-color: var(--verde-acc); }
+        #config-numerica label { display: block; margin-bottom: 0.4rem; }
         #lista-categorias { max-height: 150px; overflow-y: auto; margin: 0.5rem 0; }
         #lista-categorias label { display: block; font-size: 0.82rem; padding: 0.15rem 0; }
         .destino-filtro { margin: 0.6rem 0; font-size: 0.82rem; color: var(--muted); }
+        .destino-filtro .destino-titulo { display: block; margin-bottom: 0.35rem; }
         .destino-filtro label { margin-right: 1rem; font-weight: 600; }
 
         button { cursor: pointer; padding: 0.45rem 0.9rem; font-size: 0.85rem; font-family: var(--font);
@@ -125,7 +127,9 @@
         #boton-exportar:disabled { background: var(--bg3); border-color: var(--border); color: var(--muted); cursor: not-allowed; }
 
         /* --- Tabla numericas --- */
-        table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+        /* Tamano de los datos (no de las cabeceras, que ya tienen su propio font-size mas
+           abajo): reducido 2 niveles (0.1rem cada uno) respecto al 0.82rem original. */
+        table { border-collapse: collapse; width: 100%; font-size: 0.62rem; }
         #tabla-numericas th, #tabla-numericas td { border: 1px solid var(--border); padding: 0.35rem 0.45rem;
                                                      text-align: right; }
         #tabla-numericas th { background: var(--bg3); color: var(--muted); text-align: center;
@@ -195,7 +199,7 @@
                         <div id="lista-categorias"></div>
                     </div>
                     <div class="destino-filtro">
-                        Asignar a:
+                        <span class="destino-titulo">Asignar a:</span>
                         <label><input type="radio" name="destino" value="1" checked> Filtro 1</label>
                         <label><input type="radio" name="destino" value="2"> Filtro 2</label>
                     </div>
@@ -350,9 +354,13 @@ async function calcular() {
     document.getElementById('boton-exportar').disabled = false;
 }
 
-function fmt(n, decimales = 1) {
+// 1 decimal para unidades/decenas, sin decimales a partir de centenas (el decimal
+// deja de aportar precision util cuando la cifra ya es grande).
+function fmt(n) {
     if (n === null || n === undefined) return '';
-    return Number(n).toFixed(decimales);
+    const num = Number(n);
+    const decimales = Math.abs(num) >= 100 ? 0 : 1;
+    return num.toFixed(decimales);
 }
 
 // Decide que estadistico destacar por fila: si la dispersion (desviacion/media)
@@ -414,7 +422,7 @@ function renderizarCategoricas(subgrupos) {
             html += `<tr><td>${valor}</td>`;
             for (const nombre of ORDEN_SUBGRUPOS) {
                 const entrada = mapas[nombre].get(valor);
-                html += entrada ? `<td>${entrada.conteo}</td><td>${fmt(entrada.porcentaje, 1)}</td>` : '<td></td><td></td>';
+                html += entrada ? `<td>${entrada.conteo}</td><td>${fmt(entrada.porcentaje)}</td>` : '<td></td><td></td>';
             }
             html += '</tr>';
         }
