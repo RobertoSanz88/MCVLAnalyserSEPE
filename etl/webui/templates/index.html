@@ -87,11 +87,36 @@ function marcarProcesando(id) {
     if (boton) boton.classList.add('procesando');
 }
 
-// Duracion aproximada (segundos) de cada grupo de la Fase 3, medida hoy en una ejecucion real
-// completa. Solo sirve para "personas_extendida": las 6 tablas individuales dependen del
-// tamanyo real de cada TXT en la maquina de turno, no hay forma fiable de estimarlas -> barra
-// indeterminada para esas.
-const ETAPAS_PERSONAS_EXTENDIDA = [
+// Duraciones medidas en una ejecucion real completa (PC de 15GB RAM, MCVL 2024 completa,
+// "Construir todas" cronometrado en 28 min = 1680s). Para Bases CA y Afiliacion incluyen,
+// ademas de la lectura, el combinado con DuckDB (y en Afiliacion el calculo de Fase 1), que no
+// se imprime con su propio tiempo - repartido por diferencia sobre el total cronometrado. No
+// son exactas para pulsar cada boton en solitario (la duracion real depende del tamanyo de los
+// TXT de turno), pero sirven de referencia razonable: si la tabla real va mas rapido, la barra
+// salta antes de tiempo al 100% en cuanto llega el evento final; si va mas lenta, se queda
+// esperando cerca del 97% hasta que termine de verdad. Preferido explicitamente por el usuario
+// frente a la barra indeterminada, aunque no cuadre exacto.
+const DURACION_TABLA_SEG = {
+    personas: 8,
+    fiscal: 45,
+    bases_cp: 40,
+    bases_ca: 480,
+    pensiones: 85,
+    afiliacion: 1022,
+};
+
+function calcularPorcentajes(etapas) {
+    const total = etapas.reduce((s, e) => s + e.seg, 0);
+    let acumulado = 0;
+    for (const etapa of etapas) {
+        etapa.pctInicio = (acumulado / total) * 100;
+        acumulado += etapa.seg;
+        etapa.pctFin = (acumulado / total) * 100;
+    }
+    return etapas;
+}
+
+const ETAPAS_PERSONAS_EXTENDIDA = calcularPorcentajes([
     { marca: 'Bootstrap',        seg: 1 },
     { marca: 'Grupo A',          seg: 18 },
     { marca: 'Grupo B',          seg: 17 },
@@ -101,28 +126,31 @@ const ETAPAS_PERSONAS_EXTENDIDA = [
     { marca: 'Grupo F',          seg: 12 },
     { marca: 'Grupo G',          seg: 96 },
     { marca: 'Grupo H',          seg: 45 },
-];
-const TOTAL_SEGUNDOS = ETAPAS_PERSONAS_EXTENDIDA.reduce((s, e) => s + e.seg, 0);
-// % acumulado a la ENTRADA y a la SALIDA de cada etapa
-let acumulado = 0;
-for (const etapa of ETAPAS_PERSONAS_EXTENDIDA) {
-    etapa.pctInicio = (acumulado / TOTAL_SEGUNDOS) * 100;
-    acumulado += etapa.seg;
-    etapa.pctFin = (acumulado / TOTAL_SEGUNDOS) * 100;
-}
+]);
+
+// IMPORTANTE: este orden debe coincidir exactamente con TODAS_LAS_TABLAS en ejecutar_paso.py
+// (ahi bases_cp va ANTES que bases_ca, al reves que en la fila de botones) - si se desincroniza,
+// los porcentajes acumulados de cada etapa quedan mal y la barra puede retroceder al pasar de
+// una tabla a la siguiente.
+const ORDEN_TODAS = ['personas', 'fiscal', 'bases_cp', 'bases_ca', 'pensiones', 'afiliacion'];
+const ETAPAS_TODAS = calcularPorcentajes(
+    ORDEN_TODAS.map(id => ({ marca: '# ' + id.toUpperCase(), seg: DURACION_TABLA_SEG[id] }))
+);
 
 // Mientras dura una etapa, la barra avanza sola con el tiempo (no solo salta al llegar la
 // siguiente marca): interpola desde el % de inicio de la etapa hasta su % de fin segun el
 // tiempo transcurrido frente a la duracion esperada, tope en el 97% del tramo para no marcar
 // nunca la etapa como acabada antes de que llegue de verdad la siguiente marca (si tarda mas
 // de lo esperado, la barra se queda cerca del final del tramo esperando, no lo pasa).
+let etapasActivas = null;
 let etapaActual = null;
 let etapaInicioTs = null;
 let temporizador = null;
 
 function actualizarBarraPesada(linea) {
-    for (const etapa of ETAPAS_PERSONAS_EXTENDIDA) {
-        if (linea.includes(etapa.marca)) {
+    if (!etapasActivas) return;
+    for (const etapa of etapasActivas) {
+        if (etapa.marca && linea.includes(etapa.marca)) {
             etapaActual = etapa;
             etapaInicioTs = Date.now();
             fijarBarra(etapa.pctInicio);
@@ -158,6 +186,7 @@ function ejecutar(accion) {
     if (fuenteActual) fuenteActual.close();
     if (temporizador) clearInterval(temporizador);
     terminadoLimpio = false;
+    etapasActivas = null;
     etapaActual = null;
     etapaInicioTs = null;
 
@@ -181,11 +210,27 @@ function ejecutar(accion) {
     const barra = document.getElementById('barra');
     contenedor.style.display = 'block';
     barra.classList.remove('error');
-    const esPersonasExtendida = accion === 'personas_extendida';
-    barra.classList.toggle('indeterminada', !esPersonasExtendida);
+
+    if (accion === 'personas_extendida') {
+        etapasActivas = ETAPAS_PERSONAS_EXTENDIDA;
+    } else if (accion === 'todas') {
+        etapasActivas = ETAPAS_TODAS;
+    } else if (DURACION_TABLA_SEG[accion] !== undefined) {
+        etapasActivas = [{ marca: null, seg: DURACION_TABLA_SEG[accion], pctInicio: 0, pctFin: 100 }];
+    }
+
+    barra.classList.toggle('indeterminada', etapasActivas === null);
     fijarBarra(0);
-    if (!esPersonasExtendida) barra.textContent = '';
-    if (esPersonasExtendida) temporizador = setInterval(tick, 200);
+    if (etapasActivas === null) {
+        barra.textContent = '';
+    } else {
+        temporizador = setInterval(tick, 200);
+        if (etapasActivas.length === 1 && etapasActivas[0].marca === null) {
+            // Accion de una sola tabla: no hay linea de log que marque el inicio, arranca ya.
+            etapaActual = etapasActivas[0];
+            etapaInicioTs = Date.now();
+        }
+    }
 
     // Si la accion es una tabla individual ya sabemos cual es; si es "todas" se ira marcando
     // segun lleguen las lineas "# NOMBRE" del log (ver idTablaEnLinea).
@@ -197,7 +242,7 @@ function ejecutar(accion) {
     fuenteActual.onmessage = (ev) => {
         log.textContent += ev.data + '\n';
         log.scrollTop = log.scrollHeight;
-        if (esPersonasExtendida) actualizarBarraPesada(ev.data);
+        actualizarBarraPesada(ev.data);
         if (accion === 'todas') {
             const id = idTablaEnLinea(ev.data);
             if (id) marcarProcesando(id);
