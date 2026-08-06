@@ -57,6 +57,7 @@ TABLES = {
             "Bases_cotiz_bruto_historico": "bases_cotiz_bruto_historico",
             "Edad_Ultimo_Empleo": "edad_ultimo_empleo",
             "Anos_VL": "anos_vl",
+            "Edad_Actual_Fecha_Corte": "edad_actual_fecha_corte",
             "Edad_Primer_Empleo_Signif": "edad_primer_empleo_signif",
             "num_altas_anual_promedio": "num_altas_anual_promedio",
             "num_bajas_anual_promedio": "num_bajas_anual_promedio",

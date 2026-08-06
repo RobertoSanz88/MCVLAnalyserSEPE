@@ -19,7 +19,7 @@ los 4 subgrupos, y el eje pasa a variar segun filtro3 (o filtro4). P.ej.:
     filtro1 = sexo in ["1"] (Hombres), sin contracolectivo -> fijo, siempre Hombres
     filtro3 = tipo_paro in ["LD"]                          -> eje A: ParadosLD / Resto
     filtro2 = nacionalidad in ["espana"] (Espanoles), sin contracolectivo -> fijo
-    filtro4 = edad_actual >= 45                            -> eje B: Mayores 45 / Resto
+    filtro4 = edad_actual_fecha_corte >= 45                -> eje B: Mayores 45 / Resto
 
     subgrupos: Hombres+Espanoles+ParadosLD+Mayores45, Hombres+Espanoles+ParadosLD+Resto,
                Hombres+Espanoles+Resto+Mayores45,      Hombres+Espanoles+Resto+Resto
@@ -63,12 +63,6 @@ ORDEN_SUBGRUPOS = [
     "filtro1_no__filtro2_si",
     "filtro1_no__filtro2_no",
 ]
-
-# Columnas derivadas que no existen tal cual en el Parquet pero son utiles
-# como filtro (p.ej. "mayores de 45 anos" no es una columna real).
-COLUMNAS_VIRTUALES = {
-    "edad_actual": "date_part('year', age(current_date, fecha_nacimiento))",
-}
 
 # Columnas numericas (por tipo DuckDB) que se excluyen de "Estadisticas
 # numericas": no son caracteristicas calculadas, sino el identificador o
@@ -124,8 +118,6 @@ def _columnas_personas(con) -> dict[str, str]:
 
 
 def _columna_sql(nombre: str, columnas_validas: dict[str, str]) -> str:
-    if nombre in COLUMNAS_VIRTUALES:
-        return COLUMNAS_VIRTUALES[nombre]
     if nombre not in columnas_validas:
         raise HTTPException(400, f"Columna desconocida: {nombre}")
     return nombre
@@ -219,7 +211,6 @@ def columnas(request: Request):
     con = request.app.state.con
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
-    numericas = numericas + list(COLUMNAS_VIRTUALES.keys())
     return {"numericas": sorted(numericas), "categoricas": sorted(categoricas)}
 
 

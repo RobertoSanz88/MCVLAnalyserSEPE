@@ -648,7 +648,11 @@ def extraer_grupo_f(parquet_folder, anio_datos):
     Devuelve (lista_de_extracciones, nombre_columna_ingresos_brutos)."""
     df = pd.read_parquet(_ruta(parquet_folder, "tabla_datos_fiscales_optimizada.parquet"))
 
-    df_sumado = df.groupby("01 IPF")["07 PERC_INTEGRA_DIN_NO_DERIVADA_IL"].sum().reset_index()
+    # /100: el campo fiscal viene en centimos (convencion habitual de la Agencia
+    # Tributaria/SEPE), ni el cuaderno ni la version anterior de este script lo
+    # dividian - decision explicita del usuario tras detectar el error (medias de
+    # ~2,2M € sin sentido en vez de ~22.000 €).
+    df_sumado = (df.groupby("01 IPF")["07 PERC_INTEGRA_DIN_NO_DERIVADA_IL"].sum() / 100).reset_index()
     nombre_col_ingresos_brutos = f"Ingresos_bruto_anual_{anio_datos}"
     df_estudio_ingresosbrutos = df_sumado.rename(
         columns={"07 PERC_INTEGRA_DIN_NO_DERIVADA_IL": nombre_col_ingresos_brutos}
@@ -747,6 +751,7 @@ NUEVO_ORDEN = [
     "01 IPF", "02 FECHA_NACIMIENTO", "03 SEXO", "04 NACIONALIDAD", "05 PROV_NACIMIENTO",
     "06 PROV_1a_AFILIACION", "07 DOMIC_RESID_HABITUAL", "08 FECHA_FALLECIMIENTO", "09 PAIS_NACIMIENTO",
     "Nacionalidad_agrupado", "Pais_nacim_agrupado",
+    "Edad_Actual_Fecha_Corte",
     "Edad_Primer_Empleo_Signif", "Duracion_1er_Empleo_Signif", "Grupo_cotiz_1er_Empleo_Signif",
     "Edad_Ultimo_Empleo", "Grupo_Ultimo_Empleo",
     "t_contrato_mas_largo", "Anos_VL",
@@ -837,6 +842,13 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     df["Edad_Ultimo_Empleo"] = df["Edad_Ultimo_Empleo"] / 12
     df["Edad_Primer_Empleo_Signif"] = df["Edad_Primer_Empleo_Signif"] / 12
 
+    # Edad_Actual_Fecha_Corte: edad a la fecha de corte de esta MCVL (FECHA_CORTE), NUNCA la
+    # fecha real del sistema - si no, se desincroniza del resto del snapshot segun cuando se
+    # ejecute la app.
+    fecha_nacimiento_completa = df["02 FECHA_NACIMIENTO"].dt.year * 12 + df["02 FECHA_NACIMIENTO"].dt.month
+    fecha_corte_completa = FECHA_CORTE.year * 12 + FECHA_CORTE.month
+    df["Edad_Actual_Fecha_Corte"] = (fecha_corte_completa - fecha_nacimiento_completa) / 12
+
     # num_altas_anual_promedio / num_bajas_anual_promedio: normalizados por anyos de vida laboral
     df["num_altas_anual_promedio"] = df["num_episodios_alta"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"].dt.days * 365
     df["num_bajas_anual_promedio"] = df["num_episodios_baja"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"].dt.days * 365
@@ -900,9 +912,15 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     df.loc[es_parado & es_ld, "Situacion_Paro_Ocupacion"] = "Parado_LD"
     df.loc[es_parado & ~es_ld, "Situacion_Paro_Ocupacion"] = "Parado_NoLD"
 
-    # %T_total_EMPLEO / %T_total_DESEMPLEO
-    df["%T_total_EMPLEO"] = df["T_total_EMPLEO"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"]
-    df["%T_total_DESEMPLEO"] = df["T_total_DESEMPLEO"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"]
+    # %T_total_EMPLEO / %T_total_DESEMPLEO: proporcion (0-1) sobre la duracion total de
+    # vida laboral, x100 para que sea un porcentaje real (0-100) acorde al nombre de la
+    # columna. El cuaderno reconstruyo esta formula (el codigo original de 2023 que la
+    # produjo se habia perdido) sin el x100 y con una advertencia sin resolver
+    # ("REVISAR ... verificar que es la definicion que se queria") que esta version
+    # anterior de este script tampoco llevaba - decision explicita del usuario tras
+    # detectar que los valores (0,8 / 0,9 / 0,1...) no podian ser un porcentaje real.
+    df["%T_total_EMPLEO"] = df["T_total_EMPLEO"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"] * 100
+    df["%T_total_DESEMPLEO"] = df["T_total_DESEMPLEO"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"] * 100
 
     # Conversion de columnas Timedelta a anyos (in-place)
     for col in df.columns:
@@ -930,6 +948,12 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     outliers = df[(df["Anos_VL"] < limite_inferior) | (df["Anos_VL"] > limite_superior)]
     print(f"Outliers de Anos_VL: {len(outliers)} ({len(outliers) / len(df) * 100:.2f}%)")
     df = df[~df.index.isin(outliers.index)].copy()
+
+    # Sexo: 0/1/2 -> "NO CONSTA"/"Hombre"/"Mujer". El cuaderno no transforma esta columna (se
+    # copia tal cual del CSV crudo con esos 3 codigos numericos); decision explicita del usuario
+    # de relabelarla aqui, con el mismo criterio "NO CONSTA" ya usado para el resto de columnas
+    # categoricas con codigos ausentes/desconocidos (Prov_trabajo_ppal, Act_econ_ppal...).
+    df["03 SEXO"] = df["03 SEXO"].map({0: "NO CONSTA", 1: "Hombre", 2: "Mujer"}).fillna("NO CONSTA").astype("category")
 
     # Provincia de trabajo principal / Actividad economica principal (CNAE-2009, nivel Grupo)
     provincias_df = pd.read_csv(provincias_dict_path, sep=";", encoding="utf-8", dtype={"codigo": int})
