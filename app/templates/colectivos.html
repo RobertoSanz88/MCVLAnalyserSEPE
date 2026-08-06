@@ -462,20 +462,32 @@ async function calcular() {
     document.getElementById('boton-exportar').disabled = false;
 }
 
+// Punto de millar puesto a mano (cada 3 cifras desde la derecha) en vez de con
+// toLocaleString('es-ES'): el dato de localizacion del navegador para es-ES solo
+// agrupa a partir de 5 cifras (10.000), no con 4 (deja "4780" en vez de "4.780") -
+// convencion tipografica real del CLDR, pero no la que queremos aqui.
+function agruparMiles(digitos) {
+    return digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 // 1 decimal para unidades/decenas, sin decimales a partir de centenas (el decimal
-// deja de aportar precision util cuando la cifra ya es grande).
-// Convencion espanola: coma decimal, punto de millar (toLocaleString('es-ES')
-// ya lo hace nativo, sin tener que montar el separador a mano).
+// deja de aportar precision util cuando la cifra ya es grande). Coma decimal,
+// punto de millar (convencion espanola).
 function fmt(n) {
     if (n === null || n === undefined) return '';
     const num = Number(n);
     const decimales = Math.abs(num) >= 100 ? 0 : 1;
-    return num.toLocaleString('es-ES', { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+    const signo = num < 0 ? '-' : '';
+    const [parteEntera, parteDecimal] = Math.abs(num).toFixed(decimales).split('.');
+    const entero = signo + agruparMiles(parteEntera);
+    return parteDecimal !== undefined ? `${entero},${parteDecimal}` : entero;
 }
 
 function fmtEntero(n) {
     if (n === null || n === undefined) return '';
-    return Number(n).toLocaleString('es-ES');
+    const num = Math.round(Number(n));
+    const signo = num < 0 ? '-' : '';
+    return signo + agruparMiles(Math.abs(num).toString());
 }
 
 // Decide que estadistico destacar por fila: si la dispersion (desviacion/media)
