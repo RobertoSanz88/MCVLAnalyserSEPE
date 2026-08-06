@@ -1,0 +1,273 @@
+codigo;descripcion
+011;Cultivos no perennes
+012;Cultivos perennes
+013;Propagación de plantas
+014;Producción ganadera
+015;Producción agrícola combinada con la producción ganadera
+016;Actividades de apoyo a la agricultura, a la ganadería y de preparación posterior a la cosecha
+017;Caza, captura de animales y servicios relacionados con las mismas
+021;Silvicultura y otras actividades forestales
+022;Explotación de la madera
+023;Recolección de productos silvestres, excepto madera
+024;Servicios de apoyo a la silvicultura
+031;Pesca
+032;Acuicultura
+051;Extracción de antracita y hulla
+052;Extracción de lignito
+061;Extracción de crudo de petróleo
+062;Extracción de gas natural
+071;Extracción de minerales de hierro
+072;Extracción de minerales metálicos no férreos
+081;Extracción de piedra, arena y arcilla
+089;Industrias extractivas n.c.o.p.
+091;Actividades de apoyo a la extracción de petróleo y gas natural
+099;Actividades de apoyo a otras industrias extractivas
+101;Procesado y conservación de carne y elaboración de productos cárnicos
+102;Procesado y conservación de pescados, crustáceos y moluscos
+103;Procesado y conservación de frutas y hortalizas
+104;Fabricación de aceites y grasas vegetales y animales
+105;Fabricación de productos lácteos
+106;Fabricación de productos de molinería, almidones y productos amiláceos
+107;Fabricación de productos de panadería y pastas alimenticias
+108;Fabricación de otros productos alimenticios
+109;Fabricación de productos para la alimentación animal
+110;Fabricación de bebidas
+120;Industria del tabaco
+131;Preparación e hilado de fibras textiles
+132;Fabricación de tejidos textiles
+133;Acabado de textiles
+139;Fabricación de otros productos textiles
+141;Confección de prendas de vestir, excepto de peletería
+142;Fabricación de artículos de peletería
+143;Confección de prendas de vestir de punto
+151;"Preparación, curtido y acabado del cuero; fabricación de artículos de marroquinería, viaje y de guarnicionería y talabartería; preparación y teñido de pieles"
+152;Fabricación de calzado
+161;Aserrado y cepillado de la madera
+162;Fabricación de productos de madera, corcho, cestería y espartería
+171;Fabricación de pasta papelera, papel y cartón
+172;Fabricación de artículos de papel y de cartón
+181;Artes gráficas y servicios relacionados con las mismas
+182;Reproducción de soportes grabados
+191;Coquerías
+192;Refino de petróleo
+201;Fabricación de productos químicos básicos, compuestos nitrogenados, fertilizantes, plásticos y caucho sintético en formas primarias
+202;Fabricación de pesticidas y otros productos agroquímicos
+203;"Fabricación de pinturas, barnices y revestimientos similares; tintas de imprenta y masillas"
+204;"Fabricación de jabones, detergentes y otros artículos de limpieza y abrillantamiento; fabricación de perfumes y cosméticos"
+205;Fabricación de otros productos químicos
+206;Fabricación de fibras artificiales y sintéticas
+211;Fabricación de productos farmacéuticos de base
+212;Fabricación de especialidades farmacéuticas
+221;Fabricación de productos de caucho
+222;Fabricación de productos de plástico
+231;Fabricación de vidrio y productos de vidrio
+232;Fabricación de productos cerámicos refractarios
+233;Fabricación de productos cerámicos para la construcción
+234;Fabricación de otros productos cerámicos
+235;Fabricación de cemento, cal y yeso
+236;Fabricación de elementos de hormigón, cemento y yeso
+237;Corte, tallado y acabado de la piedra
+239;Fabricación de productos abrasivos y productos minerales no metálicos n.c.o.p.
+241;Fabricación de productos básicos de hierro, acero y ferroaleaciones
+242;Fabricación de tubos, tuberías, perfiles huecos y sus accesorios, de acero
+243;Fabricación de otros productos de primera transformación del acero
+244;Producción de metales preciosos y de otros metales no férreos
+245;Fundición de metales
+251;Fabricación de elementos metálicos para la construcción
+252;Fabricación de cisternas, grandes depósitos y contenedores de metal
+253;Fabricación de generadores de vapor, excepto calderas de calefacción central
+254;Fabricación de armas y municiones
+255;"Forja, estampación y embutición de metales; metalurgia de polvos"
+256;"Tratamiento y revestimiento de metales; ingeniería mecánica por cuenta de terceros"
+257;Fabricación de artículos de cuchillería y cubertería, herramientas y ferretería
+259;Fabricación de otros productos metálicos
+261;Fabricación de componentes electrónicos y circuitos impresos ensamblados
+262;Fabricación de ordenadores y equipos periféricos
+263;Fabricación de equipos de telecomunicaciones
+264;Fabricación de productos electrónicos de consumo
+265;"Fabricación de instrumentos y aparatos de medida, verificación y navegación; fabricación de relojes"
+266;Fabricación de equipos de radiación, electromédicos y electroterapéuticos
+267;Fabricación de instrumentos de óptica y equipo fotográfico
+268;Fabricación de soportes magnéticos y ópticos
+271;Fabricación de motores, generadores y transformadores eléctricos, y de aparatos de distribución y control eléctrico
+272;Fabricación de pilas y acumuladores eléctricos
+273;Fabricación de cables y dispositivos de cableado
+274;Fabricación de lámparas y aparatos eléctricos de iluminación
+275;Fabricación de aparatos domésticos
+279;Fabricación de otro material y equipo eléctrico
+281;Fabricación de maquinaria de uso general
+282;Fabricación de otra maquinaria de uso general
+283;Fabricación de maquinaria agraria y forestal
+284;Fabricación de máquinas herramienta para trabajar el metal y otras máquinas herramienta
+289;Fabricación de otra maquinaria para usos específicos
+291;Fabricación de vehículos de motor
+292;"Fabricación de carrocerías para vehículos de motor; fabricación de remolques y semirremolques"
+293;Fabricación de componentes, piezas y accesorios para vehículos de motor
+301;Construcción naval
+302;Fabricación de locomotoras y material ferroviario
+303;Construcción aeronáutica y espacial y su maquinaria
+304;Fabricación de vehículos militares de combate
+309;Fabricación de otro material de transporte n.c.o.p.
+310;Fabricación de muebles
+321;Fabricación de artículos de joyería, bisutería y similares
+322;Fabricación de instrumentos musicales
+323;Fabricación de artículos de deporte
+324;Fabricación de juegos y juguetes
+325;Fabricación de instrumentos y suministros médicos y odontológicos
+329;Industrias manufactureras n.c.o.p.
+331;Reparación de productos metálicos, maquinaria y equipo
+332;Instalación de máquinas y equipos industriales
+351;Producción, transporte y distribución de energía eléctrica
+352;"Producción de gas; distribución por tubería de combustibles gaseosos"
+353;Suministro de vapor y aire acondicionado
+360;Captación, depuración y distribución de agua
+370;Recogida y tratamiento de aguas residuales
+381;Recogida de residuos
+382;Tratamiento y eliminación de residuos
+383;Valorización
+390;Actividades de descontaminación y otros servicios de gestión de residuos
+411;Promoción inmobiliaria
+412;Construcción de edificios
+421;Construcción de carreteras y vías férreas, puentes y túneles
+422;Construcción de redes
+429;Construcción de otros proyectos de ingeniería civil
+431;Demolición y preparación de terrenos
+432;Instalaciones eléctricas, de fontanería y otras instalaciones en obras de construcción
+433;Acabado de edificios
+439;Otras actividades de construcción especializada
+451;Venta de vehículos de motor
+452;Mantenimiento y reparación de vehículos de motor
+453;Comercio de repuestos y accesorios de vehículos de motor
+454;Venta, mantenimiento y reparación de motocicletas y de sus repuestos y accesorios
+461;Intermediarios del comercio
+462;Comercio al por mayor de materias primas agrarias y de animales vivos
+463;Comercio al por mayor de productos alimenticios, bebidas y tabaco
+464;Comercio al por mayor de artículos de uso doméstico
+465;Comercio al por mayor de equipos para las tecnologías de la información y las comunicaciones
+466;Comercio al por mayor de otra maquinaria, equipos y suministros
+467;Otro comercio al por mayor especializado
+469;Comercio al por mayor no especializado
+471;Comercio al por menor en establecimientos no especializados
+472;Comercio al por menor de productos alimenticios, bebidas y tabaco en establecimientos especializados
+473;Comercio al por menor de combustible para la automoción en establecimientos especializados
+474;Comercio al por menor de equipos para las tecnologías de la información y las comunicaciones en establecimientos especializados
+475;Comercio al por menor de otros artículos de uso doméstico en establecimientos especializados
+476;Comercio al por menor de artículos culturales y recreativos en establecimientos especializados
+477;Comercio al por menor de otros artículos en establecimientos especializados
+478;Comercio al por menor en puestos de venta y en mercadillos
+479;Comercio al por menor no realizado ni en establecimientos, ni en puestos de venta ni en mercadillos
+491;Transporte interurbano de pasajeros por ferrocarril
+492;Transporte de mercancías por ferrocarril
+493;Otro transporte terrestre de pasajeros
+494;Transporte de mercancías por carretera y servicios de mudanza
+495;Transporte por tubería
+501;Transporte marítimo de pasajeros
+502;Transporte marítimo de mercancías
+503;Transporte de pasajeros por vías navegables interiores
+504;Transporte de mercancías por vías navegables interiores
+511;Transporte aéreo de pasajeros
+512;Transporte aéreo de mercancías y transporte espacial
+521;Depósito y almacenamiento
+522;Actividades anexas al transporte
+531;Actividades postales sometidas a la obligación del servicio universal
+532;Otras actividades postales y de correos
+551;Hoteles y alojamientos similares
+552;Alojamientos turísticos y otros alojamientos de corta estancia
+553;Campings y aparcamientos para caravanas
+559;Otros alojamientos
+561;Restaurantes y puestos de comidas
+562;Provisión de comidas preparadas para eventos y otros servicios de comidas
+563;Establecimientos de bebidas
+581;Edición de libros, periódicos y otras actividades editoriales
+582;Edición de programas informáticos
+591;Actividades cinematográficas, de vídeo y de programas de televisión
+592;Actividades de grabación de sonido y edición musical
+601;Actividades de radiodifusión
+602;Actividades de programación y emisión de televisión
+611;Telecomunicaciones por cable
+612;Telecomunicaciones inalámbricas
+613;Telecomunicaciones por satélite
+619;Otras actividades de telecomunicaciones
+620;Programación, consultoría y otras actividades relacionadas con la informática
+631;"Proceso de datos, hosting y actividades relacionadas; portales web"
+639;Otros servicios de información
+641;Intermediación monetaria
+642;Actividades de las sociedades holding
+643;Inversión colectiva, fondos y entidades financieras similares
+649;Otros servicios financieros, excepto seguros y fondos de pensiones
+651;Seguros
+652;Reaseguros
+653;Fondos de pensiones
+661;Actividades auxiliares a los servicios financieros, excepto seguros y fondos de pensiones
+662;Actividades auxiliares a seguros y fondos de pensiones
+663;Actividades de gestión de fondos
+681;Compraventa de bienes inmobiliarios por cuenta propia
+682;Alquiler de bienes inmobiliarios por cuenta propia
+683;Actividades inmobiliarias por cuenta de terceros
+691;Actividades jurídicas
+692;Actividades de contabilidad, teneduría de libros, auditoría y asesoría fiscal
+701;Actividades de las sedes centrales
+702;Actividades de consultoría de gestión empresarial
+711;Servicios técnicos de arquitectura e ingeniería y otras actividades relacionadas con el asesoramiento técnico
+712;Ensayos y análisis técnicos
+721;Investigación y desarrollo experimental en ciencias naturales y técnicas
+722;Investigación y desarrollo experimental en ciencias sociales y humanidades
+731;Publicidad
+732;Estudio de mercado y realización de encuestas de opinión pública
+741;Actividades de diseño especializado
+742;Actividades de fotografía
+743;Actividades de traducción e interpretación
+749;Otras actividades profesionales, científicas y técnicas n.c.o.p.
+750;Actividades veterinarias
+771;Alquiler de vehículos de motor
+772;Alquiler de efectos personales y artículos de uso doméstico
+773;Alquiler de otra maquinaria, equipos y bienes tangibles
+774;Arrendamiento de la propiedad intelectual y productos similares, excepto trabajos protegidos por los derechos de autor
+781;Actividades de las agencias de colocación
+782;Actividades de las empresas de trabajo temporal
+783;Otra provisión de recursos humanos
+791;Actividades de agencias de viajes y operadores turísticos
+799;Otros servicios de reservas y actividades relacionadas con los mismos
+801;Actividades de seguridad privada
+802;Servicios de sistemas de seguridad
+803;Actividades de investigación
+811;Servicios integrales a edificios e instalaciones
+812;Actividades de limpieza
+813;Actividades de jardinería
+821;Actividades administrativas y auxiliares de oficina
+822;Actividades de los centros de llamadas
+823;Organización de convenciones y ferias de muestras
+829;Actividades de apoyo a las empresas n.c.o.p.
+841;Administración Pública y de la política económica y social
+842;Prestación de servicios a la comunidad en general
+843;Seguridad Social obligatoria
+851;Educación preprimaria
+852;Educación primaria
+853;Educación secundaria
+854;Educación postsecundaria
+855;Otra educación
+856;Actividades auxiliares a la educación
+861;Actividades hospitalarias
+862;Actividades médicas y odontológicas
+869;Otras actividades sanitarias
+871;Asistencia en establecimientos residenciales con cuidados sanitarios
+872;Asistencia en establecimientos residenciales para personas con discapacidad intelectual, enfermedad mental y drogodependencia
+873;Asistencia en establecimientos residenciales para personas mayores y con discapacidad física
+879;Otras actividades de asistencia en establecimientos residenciales
+881;Actividades de servicios sociales sin alojamiento para personas mayores y con discapacidad
+889;Otros actividades de servicios sociales sin alojamiento
+900;Actividades de creación, artísticas y espectáculos
+910;Actividades de bibliotecas, archivos, museos y otras actividades culturales
+920;Actividades de juegos de azar y apuestas
+931;Actividades deportivas
+932;Actividades recreativas y de entretenimiento
+941;Actividades de organizaciones empresariales, profesionales y patronales
+942;Actividades sindicales
+949;Otras actividades asociativas
+951;Reparación de ordenadores y equipos de comunicación
+952;Reparación de efectos personales y artículos de uso doméstico
+960;Otros servicios personales
+970;Actividades de los hogares como empleadores de personal doméstico
+981;Actividades de los hogares como productores de bienes para uso propio
+982;Actividades de los hogares como productores de servicios para uso propio
+990;Actividades de organizaciones y organismos extraterritoriales

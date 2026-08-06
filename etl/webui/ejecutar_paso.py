@@ -135,8 +135,9 @@ if __name__ == "__main__":
     parser.add_argument("--cnae-csv", default=None)
     args = parser.parse_args()
 
-    provincias_csv = args.provincias_csv or os.path.join(os.path.dirname(args.parquet.rstrip("/\\")), "provincias_dict.csv")
-    cnae_csv = args.cnae_csv or os.path.join(os.path.dirname(args.parquet.rstrip("/\\")), "cnae_3d_dict.csv")
+    _metadata_dir = os.path.join(_RAIZ_PROYECTO, "etl", "metadata")
+    provincias_csv = args.provincias_csv or os.path.join(_metadata_dir, "provincias_dict.csv")
+    cnae_csv = args.cnae_csv or os.path.join(_metadata_dir, "cnae_3d_dict.csv")
 
     ejecutar(args.accion, args.year, args.raw, args.parquet, args.borrar_txt, provincias_csv, cnae_csv)
     print("\nHECHO", flush=True)
