@@ -47,6 +47,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from pydantic import BaseModel
 
+from config import CATEGORICAS_COLECTIVOS
+
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
@@ -67,6 +69,13 @@ ORDEN_SUBGRUPOS = [
 COLUMNAS_VIRTUALES = {
     "edad_actual": "date_part('year', age(current_date, fecha_nacimiento))",
 }
+
+# Columnas numericas (por tipo DuckDB) que se excluyen de "Estadisticas
+# numericas": no son caracteristicas calculadas, sino el identificador o
+# columnas originales de Personas (anteriores a las fases 1-3 del ETL) que
+# resultan ser numericas por tipo pero no tienen sentido como media (un
+# codigo de provincia o una fecha guardada como entero).
+COLUMNAS_NUMERICAS_EXCLUIDAS = {"ipf", "domic_resid_habitual", "fecha_fallecimiento"}
 
 # Clasificacion de columnas de personas para las estadisticas por subgrupo.
 # TINYINT son codigos (sexo, provincia...) -> se tratan como categoricas,
@@ -158,11 +167,33 @@ def _stats_numericas(con, where: str, params: list, columnas: list[str]) -> list
     ]
 
 
-def _stats_categoricas(con, where: str, params: list, columnas: list[str], total: int) -> list[dict]:
+def _categoricas_visibles(categoricas_disponibles: list[str]) -> list[tuple[str, int | None]]:
+    """Cruza CATEGORICAS_COLECTIVOS (config.py) con las columnas categoricas
+    realmente disponibles en el Parquet, resolviendo prefijos tipo
+    "cobra_pension_*" (columnas cuyo nombre cambia segun el anyo de la MCVL
+    procesada). Entradas de config.py sin columna correspondiente se
+    ignoran en silencio - permite versionar un config.py valido para varios
+    anyos de datos, cada uno con nombres ligeramente distintos."""
+    disponibles = set(categoricas_disponibles)
     resultado = []
-    for c in columnas:
+    for entrada in CATEGORICAS_COLECTIVOS:
+        nombre_config, limite = entrada["columna"], entrada.get("limite")
+        if nombre_config.endswith("*"):
+            prefijo = nombre_config[:-1]
+            resultado += [(c, limite) for c in sorted(disponibles) if c.startswith(prefijo)]
+        elif nombre_config in disponibles:
+            resultado.append((nombre_config, limite))
+    return resultado
+
+
+def _stats_categoricas(
+    con, where: str, params: list, columnas: list[tuple[str, int | None]], total: int
+) -> list[dict]:
+    resultado = []
+    for c, limite in columnas:
+        limit_sql = f" LIMIT {int(limite)}" if limite else ""
         filas = con.execute(
-            f"SELECT {c}, COUNT(*) FROM personas WHERE {where} GROUP BY {c} ORDER BY 2 DESC",
+            f"SELECT {c}, COUNT(*) FROM personas WHERE {where} GROUP BY {c} ORDER BY 2 DESC{limit_sql}",
             params,
         ).fetchall()
         resultado.append(
@@ -300,6 +331,8 @@ def _calcular_subgrupos(
     el de exportacion a Excel para no calcular las cosas de dos formas distintas."""
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
+    numericas = [c for c in numericas if c not in COLUMNAS_NUMERICAS_EXCLUIDAS]
+    categoricas_visibles = _categoricas_visibles(categoricas)
 
     fijo_a, (eje_a_si, eje_a_no) = _eje(con, filtro1, filtro3, columnas_validas)
     fijo_b, (eje_b_si, eje_b_no) = _eje(con, filtro2, filtro4, columnas_validas)
@@ -329,7 +362,7 @@ def _calcular_subgrupos(
             "etiqueta": etiqueta,
             "recuento": total,
             "numericas": _stats_numericas(con, where, params, numericas),
-            "categoricas": _stats_categoricas(con, where, params, categoricas, total),
+            "categoricas": _stats_categoricas(con, where, params, categoricas_visibles, total),
         }
     return resultados
 

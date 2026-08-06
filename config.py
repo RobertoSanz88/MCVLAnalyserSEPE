@@ -45,3 +45,38 @@ def get_parquet_dir() -> Path:
         json.dump({"parquet_dir": str(parquet_dir)}, f, ensure_ascii=False, indent=2)
 
     return parquet_dir
+
+
+# Columnas categoricas que se muestran en "Distribucion categorica" del
+# constructor de colectivos (app/routers/colectivos.py). Personas tiene
+# decenas de columnas categoricas; mostrarlas todas satura la pantalla, asi
+# que aqui se elige explicitamente el subconjunto util para el Observatorio.
+#
+# "columna": nombre limpio tal cual lo deja app/db.py (snake_case), o un
+#     prefijo acabado en "*" para columnas cuyo nombre cambia segun el anyo
+#     de la MCVL procesada (p.ej. cobra_pension_2024_5 -> "cobra_pension_*",
+#     asi el filtro sigue funcionando sin tocar codigo cuando cambie el anyo).
+# "limite": maximo de categorias a mostrar, las mas frecuentes primero
+#     (None = todas). Pensado para columnas con muchas categorias posibles,
+#     como act_econ_ppal (CNAE, ~230 valores).
+#
+# Entradas sin columna correspondiente en el Parquet actual se ignoran en
+# silencio (permite un config.py valido para varios anyos de datos).
+CATEGORICAS_COLECTIVOS = [
+    {"columna": "sexo", "limite": None},
+    {"columna": "nacionalidad_agrupado", "limite": None},
+    {"columna": "pais_nacim_agrupado", "limite": None},
+    {"columna": "situacion_actual_afiliacion", "limite": None},
+    {"columna": "grupo_cotiz_1er_empleo_signif", "limite": None},
+    {"columna": "grupo_ultimo_empleo", "limite": None},
+    {"columna": "reg_cotiz_ppal", "limite": None},
+    {"columna": "grupo_cotiz_ppal", "limite": None},
+    {"columna": "tipo_contrato_ppal_agrupado", "limite": None},
+    {"columna": "prov_trabajo_ppal", "limite": None},
+    {"columna": "act_econ_ppal", "limite": 20},
+    {"columna": "discap_fiscal", "limite": None},
+    {"columna": "discap_afiliacion", "limite": None},
+    {"columna": "discap_pension", "limite": None},
+    {"columna": "cobra_pension_*", "limite": None},
+    {"columna": "situacion_paro_ocupacion", "limite": None},
+]
