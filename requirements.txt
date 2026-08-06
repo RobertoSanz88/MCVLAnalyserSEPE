@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+duckdb
+jinja2
+openpyxl
