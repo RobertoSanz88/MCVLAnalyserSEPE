@@ -83,6 +83,13 @@ def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv,
             ejecutar(sub, year, raw_root, parquet_folder, borrar_txt, provincias_csv, cnae_csv)
 
     elif accion == "personas_extendida":
+        ruta_personas_optimizada = os.path.join(parquet_folder, "tabla_personas_optimizada.parquet")
+        if not os.path.exists(ruta_personas_optimizada):
+            print("\nERROR: falta tabla_personas_optimizada.parquet (se borra en cuanto")
+            print("  se construye la extendida, ver CLAUDE.md). Pulsa primero el boton")
+            print('  "Personas" para generarla de nuevo, y luego repite este paso.')
+            sys.exit(1)
+
         print("Bootstrap...")
         bootstrap_personas_extendida(con, parquet_folder)
         _borrar_optimizada(parquet_folder, "personas")
