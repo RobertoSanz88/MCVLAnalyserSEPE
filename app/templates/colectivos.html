@@ -129,7 +129,7 @@
         #tabla-numericas th, #tabla-numericas td { border: 1px solid var(--border); padding: 0.35rem 0.45rem;
                                                      text-align: right; }
         #tabla-numericas th { background: var(--bg3); color: var(--muted); text-align: center;
-                               font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
+                               font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.03em; }
         #tabla-numericas td { font-family: var(--mono); }
         #tabla-numericas td:first-child, #tabla-numericas th:first-child { text-align: left; font-family: var(--font); }
         #tabla-numericas tbody tr:hover { background: rgba(4,160,110,0.05); }
@@ -355,21 +355,32 @@ function fmt(n, decimales = 1) {
     return Number(n).toFixed(decimales);
 }
 
+// Decide que estadistico destacar por fila: si la dispersion (desviacion/media)
+// supera el 30%, la mediana representa mejor el colectivo que la media; si no,
+// al reves. La desviacion en si no se muestra, solo se usa para esta decision.
+function estadisticoDestacado(media, desviacion) {
+    if (!media) return 'media'; // media 0/nula: sin ratio fiable, se mantiene la media
+    return Math.abs(desviacion / media) > 0.3 ? 'mediana' : 'media';
+}
+
 function renderizarNumericas(subgrupos) {
     const columnas = subgrupos[ORDEN_SUBGRUPOS[0]].numericas.map(d => d.columna);
     let html = '<table id="tabla-numericas"><thead><tr><th rowspan="2">Columna</th>';
     for (const nombre of ORDEN_SUBGRUPOS) {
-        html += `<th colspan="3">${subgrupos[nombre].etiqueta}</th>`;
+        html += `<th colspan="2">${subgrupos[nombre].etiqueta}</th>`;
     }
     html += '</tr><tr>';
-    for (let i = 0; i < ORDEN_SUBGRUPOS.length; i++) html += '<th>Media</th><th>Mediana</th><th>Desv.</th>';
+    for (let i = 0; i < ORDEN_SUBGRUPOS.length; i++) html += '<th>Media</th><th>Mediana</th>';
     html += '</tr></thead><tbody>';
 
     columnas.forEach((nombreCol, i) => {
         html += `<tr><td>${nombreCol}</td>`;
         for (const nombre of ORDEN_SUBGRUPOS) {
             const s = subgrupos[nombre].numericas[i];
-            html += `<td>${fmt(s.media)}</td><td>${fmt(s.mediana)}</td><td>${fmt(s.desviacion)}</td>`;
+            const destaca = estadisticoDestacado(s.media, s.desviacion);
+            const media = destaca === 'media' ? `<b>${fmt(s.media)}</b>` : fmt(s.media);
+            const mediana = destaca === 'mediana' ? `<b>${fmt(s.mediana)}</b>` : fmt(s.mediana);
+            html += `<td>${media}</td><td>${mediana}</td>`;
         }
         html += '</tr>';
     });
