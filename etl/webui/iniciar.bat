@@ -32,7 +32,10 @@ exit /b 1
 :arrancar
 echo.
 echo Arrancando MCVL ETL en http://127.0.0.1:8010/ ...
-start "" http://127.0.0.1:8010/
+REM El navegador se abre solo cuando el servidor ya responde de verdad (ver
+REM esperar_y_abrir.bat) - abrirlo aqui a ciegas fallaba en PCs donde las
+REM importaciones de python tardan varios segundos (antivirus corporativo).
+start "" "%~dp0esperar_y_abrir.bat"
 python etl\webui\run.py
 
 pause
