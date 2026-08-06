@@ -5,13 +5,16 @@
     <title>MCVL Analyser SEPE — Análisis de colectivos</title>
     <style>
         * { box-sizing: border-box; }
+        /* Base mas grande: todo lo demas usa rem, que es relativo a esto (no a body), asi
+           que subir aqui escala la pagina entera de forma coherente de una sola vez. */
+        html { font-size: 118.75%; }
         body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh;
-               font-size: 0.95rem; color: #222; }
+               color: #222; }
 
         /* --- Sidebar --- */
-        #sidebar { width: 190px; flex: none; background: #1e2a38; color: #cdd7e1;
+        #sidebar { width: 210px; flex: none; background: #1e2a38; color: #cdd7e1;
                    padding: 1rem 0; display: flex; flex-direction: column; }
-        #sidebar h1 { font-size: 1rem; color: #fff; margin: 0 1rem 1.5rem; }
+        #sidebar h1 { font-size: 1.15rem; color: #fff; margin: 0 1rem 1.5rem; }
         .pestana { padding: 0.7rem 1rem; cursor: pointer; border-left: 3px solid transparent; }
         .pestana.activa { background: #2c3e50; color: #fff; border-left-color: #4da3ff; }
         .pestana.deshabilitada { color: #6b7a8a; cursor: default; }
