@@ -51,28 +51,40 @@
         #app { flex: 1; display: flex; overflow: hidden; }
 
         /* --- Rail de navegacion --- */
+        /* Rail blanco por defecto (igual que un item inactivo tipo "Cluster"): la unica
+           zona verde clarito (bg3) es la pestana activa, y ese MISMO verde continua sin
+           interrupcion en panel-filtros (ver mas abajo) - pestana + panel forman un solo
+           "terreno" verde. El border-right del sidebar (gris) se ve donde de verdad hay
+           un cambio de color (rail blanco vs panel verde) y desaparece justo a la altura
+           de la pestana, porque ahi ambos lados ya son el mismo verde. */
+        /* Sin overflow-y aqui a proposito: con overflow-y:auto, el navegador fuerza
+           tambien overflow-x:auto (no se puede tener solo un eje con scroll), y eso
+           recorta el pseudo-elemento ::after de la pestana activa justo antes de que
+           llegue a tapar el border-right - se veia un resto de la linea sin borrar. El
+           rail solo tiene 2 items fijos, no necesita scroll propio. */
         #sidebar { width: var(--nav-w); flex: none; background: var(--bg2);
                    border-right: 1px solid var(--border); padding: 0.9rem 0 0.9rem 0.6rem;
-                   display: flex; flex-direction: column; overflow-y: auto; position: relative; }
+                   display: flex; flex-direction: column; position: relative; }
         /* La pestana activa no es una caja cerrada: solo tiene borde arriba/izquierda/abajo
            (forma de "U" tumbada, abierta a la derecha) y sus dos brazos horizontales se
            prolongan hasta fundirse con la linea vertical que separa sidebar y contenido -
-           el pseudo-elemento ::after tapa ese tramo del border-right del sidebar, como si
-           la pestana "perforase" la linea para conectar con el panel de al lado. */
+           el pseudo-elemento ::after tapa ese tramo del border-right del sidebar con el
+           mismo verde de la pestana y de panel-filtros, como si la pestana "perforase"
+           la linea para conectar con el panel de al lado. */
         .pestana { margin: 0 0 0.35rem; padding: 0.55rem 0.7rem; cursor: pointer;
                    border-radius: 7px 0 0 7px; font-size: 0.85rem; font-weight: 700; color: var(--muted);
                    border: 1.5px solid transparent; border-right: none; position: relative;
                    transition: all .15s; }
-        .pestana.activa { background: rgba(0,129,90,0.08); color: var(--verde-dk); border-color: var(--verde-dk); }
+        .pestana.activa { background: var(--bg3); color: var(--verde-dk); border-color: var(--verde-dk); }
         .pestana.activa::after { content: ''; position: absolute; top: -1.5px; bottom: -1.5px;
-                                   right: -2px; width: 2px; background: var(--bg2); }
+                                   right: -2px; width: 2px; background: var(--bg3); }
         .pestana.deshabilitada { color: var(--border); cursor: default; }
         .pestana .nota-futuro { display: block; font-size: 0.66rem; font-weight: 400; color: var(--border); margin-top: 0.1rem; }
 
         /* --- Contenido --- */
         #contenido { flex: 1; display: flex; overflow: hidden; }
         .panel { padding: 1rem 1.1rem; overflow-y: auto; }
-        #panel-filtros { width: var(--sidebar-w); flex: none; background: var(--bg2);
+        #panel-filtros { width: var(--sidebar-w); flex: none; background: var(--bg3);
                           border-right: 1px solid var(--border); }
         #panel-numericas { flex: 1; min-width: 320px; background: var(--bg2); border-right: 1px solid var(--border); }
         #panel-categoricas { flex: 1; min-width: 320px; background: var(--bg2); }
