@@ -1,6 +1,7 @@
 """FastAPI app: analisis de la MCVL sobre Parquet local via DuckDB."""
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 
 from app.db import get_connection
 from app.routers import colectivos, trayectorias
@@ -18,3 +19,8 @@ def startup():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/")
+def raiz():
+    return RedirectResponse("/colectivos")
