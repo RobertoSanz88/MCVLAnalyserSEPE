@@ -42,7 +42,10 @@ REM trae (venv creado sin ella), cae a python normal.
 where pythonw >nul 2>nul
 if errorlevel 1 (set PYTHON_SPLASH=python) else (set PYTHON_SPLASH=pythonw)
 start "" %PYTHON_SPLASH% "%~dp0splash.py"
-start "" "%~dp0esperar_y_abrir.bat"
+REM /min: solo espera al servidor y abre el navegador, no hace falta que el
+REM usuario la vea ni la cierre a mano - antes aparecia como una ventana de
+REM consola suelta sin utilidad visible una vez arrancada la app.
+start /min "" "%~dp0esperar_y_abrir.bat"
 python run.py
 
 pause
