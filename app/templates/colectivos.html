@@ -198,6 +198,15 @@
         .leyenda-item { display: flex; align-items: center; gap: 0.35rem; }
         .leyenda-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 
+        /* --- Recuento absoluto por subcolectivo (numericas, Datos y Graficos) --- */
+        #recuentos-numericas { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+        .tarjeta-recuento { flex: 1 1 180px; border: 1.5px solid var(--border); border-radius: 7px;
+                              background: var(--bg); padding: 0.5rem 0.65rem; border-left-width: 4px; }
+        .tarjeta-recuento .etiqueta-recuento { font-size: 0.68rem; color: var(--muted); font-weight: 600;
+                              line-height: 1.25; display: block; margin-bottom: 0.15rem; }
+        .tarjeta-recuento .valor-recuento { font-family: var(--mono); font-size: 1.05rem; font-weight: 700; color: var(--text); }
+        .tarjeta-recuento .valor-recuento span { font-size: 0.68rem; font-weight: 600; color: var(--muted); margin-left: 0.2rem; }
+
         .grid-graficos { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.7rem; }
         .caja-grafico { border: 1px solid var(--border); border-radius: 7px; background: var(--bg);
                           padding: 0.5rem 0.35rem 0.15rem; }
@@ -329,6 +338,7 @@
                         <button type="button" data-vista="graficos" onclick="cambiarVistaNumericas('graficos')">Gráficos</button>
                     </div>
                 </div>
+                <div id="recuentos-numericas"></div>
                 <div id="contenedor-numericas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
             </div>
 
@@ -398,11 +408,17 @@ const PALETA_VALOR = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#0
 const COLOR_OTROS = '#9a988f';
 
 const TIPOS_GRAFICO_CATEGORICO = [
-    { valor: 'agrupadas', etiqueta: 'Barras agrupadas' },
+    { valor: 'agrupadas', etiqueta: 'Barras agrupadas verticales' },
     { valor: 'apiladas', etiqueta: 'Barras apiladas 100%' },
-    { valor: 'horizontales', etiqueta: 'Barras horizontales' },
+    { valor: 'agrupadas_h', etiqueta: 'Barras agrupadas horizontales' },
     { valor: 'mapacalor', etiqueta: 'Mapa de calor' },
 ];
+
+// Numero fijo 1-4 por subcolectivo (mismo orden que ORDEN_SUBGRUPOS) - se usa
+// en vez de la etiqueta completa donde el texto largo no cabe bien (eje de
+// categorias del mapa de calor): un numero + una leyenda una vez en la propia
+// caja es mas legible que 4 nombres largos rotados o apretados en el eje.
+const NUMERO_SUBGRUPO = Object.fromEntries(ORDEN_SUBGRUPOS.map((n, i) => [n, String(i + 1)]));
 
 let columnasDisponibles = { numericas: [], categoricas: [] };
 let columnaSeleccionada = null; // { nombre, tipo }
@@ -425,6 +441,11 @@ function toggleContracolectivo(n) {
         // mantenga su valor, por si el usuario lo desactiva otra vez despues.
         const radioExtra = document.getElementById('radio-destino-' + extra);
         if (radioExtra.checked) document.querySelector(`input[name=destino][value="${n}"]`).checked = true;
+    } else {
+        // Se desactiva: si Filtro 1 y 2 ya estan aplicados, el hueco que se
+        // acaba de abrir (Filtro 3 o 4) es el siguiente destino logico -
+        // permite encadenar la siguiente seleccion de columna sin tocar el radio.
+        avanzarDestino();
     }
 
     renderizarResumenFiltro(n);
@@ -513,6 +534,27 @@ function aplicarFiltro() {
     filtros[destino] = filtro;
     renderizarResumenFiltro(destino);
     actualizarBotonCalcular();
+    avanzarDestino();
+}
+
+// Tras aplicar un filtro (o al abrir un Filtro 3/4 desactivando su
+// contracolectivo automatico), adelanta el radio "Asignar a" al siguiente
+// hueco logico: 1 -> 2 -> 3 (si el automatico de 1 esta desactivado) -> 4
+// (si el de 2 tambien lo esta). Asi se pueden encadenar hasta 4 filtros
+// seleccionando columna + Seleccionar sin tener que tocar el radio a mano.
+function siguienteDestino() {
+    if (!filtros[1]) return '1';
+    if (!filtros[2]) return '2';
+    if (!contracolectivo[1] && !filtros[3]) return '3';
+    if (!contracolectivo[2] && !filtros[4]) return '4';
+    return null;
+}
+
+function avanzarDestino() {
+    const siguiente = siguienteDestino();
+    if (!siguiente) return;
+    const radio = document.querySelector(`input[name=destino][value="${siguiente}"]`);
+    if (radio && !radio.disabled) radio.checked = true;
 }
 
 // Columnas tratadas como binarias por decision explicita aunque tengan mas
@@ -620,6 +662,11 @@ function fmt(n) {
     return parteDecimal !== undefined ? `${entero},${parteDecimal}` : entero;
 }
 
+function truncarEtiqueta(s, maxLen) {
+    s = String(s);
+    return s.length > maxLen ? s.slice(0, maxLen - 1) + '…' : s;
+}
+
 function fmtEntero(n) {
     if (n === null || n === undefined) return '';
     const num = Math.round(Number(n));
@@ -635,8 +682,21 @@ function estadisticoDestacado(media, desviacion) {
     return Math.abs(desviacion / media) > 0.3 ? 'mediana' : 'media';
 }
 
+// Valor absoluto de personas de cada subcolectivo - fuera del switch
+// Datos/Graficos (se pinta una vez y se queda igual pase lo que pase con el
+// switch, no es una vista mas sino contexto siempre visible).
+function renderizarRecuentosNumericas(subgrupos) {
+    const cont = document.getElementById('recuentos-numericas');
+    cont.innerHTML = ORDEN_SUBGRUPOS.map(nombre => `
+        <div class="tarjeta-recuento" style="border-left-color:${COLOR_SUBGRUPO[nombre]}">
+            <span class="etiqueta-recuento">${subgrupos[nombre].etiqueta}</span>
+            <span class="valor-recuento">${fmtEntero(subgrupos[nombre].recuento)}<span>personas</span></span>
+        </div>`).join('');
+}
+
 function renderizarNumericas(subgrupos) {
     ultimosSubgruposNumericos = subgrupos;
+    renderizarRecuentosNumericas(subgrupos);
     if (vistaNumericas === 'graficos') renderizarGraficosNumericos(subgrupos);
     else renderizarTablaNumericas(subgrupos);
 }
@@ -828,23 +888,24 @@ function renderizarGraficosCategoricos(subgrupos) {
 
 function dibujarGraficoCategorico(div, tipo, subgrupos, mapas, vistos) {
     if (tipo === 'apiladas') return dibujarApiladas(div, subgrupos, mapas, vistos);
-    if (tipo === 'horizontales') return dibujarHorizontales(div, subgrupos, mapas, vistos);
+    if (tipo === 'agrupadas_h') return dibujarAgrupadasHorizontal(div, subgrupos, mapas, vistos);
     if (tipo === 'mapacalor') return dibujarMapaCalor(div, subgrupos, mapas, vistos);
     return dibujarAgrupadas(div, subgrupos, mapas, vistos);
 }
 
-// Barras agrupadas: 1 grupo de 4 barras (una por subcolectivo, color por
-// identidad de subcolectivo) por cada valor de la columna. Por defecto: es
-// la lectura mas directa para comparar los 4 subcolectivos entre si dentro
-// de cada categoria, y funciona bien mientras la columna no tenga demasiados
-// valores distintos (la mayoria de las columnas configuradas tienen pocos;
-// para las que tienen muchos - provincia, actividad economica - el ancho
-// crece y el cuerpo del grafico scrollea en horizontal).
+// Barras agrupadas verticales: 1 grupo de 4 barras (una por subcolectivo,
+// color por identidad de subcolectivo) por cada valor de la columna. Por
+// defecto: es la lectura mas directa para comparar los 4 subcolectivos entre
+// si dentro de cada categoria, y funciona bien mientras la columna no tenga
+// demasiados valores distintos (la mayoria de las columnas configuradas
+// tienen pocos; para las que tienen muchos - provincia, actividad economica -
+// el ancho crece y el cuerpo del grafico scrollea en horizontal, o conviene
+// mejor pasar a "Barras agrupadas horizontales").
 function dibujarAgrupadas(div, subgrupos, mapas, vistos) {
-    // Limpia restos de un tipo de grafico anterior en esta misma caja (p.ej.
-    // "Barras horizontales" deja varios sub-paneles dentro de div que
-    // Plotly.newPlot no borra por si solo si no fueron creados por Plotly
-    // directamente sobre este div).
+    // Limpia restos de un tipo de grafico anterior en esta misma caja - ver
+    // [[feedback_plotly_reusar_div]]: Plotly.newPlot no borra por si solo el
+    // HTML que haya dejado un tipo anterior si ese HTML no lo creo Plotly
+    // directamente sobre este div (p.ej. varios sub-paneles propios).
     div.innerHTML = '';
     const traces = ORDEN_SUBGRUPOS.map(nombre => ({
         type: 'bar',
@@ -867,85 +928,105 @@ function dibujarAgrupadas(div, subgrupos, mapas, vistos) {
     }, { displayModeBar: false, responsive: true });
 }
 
-// Barras apiladas al 100%: 1 barra por subcolectivo, segmentada por valor -
-// mejor para ver de un vistazo la composicion interna de cada subcolectivo.
-// Solo los 7 valores mas comunes tienen color propio; el resto se agrega en
-// "Otros" (gris) en vez de generarles un color nuevo cada vez.
-function dibujarApiladas(div, subgrupos, mapas, vistos) {
+// Barras agrupadas horizontales: el mismo grafico que las verticales pero
+// girado 90 grados - categorias en el eje vertical, 1 grupo de 4 barras por
+// categoria. Pensada para columnas con valores de texto largo (provincia,
+// actividad economica): en horizontal el texto se lee entero, sin rotarlo ni
+// apretarlo como pasaria en el eje X de la version vertical.
+function dibujarAgrupadasHorizontal(div, subgrupos, mapas, vistos) {
     div.innerHTML = '';
-    const top = vistos.slice(0, 7);
-    const resto = vistos.slice(7);
-    const categorias = resto.length ? [...top, 'Otros'] : top;
-
-    const traces = categorias.map((valor, i) => ({
+    // Ancho minimo fijo (no depende de vistos.length, a diferencia de
+    // "agrupadas"/"apiladas" - aqui el problema no es el numero de
+    // categorias sino el ancho fijo de la columna "Distribucion categorica",
+    // demasiado estrecho para dejarle sitio de sobra a las etiquetas largas
+    // del eje Y Y a las barras a la vez). Si la caja tiene menos ancho que
+    // esto, el cuerpo-grafico-cat scrollea en horizontal (igual que en los
+    // otros tipos con muchas categorias).
+    const ancho = 560;
+    div.style.minWidth = ancho + 'px';
+    const traces = ORDEN_SUBGRUPOS.map(nombre => ({
         type: 'bar',
-        name: String(valor),
-        x: ORDEN_SUBGRUPOS.map(n => subgrupos[n].etiqueta),
-        y: ORDEN_SUBGRUPOS.map(n => {
-            if (valor === 'Otros') return resto.reduce((s, v) => s + (mapas[n].get(v)?.porcentaje || 0), 0);
-            return mapas[n].get(valor)?.porcentaje ?? 0;
-        }),
-        marker: { color: valor === 'Otros' ? COLOR_OTROS : PALETA_VALOR[i] },
-        hovertemplate: `%{x}<br>${valor}: %{y}%<extra></extra>`,
+        orientation: 'h',
+        name: subgrupos[nombre].etiqueta,
+        y: vistos,
+        x: vistos.map(v => mapas[nombre].get(v)?.porcentaje ?? 0),
+        marker: { color: COLOR_SUBGRUPO[nombre] },
+        hovertemplate: `%{y}<br>${subgrupos[nombre].etiqueta}: %{x}%<extra></extra>`,
     }));
-    div.style.minWidth = '';
+    const alto = Math.max(280, vistos.length * 46 + 120);
     Plotly.newPlot(div, traces, {
-        barmode: 'stack',
-        margin: { l: 45, r: 10, t: 10, b: 90 },
-        xaxis: { tickangle: -20, automargin: true },
-        yaxis: { title: '%', range: [0, 100] },
-        legend: { orientation: 'h', y: -0.5 },
-        height: 340,
+        barmode: 'group',
+        margin: { l: 190, r: 15, t: 10, b: 60 },
+        xaxis: { title: '%', rangemode: 'tozero' },
+        // tickvals/ticktext en vez de dejar que el eje muestre "vistos" tal
+        // cual: un valor largo (descripcion CNAE con codigo) no cabe en el
+        // margen izquierdo y Plotly no lo trunca solo - lo corta sin avisar,
+        // el texto sobrante queda invisible fuera de la caja. Se acorta aqui
+        // con "…" y el texto completo se mantiene en el hover (%{y} sigue
+        // usando el valor real, sin truncar).
+        yaxis: {
+            automargin: true, autorange: 'reversed',
+            tickvals: vistos, ticktext: vistos.map(v => truncarEtiqueta(v, 30)),
+        },
+        legend: { orientation: 'h', y: -0.14 },
+        height: alto,
+        width: ancho,
     }, { displayModeBar: false, responsive: true });
 }
 
-// Barras horizontales: pequeños multiplos, 1 mini-panel por subcolectivo (su
-// propio color de identidad) con sus valores mas frecuentes ordenados - la
-// opcion mas legible cuando la columna tiene muchos valores distintos
-// (provincia, actividad economica), porque cada panel solo enseña su top 8
-// en vez de amontonar todos los valores en un unico eje.
-function dibujarHorizontales(div, subgrupos, mapas, vistos) {
-    div.style.minWidth = '';
-    div.innerHTML = `<div class="rejilla-horizontales">${
-        ORDEN_SUBGRUPOS.map(n => `
-            <div>
-                <div class="subpanel-titulo">${subgrupos[n].etiqueta}</div>
-                <div class="subpanel-chart" data-n="${n}"></div>
-            </div>`).join('')
-    }</div>`;
+// Barras apiladas al 100%: 1 barra por CADA VALOR de la columna (eje X, como
+// en "agrupadas"), apilando los 4 subcolectivos (color por identidad, como en
+// el resto de graficos) - el complementario de "agrupadas": en vez de
+// comparar subcolectivos lado a lado, enseña de un vistazo en que
+// subcolectivo se concentra cada valor. La altura de cada segmento no es el
+// "% dentro del subcolectivo" (ese es el que ya usa "agrupadas"), sino el
+// reparto del propio valor ENTRE los 4 subcolectivos (recalculado a partir
+// del conteo, no del porcentaje ya calculado por el backend, que es relativo
+// al total de cada subcolectivo) - asi cada barra si suma justo 100%.
+function dibujarApiladas(div, subgrupos, mapas, vistos) {
+    div.innerHTML = '';
+    const totalPorValor = new Map(vistos.map(v => [
+        v,
+        ORDEN_SUBGRUPOS.reduce((s, n) => s + (mapas[n].get(v)?.conteo || 0), 0),
+    ]));
 
-    for (const n of ORDEN_SUBGRUPOS) {
-        const entradas = [...mapas[n].values()].sort((a, b) => b.porcentaje - a.porcentaje).slice(0, 8);
-        const sub = div.querySelector(`.subpanel-chart[data-n="${n}"]`);
-        Plotly.newPlot(sub, [{
-            type: 'bar',
-            orientation: 'h',
-            x: entradas.map(e => e.porcentaje),
-            y: entradas.map(e => String(e.valor)),
-            marker: { color: COLOR_SUBGRUPO[n] },
-            text: entradas.map(e => fmt(e.porcentaje)),
-            textposition: 'outside',
-            textfont: { family: 'Nunito Sans, sans-serif', size: 9, color: '#1A2E26' },
-            cliponaxis: false,
-            hovertemplate: '%{y}: %{x}%<extra></extra>',
-        }], {
-            margin: { l: 100, r: 30, t: 4, b: 24 },
-            height: 210,
-            xaxis: { title: '%', rangemode: 'tozero' },
-            yaxis: { automargin: true, autorange: 'reversed' },
-        }, { displayModeBar: false, responsive: true });
-    }
+    const traces = ORDEN_SUBGRUPOS.map(nombre => ({
+        type: 'bar',
+        name: subgrupos[nombre].etiqueta,
+        x: vistos,
+        y: vistos.map(v => {
+            const total = totalPorValor.get(v);
+            return total ? (mapas[nombre].get(v)?.conteo || 0) / total * 100 : 0;
+        }),
+        marker: { color: COLOR_SUBGRUPO[nombre] },
+        hovertemplate: `%{x}<br>${subgrupos[nombre].etiqueta}: %{y:.1f}%<extra></extra>`,
+    }));
+    const ancho = Math.max(500, vistos.length * 90);
+    div.style.minWidth = ancho + 'px';
+    Plotly.newPlot(div, traces, {
+        barmode: 'stack',
+        margin: { l: 45, r: 10, t: 10, b: 100 },
+        xaxis: { tickangle: -40, automargin: true },
+        yaxis: { title: '%', range: [0, 100] },
+        legend: { orientation: 'h', y: -0.55 },
+        height: 340,
+        width: ancho,
+    }, { displayModeBar: false, responsive: true });
 }
 
 // Mapa de calor: valor x subcolectivo, color = porcentaje (secuencial de un
 // solo tono, magnitud - no identidad, por eso NO usa COLOR_SUBGRUPO ni
 // PALETA_VALOR). Compacto y bueno para detectar patrones de un vistazo en
 // columnas con muchos valores; limitado a los 15 mas frecuentes para que las
-// filas no se aplasten.
+// filas no se aplasten. Las columnas (subcolectivos) se etiquetan con su
+// numero (1-4, ver NUMERO_SUBGRUPO) en vez de la etiqueta completa - con
+// nombres largos como eje X quedaba apretado o rotado e ilegible; una leyenda
+// numero->etiqueta debajo del grafico hace de referencia.
 function dibujarMapaCalor(div, subgrupos, mapas, vistos) {
     div.innerHTML = '';
+    div.style.minWidth = '';
     const filas = vistos.slice(0, 15);
-    const x = ORDEN_SUBGRUPOS.map(n => subgrupos[n].etiqueta);
+    const x = ORDEN_SUBGRUPOS.map(n => NUMERO_SUBGRUPO[n]);
     const z = filas.map(v => ORDEN_SUBGRUPOS.map(n => mapas[n].get(v)?.porcentaje ?? null));
 
     // Escala fija 0-100% (no al maximo de cada columna): asi el mismo verde
@@ -957,7 +1038,16 @@ function dibujarMapaCalor(div, subgrupos, mapas, vistos) {
     // dataviz sobre etiquetas dentro de un relleno de color).
     const colorTexto = z.map(fila => fila.map(n => n !== null && n >= 55 ? '#FFFFFF' : '#1A2E26'));
 
-    Plotly.newPlot(div, [{
+    // Ancho fijo, igual que en "Barras agrupadas horizontales": si las filas
+    // (valores) llevan etiquetas completas sin acortar, automargin les da
+    // todo el sitio que pidan y las 4 columnas de datos quedan aplastadas a
+    // casi nada - un ancho total fijo + margen izquierdo fijo (para las
+    // etiquetas ya truncadas) deja siempre hueco de sobra para las columnas.
+    const ancho = 480;
+    const grafico = document.createElement('div');
+    grafico.style.minWidth = ancho + 'px';
+    div.appendChild(grafico);
+    Plotly.newPlot(grafico, [{
         type: 'heatmap',
         x, y: filas, z,
         colorscale: [[0, '#EAF5EF'], [1, '#00593F']],
@@ -966,14 +1056,27 @@ function dibujarMapaCalor(div, subgrupos, mapas, vistos) {
         colorbar: { title: '%', ticksuffix: '%', thickness: 12 },
         texttemplate: '%{z}%',
         textfont: { family: 'Nunito Sans, sans-serif', size: 10, color: colorTexto },
-        hovertemplate: '%{y} — %{x}: %{z}%<extra></extra>',
+        hovertemplate: '%{y} — subcolectivo %{x}: %{z}%<extra></extra>',
         xgap: 2, ygap: 2,
     }], {
-        margin: { l: 160, r: 10, t: 10, b: 90 },
-        xaxis: { tickangle: -20, automargin: true },
-        yaxis: { automargin: true, autorange: 'reversed' },
-        height: Math.max(240, filas.length * 26 + 90),
+        margin: { l: 170, r: 10, t: 10, b: 30 },
+        xaxis: { tickangle: 0, automargin: true, dtick: 1 },
+        yaxis: {
+            automargin: true, autorange: 'reversed',
+            tickvals: filas, ticktext: filas.map(v => truncarEtiqueta(v, 24)),
+        },
+        height: Math.max(240, filas.length * 26 + 60),
+        width: ancho,
     }, { displayModeBar: false, responsive: true });
+
+    const leyenda = document.createElement('div');
+    leyenda.className = 'leyenda-graficos';
+    leyenda.style.marginTop = '0.5rem';
+    leyenda.style.marginBottom = '0';
+    leyenda.innerHTML = ORDEN_SUBGRUPOS
+        .map(n => `<span class="leyenda-item"><b>${NUMERO_SUBGRUPO[n]}</b>&nbsp;=&nbsp;${subgrupos[n].etiqueta}</span>`)
+        .join('');
+    div.appendChild(leyenda);
 }
 
 async function exportarExcel() {

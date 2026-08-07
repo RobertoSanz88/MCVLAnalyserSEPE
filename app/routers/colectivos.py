@@ -207,10 +207,13 @@ def _stats_categoricas(
 @router.get("/colectivos/columnas")
 def columnas(request: Request):
     """Columnas disponibles para usar como filtro, separadas por tipo (para el
-    selector de atributos del panel izquierdo)."""
+    selector de atributos del panel izquierdo). "ipf" es el identificador de
+    persona (clave de union entre tablas), no un atributo por el que tenga
+    sentido filtrar o construir un colectivo."""
     con = request.app.state.con
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
+    numericas = [c for c in numericas if c != "ipf"]
     return {"numericas": sorted(numericas), "categoricas": sorted(categoricas)}
 
 
