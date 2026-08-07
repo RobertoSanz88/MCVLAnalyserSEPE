@@ -452,6 +452,14 @@ function aplicarFiltro() {
     actualizarBotonCalcular();
 }
 
+// Columnas tratadas como binarias por decision explicita aunque tengan mas
+// valores en los datos - el resto de valores de la columna (aqui, los "NO
+// CONSTA" de sexo) no aparecen aparte, se pliegan en el lado complementario
+// sin mas (el backend ya los agrupa ahi solo con esto: ver
+// PARES_BINARIOS_ESPECIALES en colectivos.py, misma pareja aqui para que el
+// resumen del panel coincida con lo que luego calcula el backend).
+const PARES_BINARIOS_ESPECIALES = { sexo: ['Hombre', 'Mujer'] };
+
 function etiquetaFiltro(filtro, cumple) {
     const OPUESTO = { '>=': '<', '>': '<=', '<=': '>', '<': '>=', '==': '!=' };
     if (filtro.tipo === 'numerica') {
@@ -461,12 +469,21 @@ function etiquetaFiltro(filtro, cumple) {
     const valores = filtro.categorias.join('/');
     if (cumple) return `${filtro.columna} ${valores}`;
 
-    // Con exactamente 2 valores posibles y 1 sola categoria marcada, usar el
-    // otro valor tal cual (p.ej. "discap NO") es mas claro que "Resto discap SI".
-    const todos = valoresPorColumna[filtro.columna];
-    if (filtro.categorias.length === 1 && todos && todos.length === 2) {
-        const restante = todos.find(v => !filtro.categorias.includes(String(v)));
-        if (restante !== undefined) return `${filtro.columna} ${String(restante)}`;
+    if (filtro.categorias.length === 1) {
+        const par = PARES_BINARIOS_ESPECIALES[filtro.columna];
+        if (par) {
+            const otro = par.find(v => v !== filtro.categorias[0]);
+            if (otro !== undefined && par.includes(filtro.categorias[0])) return `${filtro.columna} ${otro}`;
+        } else {
+            // Con exactamente 2 valores posibles en los datos y 1 sola categoria
+            // marcada, usar el otro valor tal cual (p.ej. "discap NO") es mas
+            // claro que "Resto discap SI".
+            const todos = valoresPorColumna[filtro.columna];
+            if (todos && todos.length === 2) {
+                const restante = todos.find(v => !filtro.categorias.includes(String(v)));
+                if (restante !== undefined) return `${filtro.columna} ${String(restante)}`;
+            }
+        }
     }
     return `Resto ${filtro.columna} ${valores}`;
 }

@@ -241,16 +241,44 @@ def _valor_str(v) -> str:
     return str(v)
 
 
+# Columnas que se etiquetan como binarias aunque tengan mas valores en el
+# Parquet: el resto de valores de la columna (aqui, los "NO CONSTA" de sexo)
+# no aparecen aparte, se pliegan en silencio dentro del lado complementario
+# (ya ocurre asi en el SQL sin tocar nada: el complementario de "sexo
+# Hombre" es "NOT (sexo IN ('Hombre'))", que ya incluye Mujer Y NO CONSTA
+# de forma natural). Este diccionario solo cambia la ETIQUETA de ese lado,
+# de "Resto sexo Hombre" a "sexo Mujer". Decision explicita del usuario
+# (2026-08-07), pensada para sexo en concreto.
+PARES_BINARIOS_ESPECIALES: dict[str, tuple[str, str]] = {
+    "sexo": ("Hombre", "Mujer"),
+}
+
+
 def _valor_complementario_categorico(con, filtro: FiltroCategorico) -> str | None:
-    """Si la columna del filtro tiene exactamente 2 valores distintos y se
-    selecciono solo 1 como colectivo, devuelve el otro valor (p.ej. "NO"
-    para un filtro "SI") para usarlo como etiqueta del lado "no cumple" en
-    vez del generico "Resto columna valor" - mas claro cuando hay una
-    alternativa binaria natural. None si no aplica (mas de 2 valores en la
-    columna, o mas de una categoria seleccionada)."""
+    """Si se selecciono solo 1 categoria como colectivo, devuelve el otro
+    valor de una alternativa binaria (p.ej. "NO" para un filtro "SI") para
+    usarlo como etiqueta del lado "no cumple" en vez del generico "Resto
+    columna valor" - mas claro cuando hay una alternativa binaria natural.
+    Dos formas de llegar a esa alternativa:
+    - PARES_BINARIOS_ESPECIALES: columna tratada como binaria por decision
+      explicita aunque tenga mas valores (ver comentario arriba).
+    - Genérico: la columna tiene EXACTAMENTE 2 valores distintos en los
+      datos.
+    None si no aplica (mas de una categoria seleccionada, o ninguna de las
+    dos vias anteriores encaja)."""
     if len(filtro.categorias) != 1:
         return None
     col = filtro.columna
+    seleccionado = filtro.categorias[0]
+
+    par = PARES_BINARIOS_ESPECIALES.get(col)
+    if par is not None:
+        if seleccionado == par[0]:
+            return par[1]
+        if seleccionado == par[1]:
+            return par[0]
+        return None  # categoria fuera del par (p.ej. NO CONSTA solo): sin atajo, usa el fallback generico
+
     total = con.execute(
         f"SELECT COUNT(DISTINCT {col}) FROM personas WHERE {col} IS NOT NULL"
     ).fetchone()[0]
