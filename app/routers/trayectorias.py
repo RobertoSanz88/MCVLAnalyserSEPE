@@ -1,4 +1,6 @@
-"""Trayectoria individual: episodios de afiliacion de un IPF, ordenados por fecha."""
+"""Trayectorias: individual (episodios de afiliacion de un IPF) y de colectivo
+(evolucion anual de una variable, superponiendo los 4 subgrupos de un
+colectivo ya definido en /colectivos)."""
 
 import json
 
@@ -6,8 +8,83 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app.routers.colectivos import ORDEN_SUBGRUPOS, SubgruposRequest, calcular_condiciones_subgrupos
+
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+# Registrada ANTES de /trayectorias/{ipf}: aunque "colectivo" no es un int
+# valido para {ipf}, Starlette hace el match de rutas por estructura de la URL
+# antes de que FastAPI valide el tipo del parametro - si {ipf} fuera la
+# primera ruta registrada, "/trayectorias/colectivo" encajaria en su patron y
+# la peticion moriria en un 422 (int invalido) sin llegar nunca aqui.
+@router.get("/trayectorias/colectivo", response_class=HTMLResponse)
+def pagina_trayectorias_colectivo(request: Request):
+    return templates.TemplateResponse(request, "trayectorias_colectivo.html", {})
+
+
+@router.post("/trayectorias/colectivo/bases")
+def trayectorias_colectivo_bases(request: Request, body: SubgruposRequest):
+    """Evolucion de 'bases anuales' (CA+CP sumadas por ipf-anyo) de los 4
+    subgrupos de un colectivo, agregada tanto por anyos de vida laboral como
+    por edad - el frontend elige con cual pintar el grafico sin pedir otra
+    vez al backend. N por punto para que el frontend pueda cortar/atenuar la
+    linea donde la muestra es pequenya (< 30)."""
+    con = request.app.state.con
+    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+
+    resultado = {}
+    for nombre in ORDEN_SUBGRUPOS:
+        c = condiciones[nombre]
+        recuento = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
+
+        filas = con.execute(
+            f"""
+            WITH colectivo AS (
+                SELECT ipf, fecha_nacimiento, fecha_ini_primer_empleo
+                FROM personas
+                WHERE {c['where']}
+            ), bases_anio AS (
+                -- BCC_ANUAL_TOTAL viene en centimos, no en euros: el percentil
+                -- 99,999 en crudo (~6.009.445) solo tiene sentido como tope
+                -- maximo de cotizacion real (~60.094 EUR/anyo) dividido entre
+                -- 100, nunca como 6 millones de euros de base anual.
+                SELECT ipf, ano_cotizacion AS anio, SUM(bcc_anual_total) / 100.0 AS bases_anuales
+                FROM (
+                    SELECT ipf, ano_cotizacion, bcc_anual_total FROM bases_ca
+                    WHERE ipf IN (SELECT ipf FROM colectivo)
+                    UNION ALL
+                    SELECT ipf, ano_cotizacion, bcc_anual_total FROM bases_cp
+                    WHERE ipf IN (SELECT ipf FROM colectivo)
+                )
+                GROUP BY 1, 2
+            ), unido AS (
+                SELECT
+                    b.bases_anuales,
+                    CASE WHEN c.fecha_ini_primer_empleo IS NOT NULL
+                         THEN (b.anio - date_part('year', c.fecha_ini_primer_empleo))::INTEGER END AS anos_vl,
+                    (b.anio - date_part('year', c.fecha_nacimiento))::INTEGER AS edad
+                FROM bases_anio b
+                JOIN colectivo c USING (ipf)
+            )
+            SELECT 'anos_vl' AS eje, anos_vl AS x, AVG(bases_anuales), MEDIAN(bases_anuales), COUNT(*)
+            FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2
+            UNION ALL
+            SELECT 'edad' AS eje, edad AS x, AVG(bases_anuales), MEDIAN(bases_anuales), COUNT(*)
+            FROM unido WHERE edad >= 0 GROUP BY 1, 2
+            ORDER BY 1, 2
+            """,
+            c["params"],
+        ).fetchall()
+
+        series = {"anos_vl": [], "edad": []}
+        for eje, x, media, mediana, n in filas:
+            series[eje].append({"x": x, "media": media, "mediana": mediana, "n": n})
+
+        resultado[nombre] = {"etiqueta": c["etiqueta"], "recuento": recuento, "series": series}
+
+    return resultado
 
 
 @router.get("/trayectorias/{ipf}", response_class=HTMLResponse)

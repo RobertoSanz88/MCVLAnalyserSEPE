@@ -116,6 +116,26 @@ TABLES = {
             "DURACION_NO_EMPLEO": "duracion_no_empleo",
         },
     ),
+    # Bases de cotizacion: solo las 3 columnas que usa /trayectorias/colectivo
+    # (ipf, anyo, base anual total), no las 12 columnas mensuales del Parquet -
+    # sin uso todavia en la app. CA (cuenta ajena) y CP (cuenta propia,
+    # autonomos) comparten exactamente el mismo esquema de columnas crudas.
+    "bases_ca": (
+        "tabla_bases_cotizacion_CA_optimizada.parquet",
+        {
+            "01 IPF": "ipf",
+            "03 ANO_COTIZACION": "ano_cotizacion",
+            "16 BCC_ANUAL_TOTAL": "bcc_anual_total",
+        },
+    ),
+    "bases_cp": (
+        "tabla_bases_cotizacion_CP_optimizada.parquet",
+        {
+            "01 IPF": "ipf",
+            "03 ANO_COTIZACION": "ano_cotizacion",
+            "16 BCC_ANUAL_TOTAL": "bcc_anual_total",
+        },
+    ),
 }
 
 

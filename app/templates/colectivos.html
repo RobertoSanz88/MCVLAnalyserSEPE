@@ -165,6 +165,19 @@
         #boton-exportar:hover:not(:disabled) { background: rgba(0,129,90,0.15); }
         #boton-exportar:disabled { background: var(--bg3); border-color: var(--border); color: var(--muted); cursor: not-allowed; }
 
+        /* Enlace con la misma pinta de boton que #boton-exportar (un <a>, no un
+           <button>, porque abre /trayectorias/colectivo en pestana nueva con
+           target="_blank" - un <button> no navega solo) - deshabilitado hasta
+           que Calcular tenga exito, mismo aspecto que #boton-exportar:disabled
+           via la clase .deshabilitado (un <a> no tiene :disabled real). */
+        #boton-trayectorias { margin-top: 0.5rem; width: 100%; display: block; text-align: center;
+                                text-decoration: none; box-sizing: border-box;
+                                background: rgba(21,68,129,0.08); border: 1.5px solid var(--azul-marino);
+                                color: var(--azul-marino); padding: 0.55rem; }
+        #boton-trayectorias:hover:not(.deshabilitado) { background: rgba(21,68,129,0.15); }
+        #boton-trayectorias.deshabilitado { background: var(--bg3); border-color: var(--border);
+                                              color: var(--muted); cursor: not-allowed; pointer-events: none; }
+
         /* --- Tabla numericas --- */
         /* Tamano de los datos (no de las cabeceras, que ya tienen su propio font-size mas
            abajo): reducido 2 niveles (0.1rem cada uno) respecto al 0.82rem original. */
@@ -353,6 +366,7 @@
 
                 <button id="boton-calcular" onclick="calcular()" disabled>Calcular</button>
                 <button id="boton-exportar" onclick="exportarExcel()" disabled>Exportar a Excel</button>
+                <a id="boton-trayectorias" class="deshabilitado" target="_blank" rel="noopener">Ver trayectorias de este colectivo →</a>
             </div>
 
             <div id="panel-numericas" class="panel">
@@ -651,10 +665,11 @@ async function calcular() {
     boton.disabled = true;
     boton.textContent = 'Calculando...';
 
+    const cuerpo = cuerpoPeticion();
     const resp = await fetch('/colectivos/subgrupos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cuerpoPeticion()),
+        body: JSON.stringify(cuerpo),
     });
     boton.disabled = false;
     boton.textContent = 'Calcular';
@@ -664,6 +679,15 @@ async function calcular() {
     renderizarNumericas(ultimoResultado.subgrupos);
     renderizarCategoricas(ultimoResultado.subgrupos);
     document.getElementById('boton-exportar').disabled = false;
+
+    // El enlace lleva el cuerpo REALMENTE usado en este calculo (no se
+    // recalcula al vuelo con cuerpoPeticion() al hacer clic) - si el usuario
+    // toca los filtros despues de Calcular pero antes de abrir Trayectorias,
+    // la pagina nueva debe seguir mostrando el colectivo que ve en pantalla,
+    // no uno distinto a medio configurar.
+    const enlace = document.getElementById('boton-trayectorias');
+    enlace.href = '/trayectorias/colectivo?colectivo=' + encodeURIComponent(JSON.stringify(cuerpo));
+    enlace.classList.remove('deshabilitado');
 }
 
 // Punto de millar puesto a mano (cada 3 cifras desde la derecha) en vez de con

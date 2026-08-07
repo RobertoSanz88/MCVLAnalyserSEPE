@@ -340,22 +340,21 @@ def _eje(
     return filtro_principal, _lado_filtro(con, filtro_secundario, columnas_validas)
 
 
-def _calcular_subgrupos(
+def calcular_condiciones_subgrupos(
     con,
     filtro1: Filtro,
     filtro2: Filtro,
     filtro3: Filtro | None = None,
     filtro4: Filtro | None = None,
-) -> dict:
+) -> dict[str, dict]:
     """Cruza eje A (filtro1, o filtro3 con filtro1 fijo) x eje B (filtro2, o
-    filtro4 con filtro2 fijo) en 4 subgrupos y calcula recuento + estadisticas
-    (numericas y categoricas) de cada uno. Compartido entre el endpoint JSON y
-    el de exportacion a Excel para no calcular las cosas de dos formas distintas."""
+    filtro4 con filtro2 fijo) en los 4 subgrupos (ORDEN_SUBGRUPOS) y devuelve,
+    para cada uno, el WHERE SQL sobre la vista `personas` (con sus parametros
+    ?) y su etiqueta legible - sin calcular todavia ninguna estadistica.
+    Extraido de _calcular_subgrupos para que /trayectorias/colectivo pueda
+    reutilizar exactamente la misma definicion de colectivo (mismos 4
+    subgrupos, mismas etiquetas) en vez de reimplementar el cruce de ejes."""
     columnas_validas = _columnas_personas(con)
-    numericas, categoricas = _clasificar_columnas(columnas_validas)
-    numericas = [c for c in numericas if c not in COLUMNAS_NUMERICAS_EXCLUIDAS]
-    categoricas_visibles = _categoricas_visibles(categoricas)
-
     fijo_a, (eje_a_si, eje_a_no) = _eje(con, filtro1, filtro3, columnas_validas)
     fijo_b, (eje_b_si, eje_b_no) = _eje(con, filtro2, filtro4, columnas_validas)
 
@@ -374,11 +373,35 @@ def _calcular_subgrupos(
         "filtro1_no__filtro2_no": (eje_a_no, eje_b_no),
     }
 
-    resultados = {}
+    resultado = {}
     for nombre, ((parte_a, params_a, etiq_a), (parte_b, params_b, etiq_b)) in combos.items():
         where = " AND ".join(condiciones_fijas + [parte_a, parte_b])
         params = params_fijos + params_a + params_b
         etiqueta = " + ".join(etiquetas_fijas + [etiq_a, etiq_b])
+        resultado[nombre] = {"where": where, "params": params, "etiqueta": etiqueta}
+    return resultado
+
+
+def _calcular_subgrupos(
+    con,
+    filtro1: Filtro,
+    filtro2: Filtro,
+    filtro3: Filtro | None = None,
+    filtro4: Filtro | None = None,
+) -> dict:
+    """Calcula recuento + estadisticas (numericas y categoricas) de cada uno de
+    los 4 subgrupos. Compartido entre el endpoint JSON y el de exportacion a
+    Excel para no calcular las cosas de dos formas distintas."""
+    columnas_validas = _columnas_personas(con)
+    numericas, categoricas = _clasificar_columnas(columnas_validas)
+    numericas = [c for c in numericas if c not in COLUMNAS_NUMERICAS_EXCLUIDAS]
+    categoricas_visibles = _categoricas_visibles(categoricas)
+
+    condiciones = calcular_condiciones_subgrupos(con, filtro1, filtro2, filtro3, filtro4)
+
+    resultados = {}
+    for nombre, c in condiciones.items():
+        where, params, etiqueta = c["where"], c["params"], c["etiqueta"]
         total = con.execute(f"SELECT COUNT(*) FROM personas WHERE {where}", params).fetchone()[0]
         resultados[nombre] = {
             "etiqueta": etiqueta,
