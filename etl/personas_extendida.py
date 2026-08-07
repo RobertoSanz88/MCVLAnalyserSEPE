@@ -318,8 +318,9 @@ def extraer_grupo_b(con, parquet_folder):
         SELECT ipf AS "01 IPF", val AS "Grupo_Ultimo_Empleo" FROM ranked WHERE rn = 1
     """).fetchdf()
 
-    # Fecha_final_Ultimo_Empleo (Fecha_ini_Primer_Empleo es intermedia, no sobrevive al final,
-    # pero se necesita en el Grupo H para Edad_Ultimo_Empleo/Anos_VL, asi que se calcula igual)
+    # Fecha_ini_Primer_Empleo sobrevive a la tabla final (ver NUEVO_ORDEN); Fecha_final_Ultimo_Empleo
+    # sigue siendo intermedia (se necesita en el Grupo H para Edad_Ultimo_Empleo/Anos_VL, pero no se
+    # expone como columna propia)
     df_fechas = con.execute(f"""
         SELECT "01 IPF" AS "01 IPF",
                MIN("06 FECHA_ALTA_REAL_AFIL") AS "Fecha_ini_Primer_Empleo",
@@ -754,7 +755,7 @@ NUEVO_ORDEN = [
     "Edad_Actual_Fecha_Corte",
     "Edad_Primer_Empleo_Signif", "Duracion_1er_Empleo_Signif", "Grupo_cotiz_1er_Empleo_Signif",
     "Edad_Ultimo_Empleo", "Grupo_Ultimo_Empleo",
-    "t_contrato_mas_largo", "Anos_VL",
+    "t_contrato_mas_largo", "Fecha_ini_Primer_Empleo", "Anos_VL",
     "duracion_promedio_EMPLEO", "Cotizado_anual_promedio",
     "num_altas_anual_promedio", "num_bajas_anual_promedio",
     "T_total_EMPLEO", "T_total_DESEMPLEO",
@@ -766,7 +767,7 @@ NUEVO_ORDEN = [
     "Act_econ_ppal", "t_tot_act_econ_ppal",
     "Ingresos_bruto_anual_2024",
     "Discap_fiscal", "Discap_afiliacion", "Discap_pension",
-    "Pension_todas_cobradas", "Ingresos_pension_bruto_historico", "Bases_cotiz_bruto_historico",
+    "Pension_todas_cobradas",
     "Pension_actual", "Cobra_pension_2024/5",
     "fecha_ultima_baja", "Situacion_actual_afiliacion", "Situacion_Paro_Ocupacion",
     "fecha_inicio_paro", "duracion_paro_dias",
