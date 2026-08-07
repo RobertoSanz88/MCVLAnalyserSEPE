@@ -412,6 +412,21 @@ def _calcular_subgrupos(
     return resultados
 
 
+@router.post("/colectivos/recuentos")
+def recuentos(request: Request, body: SubgruposRequest):
+    """Version ligera de /colectivos/subgrupos: solo etiqueta + recuento de
+    cada subgrupo, sin las estadisticas numericas/categoricas (mucho mas
+    caras de calcular). Pensada para refrescarse en vivo mientras se
+    configuran los filtros en el frontend, antes de pulsar Calcular."""
+    con = request.app.state.con
+    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    resultado = {}
+    for nombre, c in condiciones.items():
+        total = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
+        resultado[nombre] = {"etiqueta": c["etiqueta"], "recuento": total}
+    return resultado
+
+
 @router.post("/colectivos/subgrupos")
 def subgrupos(request: Request, body: SubgruposRequest):
     con = request.app.state.con

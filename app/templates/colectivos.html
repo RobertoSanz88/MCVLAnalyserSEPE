@@ -84,11 +84,32 @@
 
         /* --- Contenido --- */
         #contenido { flex: 1; display: flex; overflow: hidden; }
+        /* Un solo panel-filtros compartido por las dos pestanas (Analisis y
+           Trayectorias); a su derecha, solo una de las dos .contenido-vista
+           esta visible a la vez (la otra queda display:none, ver cambiarVista()). */
+        .contenido-vista { flex: 1; display: flex; overflow: hidden; min-width: 0; }
         .panel { padding: 1rem 1.1rem; overflow-y: auto; }
         #panel-filtros { width: var(--sidebar-w); flex: none; background: var(--bg3);
                           border-right: 1px solid var(--border); }
         #panel-numericas { flex: 1; min-width: 320px; background: var(--bg2); border-right: 1px solid var(--border); }
         #panel-categoricas { flex: 1; min-width: 320px; background: var(--bg2); }
+        #panel-trayectorias { flex: 1; min-width: 320px; background: var(--bg2);
+                                display: flex; flex-direction: column; }
+
+        /* --- Selector de tabla (Bases/Pensiones/Afiliacion) dentro de Trayectorias --- */
+        .selector-tablas { display: flex; gap: 0.5rem; margin-bottom: 0.9rem; flex: none; }
+        .pestana-tabla { padding: 0.5rem 0.9rem; border-radius: 7px; font-size: 0.82rem; font-weight: 700;
+                           border: 1.5px solid var(--border); background: var(--bg); color: var(--muted); }
+        .pestana-tabla.activa { background: var(--verde-dk); color: #fff; border-color: var(--verde-dk); }
+        .pestana-tabla.deshabilitada { color: var(--border); cursor: default; }
+        .pestana-tabla .nota-futuro { display: block; font-size: 0.6rem; font-weight: 400; margin-top: 0.1rem; }
+
+        .controles-trayectorias { display: flex; align-items: center; gap: 1.4rem; margin: 0.9rem 0; flex: none; }
+        .controles-trayectorias label { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+        .controles-trayectorias select { font-family: var(--font); font-size: 0.82rem; padding: 0.3rem 0.5rem;
+                              border: 1.5px solid var(--border); border-radius: 5px; background: var(--bg);
+                              color: var(--text); margin-left: 0.4rem; }
+        #grafico-bases { flex: 1; min-height: 420px; }
 
         .panel::-webkit-scrollbar, #sidebar::-webkit-scrollbar,
         #lista-columnas::-webkit-scrollbar, #lista-categorias::-webkit-scrollbar { width: 6px; }
@@ -160,23 +181,6 @@
                            box-shadow: 0 4px 14px rgba(0,129,90,0.32); }
         #boton-calcular:hover:not(:disabled) { background: var(--verde-acc); box-shadow: 0 6px 18px rgba(4,160,110,0.38); color: #fff; }
         #boton-calcular:disabled { background: var(--border); color: var(--muted); box-shadow: none; cursor: not-allowed; }
-        #boton-exportar { margin-top: 0.5rem; width: 100%; background: rgba(0,129,90,0.08);
-                           border: 1.5px solid var(--verde-dk); color: var(--verde-dk); padding: 0.55rem; }
-        #boton-exportar:hover:not(:disabled) { background: rgba(0,129,90,0.15); }
-        #boton-exportar:disabled { background: var(--bg3); border-color: var(--border); color: var(--muted); cursor: not-allowed; }
-
-        /* Enlace con la misma pinta de boton que #boton-exportar (un <a>, no un
-           <button>, porque abre /trayectorias/colectivo en pestana nueva con
-           target="_blank" - un <button> no navega solo) - deshabilitado hasta
-           que Calcular tenga exito, mismo aspecto que #boton-exportar:disabled
-           via la clase .deshabilitado (un <a> no tiene :disabled real). */
-        #boton-trayectorias { margin-top: 0.5rem; width: 100%; display: block; text-align: center;
-                                text-decoration: none; box-sizing: border-box;
-                                background: rgba(21,68,129,0.08); border: 1.5px solid var(--azul-marino);
-                                color: var(--azul-marino); padding: 0.55rem; }
-        #boton-trayectorias:hover:not(.deshabilitado) { background: rgba(21,68,129,0.15); }
-        #boton-trayectorias.deshabilitado { background: var(--bg3); border-color: var(--border);
-                                              color: var(--muted); cursor: not-allowed; pointer-events: none; }
 
         /* --- Tabla numericas --- */
         /* Tamano de los datos (no de las cabeceras, que ya tienen su propio font-size mas
@@ -294,7 +298,8 @@
 
     <div id="app">
         <div id="sidebar">
-            <div class="pestana activa">Análisis de colectivos</div>
+            <div class="pestana activa" id="pestana-analisis" onclick="cambiarVista('analisis')">Análisis de colectivos</div>
+            <div class="pestana deshabilitada" id="pestana-trayectorias" onclick="cambiarVista('trayectorias')">Trayectorias de colectivo</div>
             <div class="pestana deshabilitada">Cluster
                 <span class="nota-futuro">(próximamente)</span>
             </div>
@@ -365,31 +370,60 @@
                 </div>
 
                 <button id="boton-calcular" onclick="calcular()" disabled>Calcular</button>
-                <button id="boton-exportar" onclick="exportarExcel()" disabled>Exportar a Excel</button>
-                <a id="boton-trayectorias" class="deshabilitado" target="_blank" rel="noopener">Ver trayectorias de este colectivo →</a>
+                <!-- Exportar a Excel y Ver trayectorias vivian aqui como botones - ya no.
+                     Trayectorias es ahora una pestana propia (ver #sidebar); Exportar se
+                     retira de aqui a peticion del usuario, pendiente de decidir su nuevo
+                     sitio (exportarExcel() se queda definida sin usar, lista para
+                     re-engancharse en cuanto se decida donde). -->
             </div>
 
-            <div id="panel-numericas" class="panel">
-                <div class="cabecera-panel">
-                    <h2>Estadísticas numéricas</h2>
-                    <div class="switch-vista" id="switch-vista-numericas">
-                        <button type="button" class="activa" data-vista="datos" onclick="cambiarVistaNumericas('datos')">Datos</button>
-                        <button type="button" data-vista="graficos" onclick="cambiarVistaNumericas('graficos')">Gráficos</button>
+            <div id="contenido-analisis" class="contenido-vista">
+                <div id="panel-numericas" class="panel">
+                    <div class="cabecera-panel">
+                        <h2>Estadísticas numéricas</h2>
+                        <div class="switch-vista" id="switch-vista-numericas">
+                            <button type="button" class="activa" data-vista="datos" onclick="cambiarVistaNumericas('datos')">Datos</button>
+                            <button type="button" data-vista="graficos" onclick="cambiarVistaNumericas('graficos')">Gráficos</button>
+                        </div>
                     </div>
+                    <div id="recuentos-numericas"></div>
+                    <div id="contenedor-numericas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
                 </div>
-                <div id="recuentos-numericas"></div>
-                <div id="contenedor-numericas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
+
+                <div id="panel-categoricas" class="panel">
+                    <div class="cabecera-panel">
+                        <h2>Distribución categórica</h2>
+                        <div class="switch-vista" id="switch-vista-categoricas">
+                            <button type="button" class="activa" data-vista="datos" onclick="cambiarVistaCategoricas('datos')">Datos</button>
+                            <button type="button" data-vista="graficos" onclick="cambiarVistaCategoricas('graficos')">Gráficos</button>
+                        </div>
+                    </div>
+                    <div id="contenedor-categoricas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
+                </div>
             </div>
 
-            <div id="panel-categoricas" class="panel">
-                <div class="cabecera-panel">
-                    <h2>Distribución categórica</h2>
-                    <div class="switch-vista" id="switch-vista-categoricas">
-                        <button type="button" class="activa" data-vista="datos" onclick="cambiarVistaCategoricas('datos')">Datos</button>
-                        <button type="button" data-vista="graficos" onclick="cambiarVistaCategoricas('graficos')">Gráficos</button>
+            <div id="contenido-trayectorias" class="contenido-vista" style="display:none">
+                <div id="panel-trayectorias" class="panel">
+                    <div class="selector-tablas">
+                        <div class="pestana-tabla activa">Bases de cotización</div>
+                        <div class="pestana-tabla deshabilitada">Pensiones<span class="nota-futuro">(próximamente)</span></div>
+                        <div class="pestana-tabla deshabilitada">Afiliación<span class="nota-futuro">(próximamente)</span></div>
                     </div>
+                    <div id="recuentos-trayectorias"></div>
+                    <div class="controles-trayectorias">
+                        <label>Eje X:
+                            <select id="select-eje-x" onchange="cambiarEjeXTrayectorias(this.value)">
+                                <option value="anos_vl">Años de vida laboral</option>
+                                <option value="edad">Edad</option>
+                            </select>
+                        </label>
+                        <div class="switch-vista" id="switch-estadistico-trayectorias">
+                            <button type="button" class="activa" data-valor="media" onclick="cambiarEstadisticoTrayectorias('media')">Media</button>
+                            <button type="button" data-valor="mediana" onclick="cambiarEstadisticoTrayectorias('mediana')">Mediana</button>
+                        </div>
+                    </div>
+                    <div id="grafico-bases"></div>
                 </div>
-                <div id="contenedor-categoricas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
             </div>
         </div>
     </div>
@@ -467,6 +501,25 @@ let filtros = { 1: null, 2: null, 3: null, 4: null }; // Filtro tal cual lo espe
 // Eje B = Filtro 2 (+ Filtro 4 si se desactiva su contracolectivo automatico).
 let contracolectivo = { 1: true, 2: true };
 
+// Que pestana de #sidebar esta activa ahora mismo: 'analisis' o 'trayectorias'.
+// panel-filtros (la definicion del colectivo) es comun a las dos, solo cambia
+// que hay a su derecha (#contenido-analisis vs #contenido-trayectorias).
+let vistaActiva = 'analisis';
+
+function cambiarVista(vista) {
+    const pestana = document.getElementById('pestana-' + vista);
+    if (pestana.classList.contains('deshabilitada')) return; // trayectorias sin filtro1+filtro2 listos: no navegable
+    if (vista === vistaActiva) return;
+    vistaActiva = vista;
+
+    document.getElementById('pestana-analisis').classList.toggle('activa', vista === 'analisis');
+    document.getElementById('pestana-trayectorias').classList.toggle('activa', vista === 'trayectorias');
+    document.getElementById('contenido-analisis').style.display = vista === 'analisis' ? 'flex' : 'none';
+    document.getElementById('contenido-trayectorias').style.display = vista === 'trayectorias' ? 'flex' : 'none';
+
+    if (vista === 'trayectorias') sincronizarTrayectorias();
+}
+
 function toggleContracolectivo(n) {
     const activo = document.getElementById('contracolectivo-' + n).checked;
     contracolectivo[n] = activo;
@@ -488,13 +541,45 @@ function toggleContracolectivo(n) {
     }
 
     renderizarResumenFiltro(n);
-    actualizarBotonCalcular();
+    actualizarEstadoFiltros();
 }
 
-function actualizarBotonCalcular() {
+// Unico punto que reacciona a cualquier cambio en filtros/contracolectivo:
+// habilita Calcular Y la pestana "Trayectorias de colectivo" (misma condicion
+// - en cuanto el cruce de ejes esta completo ya hay una lista de IPFs por
+// subcolectivo, no hace falta esperar a Calcular para eso) y dispara el
+// recuento en vivo. Si ya se esta viendo la pestana de Trayectorias cuando
+// cambian los filtros, tambien refresca su grafico (sincronizarTrayectorias
+// no repite la peticion si el colectivo no ha cambiado de verdad).
+function actualizarEstadoFiltros() {
     const ejeA = filtros[1] && (contracolectivo[1] || filtros[3]);
     const ejeB = filtros[2] && (contracolectivo[2] || filtros[4]);
-    document.getElementById('boton-calcular').disabled = !(ejeA && ejeB);
+    const listo = !!(ejeA && ejeB);
+
+    document.getElementById('boton-calcular').disabled = !listo;
+    document.getElementById('pestana-trayectorias').classList.toggle('deshabilitada', !listo);
+
+    actualizarRecuentosEnVivo(listo);
+    if (listo && vistaActiva === 'trayectorias') sincronizarTrayectorias();
+}
+
+// Contador monotono: si el usuario cambia los filtros varias veces seguidas,
+// varias peticiones de recuento quedan en vuelo a la vez y pueden volver en
+// cualquier orden - solo se aplica la respuesta de la ultima peticion
+// lanzada, las anteriores (aunque lleguen despues) se descartan.
+let tokenRecuentos = 0;
+
+async function actualizarRecuentosEnVivo(listo) {
+    if (!listo) { limpiarRecuentos(); return; }
+    const miToken = ++tokenRecuentos;
+    const resp = await fetch('/colectivos/recuentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpoPeticion()),
+    });
+    if (miToken !== tokenRecuentos) return; // ya hay una peticion mas nueva en marcha
+    if (!resp.ok) return; // vista previa: un fallo aqui no debe bloquear nada mas
+    renderizarRecuentosEnTodos(await resp.json());
 }
 
 async function cargarColumnas() {
@@ -572,7 +657,7 @@ function aplicarFiltro() {
 
     filtros[destino] = filtro;
     renderizarResumenFiltro(destino);
-    actualizarBotonCalcular();
+    actualizarEstadoFiltros();
     avanzarDestino();
 }
 
@@ -678,16 +763,104 @@ async function calcular() {
     ultimoResultado = await resp.json();
     renderizarNumericas(ultimoResultado.subgrupos);
     renderizarCategoricas(ultimoResultado.subgrupos);
-    document.getElementById('boton-exportar').disabled = false;
+}
 
-    // El enlace lleva el cuerpo REALMENTE usado en este calculo (no se
-    // recalcula al vuelo con cuerpoPeticion() al hacer clic) - si el usuario
-    // toca los filtros despues de Calcular pero antes de abrir Trayectorias,
-    // la pagina nueva debe seguir mostrando el colectivo que ve en pantalla,
-    // no uno distinto a medio configurar.
-    const enlace = document.getElementById('boton-trayectorias');
-    enlace.href = '/trayectorias/colectivo?colectivo=' + encodeURIComponent(JSON.stringify(cuerpo));
-    enlace.classList.remove('deshabilitado');
+// --- Pestana "Trayectorias de colectivo" (Bases de cotizacion) ---
+
+// Por debajo de esto, la media/mediana de ese punto es poco fiable - se
+// corta la linea ahi en vez de seguir dibujando (mas simple que atenuar, y
+// evita una linea con tramos de fiabilidad distinta dificiles de leer). El
+// propio N (todos los puntos, incluidos los descartados) se ve como
+// referencia en el eje secundario.
+const N_MINIMO = 30;
+
+let ejeXTrayectorias = 'anos_vl';
+let estadisticoTrayectorias = 'media';
+let ultimoResultadoTrayectorias = null;
+// JSON del cuerpo (filtro1-4) que produjo ultimoResultadoTrayectorias - si al
+// entrar en la pestana el colectivo actual coincide, no hace falta repetir
+// la peticion (~20-30s, recorre toda Bases de cotizacion).
+let ultimoCuerpoTrayectorias = null;
+
+function cambiarEjeXTrayectorias(valor) {
+    ejeXTrayectorias = valor;
+    dibujarGraficoTrayectorias();
+}
+
+function cambiarEstadisticoTrayectorias(valor) {
+    estadisticoTrayectorias = valor;
+    document.querySelectorAll('#switch-estadistico-trayectorias button')
+        .forEach(b => b.classList.toggle('activa', b.dataset.valor === valor));
+    dibujarGraficoTrayectorias();
+}
+
+function dibujarGraficoTrayectorias() {
+    if (!ultimoResultadoTrayectorias) return;
+    const div = document.getElementById('grafico-bases');
+    div.innerHTML = '';
+    const traces = [];
+
+    for (const nombre of ORDEN_SUBGRUPOS) {
+        const r = ultimoResultadoTrayectorias[nombre];
+        const serie = r.series[ejeXTrayectorias];
+        if (!serie.length) continue;
+        const etiqueta = r.etiqueta;
+
+        const xFiable = [], yFiable = [];
+        for (const p of serie) {
+            if (p.n >= N_MINIMO) { xFiable.push(p.x); yFiable.push(p[estadisticoTrayectorias]); }
+        }
+        traces.push({
+            type: 'scatter', mode: 'lines+markers', name: etiqueta,
+            x: xFiable, y: yFiable,
+            line: { color: COLOR_SUBGRUPO[nombre], width: 2.5 },
+            marker: { color: COLOR_SUBGRUPO[nombre], size: 5 },
+            hovertemplate: `${etiqueta}<br>%{x}: %{y:,.0f} €<extra></extra>`,
+        });
+        // N de referencia (TODOS los puntos, incluidos los < N_MINIMO ya
+        // excluidos de la linea principal) en el eje secundario - deja ver
+        // donde y por que se corta la linea de arriba.
+        traces.push({
+            type: 'scatter', mode: 'lines', name: 'N ' + etiqueta, showlegend: false,
+            x: serie.map(p => p.x), y: serie.map(p => p.n),
+            yaxis: 'y2', opacity: 0.4,
+            line: { color: COLOR_SUBGRUPO[nombre], width: 1, dash: 'dot' },
+            hovertemplate: `N: %{y}<extra></extra>`,
+        });
+    }
+
+    Plotly.newPlot(div, traces, {
+        margin: { l: 60, r: 55, t: 10, b: 45 },
+        xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años de vida laboral' : 'Edad' },
+        yaxis: { title: 'Bases anuales (€)', rangemode: 'tozero' },
+        yaxis2: { title: 'N', overlaying: 'y', side: 'right', rangemode: 'tozero', showgrid: false },
+        legend: { orientation: 'h', y: -0.2 },
+        font: { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26' },
+        paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+    }, { displayModeBar: false, responsive: true });
+}
+
+async function sincronizarTrayectorias() {
+    const cuerpo = cuerpoPeticion();
+    const clave = JSON.stringify(cuerpo);
+    if (clave === ultimoCuerpoTrayectorias) return; // el colectivo no ha cambiado, el grafico ya esta al dia
+
+    const div = document.getElementById('grafico-bases');
+    div.innerHTML = '<p class="aviso-vacio">Calculando trayectorias del colectivo… puede tardar un rato (recorre toda la tabla de Bases de cotización).</p>';
+
+    const resp = await fetch('/trayectorias/colectivo/bases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+    });
+    if (!resp.ok) {
+        div.innerHTML = '<p class="aviso-vacio">Error al calcular: ' + (await resp.text()) + '</p>';
+        return;
+    }
+    ultimoCuerpoTrayectorias = clave;
+    ultimoResultadoTrayectorias = await resp.json();
+    renderizarRecuentosEnTodos(ultimoResultadoTrayectorias);
+    dibujarGraficoTrayectorias();
 }
 
 // Punto de millar puesto a mano (cada 3 cifras desde la derecha) en vez de con
@@ -733,9 +906,15 @@ function estadisticoDestacado(media, desviacion) {
 
 // Valor absoluto de personas de cada subcolectivo - fuera del switch
 // Datos/Graficos (se pinta una vez y se queda igual pase lo que pase con el
-// switch, no es una vista mas sino contexto siempre visible).
-function renderizarRecuentosNumericas(subgrupos) {
-    const cont = document.getElementById('recuentos-numericas');
+// switch, no es una vista mas sino contexto siempre visible). Se pinta en
+// dos sitios (pestana Analisis y pestana Trayectorias, ver
+// renderizarRecuentosEnTodos) con exactamente el mismo aspecto y datos, asi
+// que recibe el id del contenedor en vez de asumir uno fijo. subgrupos aqui
+// solo necesita .etiqueta/.recuento por entrada - vale tanto el resultado
+// completo de /colectivos/subgrupos como el ligero de /colectivos/recuentos.
+function renderizarRecuentosNumericas(subgrupos, contenedorId) {
+    const cont = document.getElementById(contenedorId);
+    if (!cont) return;
     cont.innerHTML = `
         <div class="lista-recuentos">${ORDEN_SUBGRUPOS.map(nombre => `
             <div><span class="numero-subgrupo">${NUMERO_SUBGRUPO[nombre]}</span>
@@ -749,9 +928,22 @@ function renderizarRecuentosNumericas(subgrupos) {
         </div>`;
 }
 
+const CONTENEDORES_RECUENTOS = ['recuentos-numericas', 'recuentos-trayectorias'];
+
+function renderizarRecuentosEnTodos(subgrupos) {
+    for (const id of CONTENEDORES_RECUENTOS) renderizarRecuentosNumericas(subgrupos, id);
+}
+
+function limpiarRecuentos() {
+    for (const id of CONTENEDORES_RECUENTOS) {
+        const cont = document.getElementById(id);
+        if (cont) cont.innerHTML = '';
+    }
+}
+
 function renderizarNumericas(subgrupos) {
     ultimosSubgruposNumericos = subgrupos;
-    renderizarRecuentosNumericas(subgrupos);
+    renderizarRecuentosEnTodos(subgrupos);
     if (vistaNumericas === 'graficos') renderizarGraficosNumericos(subgrupos);
     else renderizarTablaNumericas(subgrupos);
 }

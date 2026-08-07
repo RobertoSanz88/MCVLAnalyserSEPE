@@ -1,6 +1,8 @@
 """Trayectorias: individual (episodios de afiliacion de un IPF) y de colectivo
 (evolucion anual de una variable, superponiendo los 4 subgrupos de un
-colectivo ya definido en /colectivos)."""
+colectivo ya definido en /colectivos). La vista de colectivo vive como
+pestana dentro de colectivos.html (no como pagina propia), asi que este
+modulo solo expone el endpoint de datos, no una ruta HTML."""
 
 import json
 
@@ -12,16 +14,6 @@ from app.routers.colectivos import ORDEN_SUBGRUPOS, SubgruposRequest, calcular_c
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
-
-
-# Registrada ANTES de /trayectorias/{ipf}: aunque "colectivo" no es un int
-# valido para {ipf}, Starlette hace el match de rutas por estructura de la URL
-# antes de que FastAPI valide el tipo del parametro - si {ipf} fuera la
-# primera ruta registrada, "/trayectorias/colectivo" encajaria en su patron y
-# la peticion moriria en un 422 (int invalido) sin llegar nunca aqui.
-@router.get("/trayectorias/colectivo", response_class=HTMLResponse)
-def pagina_trayectorias_colectivo(request: Request):
-    return templates.TemplateResponse(request, "trayectorias_colectivo.html", {})
 
 
 @router.post("/trayectorias/colectivo/bases")
@@ -71,8 +63,16 @@ def trayectorias_colectivo_bases(request: Request, body: SubgruposRequest):
             SELECT 'anos_vl' AS eje, anos_vl AS x, AVG(bases_anuales), MEDIAN(bases_anuales), COUNT(*)
             FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2
             UNION ALL
+            -- edad >= 18 (no >= 0): investigado el 2026-08-07 por que aparecian
+            -- edades menores. El 96,5% de las filas con edad<18 son edad 16-17
+            -- (trabajo legal en Espana desde los 16, dato real, no error); el
+            -- resto es una cola suave hasta valores negativos (~5.700 filas,
+            -- 0,02% del total) - unos pocos casos de fecha_nacimiento o
+            -- ano_cotizacion erroneos en el dato MCVL, no un fallo de esta
+            -- query. Decision explicita del usuario: no representar nada por
+            -- debajo de 18 en ningun caso, exista o no.
             SELECT 'edad' AS eje, edad AS x, AVG(bases_anuales), MEDIAN(bases_anuales), COUNT(*)
-            FROM unido WHERE edad >= 0 GROUP BY 1, 2
+            FROM unido WHERE edad >= 18 GROUP BY 1, 2
             ORDER BY 1, 2
             """,
             c["params"],
