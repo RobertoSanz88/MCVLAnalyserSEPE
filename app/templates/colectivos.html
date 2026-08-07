@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MCVL Analyser SEPE — Análisis de colectivos</title>
+    <link rel="icon" href="/static/icon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
@@ -39,9 +40,8 @@
         header { height: var(--header-h); min-height: var(--header-h); flex: none;
                  background: var(--verde-dk); display: flex; align-items: center;
                  padding: 0 1.25rem; gap: 0.75rem; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
-        .logo { width: 36px; height: 36px; background: var(--amarillo); border-radius: 8px;
-                display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
-                flex-shrink: 0; }
+        .logo { width: 36px; height: 36px; flex-shrink: 0; }
+        .logo img { width: 100%; height: 100%; object-fit: contain; }
         .header-text h1 { color: #fff; font-size: 1.2rem; font-weight: 800; line-height: 1.2; margin: 0; }
         .header-text p { color: var(--verde-claro); font-size: 0.72rem; margin: 0.1rem 0 0; }
         .header-badges { margin-left: auto; display: flex; gap: 0.4rem; }
@@ -190,22 +190,47 @@
         .aviso-vacio { color: var(--muted); font-style: italic; font-size: 0.85rem; }
 
         /* --- Graficos de barras (numericas) --- */
-        /* Leyenda unica y compartida por todas las mini-graficas: los 4 subcolectivos
-           (color y etiqueta) son los mismos en cada columna, repetirla por grafico
-           seria ruido. */
-        .leyenda-graficos { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; margin-bottom: 0.9rem;
-                              font-size: 0.72rem; color: var(--muted); font-weight: 600; }
-        .leyenda-item { display: flex; align-items: center; gap: 0.35rem; }
         .leyenda-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 
         /* --- Recuento absoluto por subcolectivo (numericas, Datos y Graficos) --- */
-        #recuentos-numericas { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
-        .tarjeta-recuento { flex: 1 1 180px; border: 1.5px solid var(--border); border-radius: 7px;
-                              background: var(--bg); padding: 0.5rem 0.65rem; border-left-width: 4px; }
-        .tarjeta-recuento .etiqueta-recuento { font-size: 0.68rem; color: var(--muted); font-weight: 600;
-                              line-height: 1.25; display: block; margin-bottom: 0.15rem; }
-        .tarjeta-recuento .valor-recuento { font-family: var(--mono); font-size: 1.05rem; font-weight: 700; color: var(--text); }
-        .tarjeta-recuento .valor-recuento span { font-size: 0.68rem; font-weight: 600; color: var(--muted); margin-left: 0.2rem; }
+        /* 2 columnas: lista de nombres a la izquierda (1 fila por subcolectivo,
+           igual que antes) + una "pastilla" a la derecha con las 4 cifras en
+           columna, cada una subrayada del color de su subcolectivo. Separada de
+           los nombres a proposito: si la cifra va pegada a cada nombre (como
+           antes) no queda alineada entre filas porque los nombres tienen
+           longitudes distintas - aqui la pastilla arranca siempre en la misma
+           posicion. Doble uso: unica leyenda color->nombre para todo el panel
+           (Datos y Graficos) y para los mini-graficos de mas abajo, que ya no
+           repiten los nombres. */
+        /* justify-content: space-between empuja la columna de la pastilla al borde
+           derecho de esta zona - queda justo debajo del switch Datos/Graficos, que
+           vive en la cabecera de arriba con el mismo alineado a la derecha.
+           align-items: flex-end en vez de stretch: "Personas" ocupa una fila
+           propia encima solo de la pastilla, asi que se alinean por abajo, no por
+           arriba, para que las 4 filas de cifras sigan a la misma altura que las
+           4 de nombres. Los numeros 1-4 delante de cada nombre son la unica
+           referencia numero->subcolectivo (los graficos ya no la repiten, ver
+           dibujarApiladas/dibujarMapaCalor). */
+        #recuentos-numericas { display: flex; align-items: flex-end; justify-content: space-between;
+                              gap: 0.9rem; margin-bottom: 1rem; }
+        .lista-recuentos { display: flex; flex-direction: column; justify-content: space-between;
+                              gap: 0.32rem; font-size: 0.72rem; color: var(--muted); font-weight: 600;
+                              line-height: 1.3; }
+        .lista-recuentos .numero-subgrupo { display: inline-block; width: 1em; font-weight: 800;
+                              color: var(--text); }
+        .lista-recuentos .leyenda-swatch { display: inline-block; vertical-align: middle; margin-right: 0.35rem; }
+        .columna-pastilla { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
+        .titulo-pastilla { font-size: 0.65rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+                              letter-spacing: 0.03em; }
+        /* Mismo font-size/line-height que .lista-recuentos y sin padding vertical
+           (solo el borde, ~1.5px arriba/abajo) - para que la pastilla entera mida
+           lo mismo que las 4 filas de nombres de al lado, fila a fila. */
+        .pastilla-recuentos { display: flex; flex-direction: column; justify-content: space-between;
+                              gap: 0.32rem; flex-shrink: 0; border: 1.5px solid var(--border);
+                              border-radius: 8px; background: var(--bg); padding: 0 0.7rem; }
+        .pastilla-recuentos .valor-recuento { font-family: var(--mono); font-weight: 700; font-size: 0.72rem;
+                              line-height: 1.3; color: var(--text); border-bottom: 2.5px solid;
+                              white-space: nowrap; text-align: right; }
 
         .grid-graficos { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.7rem; }
         .caja-grafico { border: 1px solid var(--border); border-radius: 7px; background: var(--bg);
@@ -243,7 +268,7 @@
 </head>
 <body>
     <header>
-        <div class="logo">👥</div>
+        <div class="logo"><img src="/static/icon.ico" alt=""></div>
         <div class="header-text">
             <h1>MCVL Analyser SEPE</h1>
             <p>Observatorio de las Ocupaciones · SEPE</p>
@@ -409,8 +434,8 @@ const COLOR_OTROS = '#9a988f';
 
 const TIPOS_GRAFICO_CATEGORICO = [
     { valor: 'agrupadas', etiqueta: 'Barras agrupadas verticales' },
-    { valor: 'apiladas', etiqueta: 'Barras apiladas 100%' },
     { valor: 'agrupadas_h', etiqueta: 'Barras agrupadas horizontales' },
+    { valor: 'apiladas', etiqueta: 'Barras apiladas 100%' },
     { valor: 'mapacalor', etiqueta: 'Mapa de calor' },
 ];
 
@@ -687,11 +712,17 @@ function estadisticoDestacado(media, desviacion) {
 // switch, no es una vista mas sino contexto siempre visible).
 function renderizarRecuentosNumericas(subgrupos) {
     const cont = document.getElementById('recuentos-numericas');
-    cont.innerHTML = ORDEN_SUBGRUPOS.map(nombre => `
-        <div class="tarjeta-recuento" style="border-left-color:${COLOR_SUBGRUPO[nombre]}">
-            <span class="etiqueta-recuento">${subgrupos[nombre].etiqueta}</span>
-            <span class="valor-recuento">${fmtEntero(subgrupos[nombre].recuento)}<span>personas</span></span>
-        </div>`).join('');
+    cont.innerHTML = `
+        <div class="lista-recuentos">${ORDEN_SUBGRUPOS.map(nombre => `
+            <div><span class="numero-subgrupo">${NUMERO_SUBGRUPO[nombre]}</span>
+                <span class="leyenda-swatch" style="background:${COLOR_SUBGRUPO[nombre]}"></span>${subgrupos[nombre].etiqueta}</div>
+        `).join('')}</div>
+        <div class="columna-pastilla">
+            <span class="titulo-pastilla">Personas</span>
+            <div class="pastilla-recuentos">${ORDEN_SUBGRUPOS.map(nombre => `
+                <span class="valor-recuento" style="border-color:${COLOR_SUBGRUPO[nombre]}">${fmtEntero(subgrupos[nombre].recuento)}</span>
+            `).join('')}</div>
+        </div>`;
 }
 
 function renderizarNumericas(subgrupos) {
@@ -741,18 +772,9 @@ function renderizarGraficosNumericos(subgrupos) {
     const cont = document.getElementById('contenedor-numericas');
     cont.innerHTML = '';
 
-    // Leyenda compartida una sola vez (los 4 subcolectivos son los mismos en
-    // cada mini-grafico) en vez de repetirla en cada caja.
-    const leyenda = document.createElement('div');
-    leyenda.className = 'leyenda-graficos';
-    for (const nombre of ORDEN_SUBGRUPOS) {
-        const item = document.createElement('span');
-        item.className = 'leyenda-item';
-        item.innerHTML = `<span class="leyenda-swatch" style="background:${COLOR_SUBGRUPO[nombre]}"></span>${subgrupos[nombre].etiqueta}`;
-        leyenda.appendChild(item);
-    }
-    cont.appendChild(leyenda);
-
+    // La leyenda color+nombre ya la da #recuentos-numericas, siempre visible
+    // encima de este panel (ver renderizarRecuentosNumericas) - no hace falta
+    // repetirla aqui.
     const grid = document.createElement('div');
     grid.className = 'grid-graficos';
     cont.appendChild(grid);
@@ -877,7 +899,7 @@ function renderizarGraficosCategoricos(subgrupos) {
         select.value = tipoGraficoPorColumna[nombreCol] || 'agrupadas';
         const cuerpo = caja.querySelector('.cuerpo-grafico-cat');
 
-        const dibujar = () => dibujarGraficoCategorico(cuerpo, select.value, subgrupos, mapas, vistos);
+        const dibujar = () => dibujarGraficoCategorico(cuerpo, select.value, subgrupos, mapas, vistos, nombreCol);
         select.addEventListener('change', () => {
             tipoGraficoPorColumna[nombreCol] = select.value;
             dibujar();
@@ -886,11 +908,29 @@ function renderizarGraficosCategoricos(subgrupos) {
     });
 }
 
-function dibujarGraficoCategorico(div, tipo, subgrupos, mapas, vistos) {
+function dibujarGraficoCategorico(div, tipo, subgrupos, mapas, vistos, nombreCol) {
     if (tipo === 'apiladas') return dibujarApiladas(div, subgrupos, mapas, vistos);
     if (tipo === 'agrupadas_h') return dibujarAgrupadasHorizontal(div, subgrupos, mapas, vistos);
     if (tipo === 'mapacalor') return dibujarMapaCalor(div, subgrupos, mapas, vistos);
-    return dibujarAgrupadas(div, subgrupos, mapas, vistos);
+    return dibujarAgrupadas(div, subgrupos, mapas, vistos, nombreCol);
+}
+
+// Columnas donde se pidio mostrar solo el codigo numerico en el eje X en vez
+// del texto completo (no en prov_trabajo_ppal, que tiene el mismo patron "01
+// ALAVA" pero se quiere dejar con el nombre completo): el valor ya viene del
+// ETL como codigo + espacio + descripcion ("561 Restaurantes y puestos de
+// comidas" en act_econ_ppal, codigo CNAE fijo a 3 digitos; "10 MAYORES DE 18
+// AÑOS NO CUALIFICADOS" en las 3 columnas de GRUPOS_COTIZ_DICT, codigo de 1 o
+// 2 digitos sin rellenar con ceros - ver GRUPOS_COTIZ_DICT/Act_econ_ppal en
+// etl/personas_extendida.py). La descripcion completa se queda en la tabla de
+// Datos y en el hover, aqui solo molestaba por lo larga que es. Valores sin
+// codigo al principio ("NO CONSTA"...) no matchean y se quedan tal cual.
+const COLUMNAS_CODIGO_CORTO = new Set([
+    'act_econ_ppal', 'grupo_cotiz_1er_empleo_signif', 'grupo_cotiz_ppal', 'grupo_ultimo_empleo',
+]);
+function codigoCorto(valor) {
+    const m = /^(\d{1,3})\s/.exec(valor);
+    return m ? m[1] : valor;
 }
 
 // Barras agrupadas verticales: 1 grupo de 4 barras (una por subcolectivo,
@@ -901,7 +941,7 @@ function dibujarGraficoCategorico(div, tipo, subgrupos, mapas, vistos) {
 // tienen pocos; para las que tienen muchos - provincia, actividad economica -
 // el ancho crece y el cuerpo del grafico scrollea en horizontal, o conviene
 // mejor pasar a "Barras agrupadas horizontales").
-function dibujarAgrupadas(div, subgrupos, mapas, vistos) {
+function dibujarAgrupadas(div, subgrupos, mapas, vistos, nombreCol) {
     // Limpia restos de un tipo de grafico anterior en esta misma caja - ver
     // [[feedback_plotly_reusar_div]]: Plotly.newPlot no borra por si solo el
     // HTML que haya dejado un tipo anterior si ese HTML no lo creo Plotly
@@ -915,16 +955,30 @@ function dibujarAgrupadas(div, subgrupos, mapas, vistos) {
         marker: { color: COLOR_SUBGRUPO[nombre] },
         hovertemplate: `%{x}<br>${subgrupos[nombre].etiqueta}: %{y}%<extra></extra>`,
     }));
-    const ancho = Math.max(500, vistos.length * 90);
-    div.style.minWidth = ancho + 'px';
+    // Sin ancho fijo (a diferencia del resto de tipos de grafico categorico):
+    // aqui el objetivo es justo lo contrario - que todos los graficos de
+    // "Barras agrupadas verticales" ocupen el mismo ancho (el disponible en
+    // el panel), en vez de que cada uno tenga un ancho distinto segun su
+    // numero de categorias. div.style.minWidth queda vacio y no se pasa
+    // layout.width, asi que con responsive:true Plotly mide el contenedor
+    // real y se ajusta a el (ver [[feedback_plotly_width_responsive]] para
+    // el caso contrario, cuando si hace falta forzar mas ancho que el
+    // contenedor).
+    div.style.minWidth = '';
+    const xaxis = { tickangle: -40, automargin: true };
+    // tickvals/ticktext no tocan "x" en los traces, asi que el hover (%{x})
+    // sigue mostrando la descripcion completa, solo el eje se acorta al codigo.
+    if (COLUMNAS_CODIGO_CORTO.has(nombreCol)) {
+        xaxis.tickvals = vistos;
+        xaxis.ticktext = vistos.map(codigoCorto);
+    }
     Plotly.newPlot(div, traces, {
         barmode: 'group',
         margin: { l: 45, r: 10, t: 10, b: 100 },
-        xaxis: { tickangle: -40, automargin: true },
+        xaxis,
         yaxis: { title: '%', rangemode: 'tozero' },
         legend: { orientation: 'h', y: -0.55 },
         height: 340,
-        width: ancho,
     }, { displayModeBar: false, responsive: true });
 }
 
@@ -974,43 +1028,69 @@ function dibujarAgrupadasHorizontal(div, subgrupos, mapas, vistos) {
     }, { displayModeBar: false, responsive: true });
 }
 
-// Barras apiladas al 100%: 1 barra por CADA VALOR de la columna (eje X, como
-// en "agrupadas"), apilando los 4 subcolectivos (color por identidad, como en
-// el resto de graficos) - el complementario de "agrupadas": en vez de
-// comparar subcolectivos lado a lado, enseña de un vistazo en que
-// subcolectivo se concentra cada valor. La altura de cada segmento no es el
-// "% dentro del subcolectivo" (ese es el que ya usa "agrupadas"), sino el
-// reparto del propio valor ENTRE los 4 subcolectivos (recalculado a partir
-// del conteo, no del porcentaje ya calculado por el backend, que es relativo
-// al total de cada subcolectivo) - asi cada barra si suma justo 100%.
+// Barras apiladas al 100%: SOLO 4 barras horizontales, una por subcolectivo
+// (eje Y) - no una por valor de la columna, esa es "agrupadas horizontales".
+// Dentro de cada barra se apilan las categorias de la columna (color por
+// IDENTIDAD DE CATEGORIA, PALETA_VALOR - no COLOR_SUBGRUPO, que aqui ya no
+// pinta nada porque el eje ya es el subcolectivo). Es el "% dentro del
+// subcolectivo" que ya calcula el backend (mapas[n].get(v).porcentaje, sobre
+// el total de ESE subcolectivo) sin recalcular nada - por eso cada barra
+// suma justo 100%: son las categorias de un mismo subcolectivo repartiendose
+// su propio 100%, no un valor repartiendose entre subcolectivos.
+// PALETA_VALOR solo tiene 7 tonos, asi que se identifican las 7 categorias
+// con mas peso combinado (suma de conteo en los 4 subcolectivos) y el resto
+// se pliega en "Otros" (gris) - incluye tanto las categorias fuera de ese
+// top 7 como el margen por debajo del limite de categorias que ya aplica el
+// backend en columnas con muchos valores (ver config.py, CATEGORICAS_COLECTIVOS).
 function dibujarApiladas(div, subgrupos, mapas, vistos) {
     div.innerHTML = '';
+    div.style.minWidth = '';
+
     const totalPorValor = new Map(vistos.map(v => [
         v,
         ORDEN_SUBGRUPOS.reduce((s, n) => s + (mapas[n].get(v)?.conteo || 0), 0),
     ]));
+    const topCategorias = [...vistos]
+        .sort((a, b) => totalPorValor.get(b) - totalPorValor.get(a))
+        .slice(0, PALETA_VALOR.length);
 
-    const traces = ORDEN_SUBGRUPOS.map(nombre => ({
+    const numeros = ORDEN_SUBGRUPOS.map(n => NUMERO_SUBGRUPO[n]);
+    const traces = topCategorias.map((valor, i) => ({
         type: 'bar',
-        name: subgrupos[nombre].etiqueta,
-        x: vistos,
-        y: vistos.map(v => {
-            const total = totalPorValor.get(v);
-            return total ? (mapas[nombre].get(v)?.conteo || 0) / total * 100 : 0;
-        }),
-        marker: { color: COLOR_SUBGRUPO[nombre] },
-        hovertemplate: `%{x}<br>${subgrupos[nombre].etiqueta}: %{y:.1f}%<extra></extra>`,
+        orientation: 'h',
+        name: valor,
+        y: numeros,
+        x: ORDEN_SUBGRUPOS.map(n => mapas[n].get(valor)?.porcentaje ?? 0),
+        marker: { color: PALETA_VALOR[i] },
+        hovertemplate: `subcolectivo %{y} — ${valor}: %{x:.1f}%<extra></extra>`,
     }));
-    const ancho = Math.max(500, vistos.length * 90);
-    div.style.minWidth = ancho + 'px';
+    traces.push({
+        type: 'bar',
+        orientation: 'h',
+        name: 'Otros',
+        y: numeros,
+        x: ORDEN_SUBGRUPOS.map(n => {
+            const sumaTop = topCategorias.reduce((s, v) => s + (mapas[n].get(v)?.porcentaje ?? 0), 0);
+            return Math.max(0, 100 - sumaTop);
+        }),
+        marker: { color: COLOR_OTROS },
+        hovertemplate: `subcolectivo %{y} — Otros: %{x:.1f}%<extra></extra>`,
+    });
+
+    // Eje Y con numeros 1-4 (ver NUMERO_SUBGRUPO) en vez del nombre completo -
+    // la referencia numero->subcolectivo ya no se repite aqui debajo de cada
+    // grafico (era muy repetitivo, uno igual en cada columna categorica); esta
+    // en "Estadisticas numericas" una unica vez, ver renderizarRecuentosNumericas.
+    // Tampoco lleva titulo '%' en el eje X: con la leyenda de categorias justo
+    // debajo, quedaba encimada y estorbaba mas que ayudaba (el rango 0-100 ya
+    // se lee solo).
     Plotly.newPlot(div, traces, {
         barmode: 'stack',
-        margin: { l: 45, r: 10, t: 10, b: 100 },
-        xaxis: { tickangle: -40, automargin: true },
-        yaxis: { title: '%', range: [0, 100] },
-        legend: { orientation: 'h', y: -0.55 },
-        height: 340,
-        width: ancho,
+        margin: { l: 30, r: 15, t: 10, b: 40 },
+        xaxis: { range: [0, 100] },
+        yaxis: { automargin: true, autorange: 'reversed', dtick: 1 },
+        legend: { orientation: 'h', y: -0.25 },
+        height: 220,
     }, { displayModeBar: false, responsive: true });
 }
 
@@ -1020,8 +1100,10 @@ function dibujarApiladas(div, subgrupos, mapas, vistos) {
 // columnas con muchos valores; limitado a los 15 mas frecuentes para que las
 // filas no se aplasten. Las columnas (subcolectivos) se etiquetan con su
 // numero (1-4, ver NUMERO_SUBGRUPO) en vez de la etiqueta completa - con
-// nombres largos como eje X quedaba apretado o rotado e ilegible; una leyenda
-// numero->etiqueta debajo del grafico hace de referencia.
+// nombres largos como eje X quedaba apretado o rotado e ilegible. La
+// referencia numero->subcolectivo no se repite aqui debajo (era muy
+// repetitivo, igual en cada columna categorica) - esta una unica vez en
+// "Estadisticas numericas", ver renderizarRecuentosNumericas.
 function dibujarMapaCalor(div, subgrupos, mapas, vistos) {
     div.innerHTML = '';
     div.style.minWidth = '';
@@ -1068,15 +1150,6 @@ function dibujarMapaCalor(div, subgrupos, mapas, vistos) {
         height: Math.max(240, filas.length * 26 + 60),
         width: ancho,
     }, { displayModeBar: false, responsive: true });
-
-    const leyenda = document.createElement('div');
-    leyenda.className = 'leyenda-graficos';
-    leyenda.style.marginTop = '0.5rem';
-    leyenda.style.marginBottom = '0';
-    leyenda.innerHTML = ORDEN_SUBGRUPOS
-        .map(n => `<span class="leyenda-item"><b>${NUMERO_SUBGRUPO[n]}</b>&nbsp;=&nbsp;${subgrupos[n].etiqueta}</span>`)
-        .join('');
-    div.appendChild(leyenda);
 }
 
 async function exportarExcel() {
