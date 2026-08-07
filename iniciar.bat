@@ -35,6 +35,13 @@ echo Arrancando MCVL Analyser SEPE en http://127.0.0.1:8000/ ...
 REM El navegador se abre solo cuando el servidor ya responde de verdad (ver
 REM esperar_y_abrir.bat) - abrirlo aqui a ciegas fallaba en PCs donde las
 REM importaciones de python tardan varios segundos (antivirus corporativo).
+REM La ventana de splash (splash.py) sondea el servidor igual que
+REM esperar_y_abrir.bat y se cierra sola cuando responde. pythonw evita que
+REM se abra una consola negra detras de la ventana; si el interprete no la
+REM trae (venv creado sin ella), cae a python normal.
+where pythonw >nul 2>nul
+if errorlevel 1 (set PYTHON_SPLASH=python) else (set PYTHON_SPLASH=pythonw)
+start "" %PYTHON_SPLASH% "%~dp0splash.py"
 start "" "%~dp0esperar_y_abrir.bat"
 python run.py
 
