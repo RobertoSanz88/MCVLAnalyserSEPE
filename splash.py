@@ -6,8 +6,10 @@ vez de asumir un tiempo fijo) y se cierra sola en cuanto
 http://127.0.0.1:8000/health responde.
 """
 
+import ctypes
 import tkinter as tk
 import urllib.request
+from ctypes import wintypes
 from pathlib import Path
 
 URL_SALUD = "http://127.0.0.1:8000/health"
@@ -15,6 +17,33 @@ IMAGEN = Path(__file__).parent / "app" / "static" / "splash.png"
 COLOR_CLAVE = "#010203"  # fuera de la paleta real del icono: se vuelve transparente
 INTERVALO_MS = 300
 MAX_INTENTOS = 200  # ~60s; si el servidor no arranca en ese tiempo, se cierra igual
+
+
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork", wintypes.RECT),
+        ("dwFlags", wintypes.DWORD),
+    ]
+
+
+def monitor_del_cursor() -> tuple[int, int, int, int]:
+    """(left, top, width, height) del monitor donde esta el raton en este
+    instante - con varias pantallas, tk.winfo_screenwidth/height siempre
+    devuelven las de "la pantalla" que Windows tiene marcada como principal,
+    sin mirar donde esta realmente el usuario. Como el splash se lanza justo
+    al hacer doble clic en el acceso directo, el cursor esta sobre la
+    pantalla correcta en ese momento - se usa esa, no la principal."""
+    pt = wintypes.POINT()
+    ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+    MONITOR_DEFAULTTONEAREST = 2
+    hmon = ctypes.windll.user32.MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+    info = _MONITORINFO()
+    info.cbSize = ctypes.sizeof(_MONITORINFO)
+    ctypes.windll.user32.GetMonitorInfoW(hmon, ctypes.byref(info))
+    r = info.rcMonitor
+    return r.left, r.top, r.right - r.left, r.bottom - r.top
 
 
 def servidor_listo() -> bool:
@@ -39,8 +68,9 @@ def main():
     root.imagen = imagen  # referencia viva - si no, el recolector de basura la borra
     ancho, alto = imagen.width(), imagen.height()
 
-    x = (root.winfo_screenwidth() - ancho) // 2
-    y = (root.winfo_screenheight() - alto) // 2
+    mon_left, mon_top, mon_ancho, mon_alto = monitor_del_cursor()
+    x = mon_left + (mon_ancho - ancho) // 2
+    y = mon_top + (mon_alto - alto) // 2
     root.geometry(f"{ancho}x{alto}+{x}+{y}")
 
     tk.Label(root, image=imagen, bd=0, bg=COLOR_CLAVE).pack()
