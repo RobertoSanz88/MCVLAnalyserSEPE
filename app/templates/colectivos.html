@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <style>
         :root {
           --verde-dk:    #00815A;
@@ -100,6 +101,16 @@
         h3 { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
              letter-spacing: 0.05em; margin: 1.1rem 0 0.5rem; }
 
+        /* --- Cabecera de panel con switch Datos/Graficos --- */
+        .cabecera-panel { display: flex; justify-content: space-between; align-items: center;
+                            margin: 0 0 0.9rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+        .cabecera-panel h2 { margin: 0; padding: 0; border: none; }
+        .switch-vista { display: flex; border: 1.5px solid var(--border); border-radius: 7px; overflow: hidden; }
+        .switch-vista button { border: none; border-radius: 0; padding: 0.3rem 0.75rem; font-size: 0.72rem;
+                                 background: var(--bg); color: var(--muted); }
+        .switch-vista button.activa { background: var(--verde-dk); color: #fff; }
+        .switch-vista button:hover:not(.activa) { border-color: transparent; background: var(--bg3); color: var(--verde-dk); }
+
         /* --- Selector de atributo --- */
         .tipos-filtro { margin-bottom: 0.6rem; }
         .tipos-filtro label { margin-right: 1rem; font-size: 0.82rem; color: var(--muted); font-weight: 600; }
@@ -177,6 +188,22 @@
         .tabla-categorica tbody tr:hover { background: rgba(4,160,110,0.05); }
 
         .aviso-vacio { color: var(--muted); font-style: italic; font-size: 0.85rem; }
+
+        /* --- Graficos de barras (numericas) --- */
+        /* Leyenda unica y compartida por todas las mini-graficas: los 4 subcolectivos
+           (color y etiqueta) son los mismos en cada columna, repetirla por grafico
+           seria ruido. */
+        .leyenda-graficos { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; margin-bottom: 0.9rem;
+                              font-size: 0.72rem; color: var(--muted); font-weight: 600; }
+        .leyenda-item { display: flex; align-items: center; gap: 0.35rem; }
+        .leyenda-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+        .grid-graficos { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.7rem; }
+        .caja-grafico { border: 1px solid var(--border); border-radius: 7px; background: var(--bg);
+                          padding: 0.5rem 0.35rem 0.15rem; }
+        .titulo-grafico { font-size: 0.7rem; font-weight: 700; color: var(--text); text-align: center;
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mini-grafico { width: 100%; height: 140px; }
     </style>
 </head>
 <body>
@@ -269,7 +296,13 @@
             </div>
 
             <div id="panel-numericas" class="panel">
-                <h2>Estadísticas numéricas</h2>
+                <div class="cabecera-panel">
+                    <h2>Estadísticas numéricas</h2>
+                    <div class="switch-vista" id="switch-vista-numericas">
+                        <button type="button" class="activa" data-vista="datos" onclick="cambiarVistaNumericas('datos')">Datos</button>
+                        <button type="button" data-vista="graficos" onclick="cambiarVistaNumericas('graficos')">Gráficos</button>
+                    </div>
+                </div>
                 <div id="contenedor-numericas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
             </div>
 
@@ -283,6 +316,29 @@
 <script>
 const ORDEN_SUBGRUPOS = ["filtro1_si__filtro2_si", "filtro1_si__filtro2_no",
                           "filtro1_no__filtro2_si", "filtro1_no__filtro2_no"];
+
+// Paleta categorica fija por subcolectivo (identidad, nunca por rango) - validada
+// con el validador del skill de dataviz (bandas de luminosidad, separacion CVD
+// deuteranopia/tritanopia y suelo de vision normal, las 4 en PASS con esta
+// combinacion; el contraste bajo del dorado va compensado con etiquetas de valor
+// visibles en cada barra, nunca texto coloreado).
+const COLOR_SUBGRUPO = {
+    filtro1_si__filtro2_si: '#00815A',
+    filtro1_si__filtro2_no: '#2C6CB0',
+    filtro1_no__filtro2_si: '#C9A700',
+    filtro1_no__filtro2_no: '#8A4E9E',
+};
+
+let vistaNumericas = 'datos';
+let ultimosSubgruposNumericos = null;
+
+function cambiarVistaNumericas(vista) {
+    if (vista === vistaNumericas) return;
+    vistaNumericas = vista;
+    document.querySelectorAll('#switch-vista-numericas button')
+        .forEach(b => b.classList.toggle('activa', b.dataset.vista === vista));
+    if (ultimosSubgruposNumericos) renderizarNumericas(ultimosSubgruposNumericos);
+}
 
 let columnasDisponibles = { numericas: [], categoricas: [] };
 let columnaSeleccionada = null; // { nombre, tipo }
@@ -499,6 +555,12 @@ function estadisticoDestacado(media, desviacion) {
 }
 
 function renderizarNumericas(subgrupos) {
+    ultimosSubgruposNumericos = subgrupos;
+    if (vistaNumericas === 'graficos') renderizarGraficosNumericos(subgrupos);
+    else renderizarTablaNumericas(subgrupos);
+}
+
+function renderizarTablaNumericas(subgrupos) {
     const columnas = subgrupos[ORDEN_SUBGRUPOS[0]].numericas.map(d => d.columna);
     let html = '<table id="tabla-numericas"><thead><tr><th rowspan="2">Columna</th>';
     for (const nombre of ORDEN_SUBGRUPOS) {
@@ -521,6 +583,71 @@ function renderizarNumericas(subgrupos) {
     });
     html += '</tbody></table>';
     document.getElementById('contenedor-numericas').innerHTML = html;
+}
+
+// El mismo estadistico que la tabla resalta en negrita (media o mediana, segun
+// dispersion de ESE subcolectivo) es el que marca la altura de la barra - asi el
+// grafico nunca contradice lo que la vista de datos ya destaca.
+function valorDestacadoNumerica(s) {
+    const destaca = estadisticoDestacado(s.media, s.desviacion);
+    return destaca === 'media' ? s.media : s.mediana;
+}
+
+function renderizarGraficosNumericos(subgrupos) {
+    const columnas = subgrupos[ORDEN_SUBGRUPOS[0]].numericas.map(d => d.columna);
+    const cont = document.getElementById('contenedor-numericas');
+    cont.innerHTML = '';
+
+    // Leyenda compartida una sola vez (los 4 subcolectivos son los mismos en
+    // cada mini-grafico) en vez de repetirla en cada caja.
+    const leyenda = document.createElement('div');
+    leyenda.className = 'leyenda-graficos';
+    for (const nombre of ORDEN_SUBGRUPOS) {
+        const item = document.createElement('span');
+        item.className = 'leyenda-item';
+        item.innerHTML = `<span class="leyenda-swatch" style="background:${COLOR_SUBGRUPO[nombre]}"></span>${subgrupos[nombre].etiqueta}`;
+        leyenda.appendChild(item);
+    }
+    cont.appendChild(leyenda);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid-graficos';
+    cont.appendChild(grid);
+
+    columnas.forEach((nombreCol, i) => {
+        const caja = document.createElement('div');
+        caja.className = 'caja-grafico';
+        caja.title = nombreCol;
+        caja.innerHTML = `<div class="titulo-grafico">${nombreCol}</div><div class="mini-grafico"></div>`;
+        grid.appendChild(caja);
+
+        const valores = ORDEN_SUBGRUPOS.map(nombre => valorDestacadoNumerica(subgrupos[nombre].numericas[i]));
+        const colores = ORDEN_SUBGRUPOS.map(nombre => COLOR_SUBGRUPO[nombre]);
+        const hovertext = ORDEN_SUBGRUPOS.map((nombre, idx) => `${subgrupos[nombre].etiqueta}: ${fmt(valores[idx])}`);
+
+        Plotly.newPlot(caja.querySelector('.mini-grafico'), [{
+            type: 'bar',
+            x: ORDEN_SUBGRUPOS.map((_, idx) => idx),
+            y: valores,
+            width: 0.55,
+            marker: { color: colores },
+            text: valores.map(v => fmt(v)),
+            textposition: 'outside',
+            textfont: { family: 'Nunito Sans, sans-serif', size: 10, color: '#1A2E26' },
+            cliponaxis: false,
+            hovertext, hoverinfo: 'text',
+        }], {
+            margin: { l: 2, r: 2, t: 18, b: 2 },
+            xaxis: { visible: false },
+            yaxis: { visible: false, rangemode: 'tozero' },
+            showlegend: false,
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+        }, {
+            displayModeBar: false,
+            responsive: true,
+        });
+    });
 }
 
 function renderizarCategoricas(subgrupos) {
