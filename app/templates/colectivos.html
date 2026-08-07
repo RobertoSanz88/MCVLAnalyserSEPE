@@ -205,6 +205,31 @@
                             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .subtitulo-grafico { font-weight: 400; color: var(--muted); text-transform: none; }
         .mini-grafico { width: 100%; height: 140px; }
+
+        /* --- Graficos de barras (categoricas) --- */
+        /* Lista apilada a todo lo ancho (no rejilla como en numericas): estos
+           graficos necesitan mas sitio horizontal (categorias con muchos valores
+           posibles, p.ej. provincia). */
+        .lista-graficos-cat { display: flex; flex-direction: column; gap: 0.9rem; }
+        .caja-grafico-cat { border: 1px solid var(--border); border-radius: 7px; background: var(--bg);
+                              padding: 0.6rem 0.7rem; }
+        .cabecera-grafico-cat { display: flex; justify-content: space-between; align-items: center;
+                                  gap: 0.6rem; margin-bottom: 0.4rem; }
+        .titulo-grafico-cat { font-size: 0.78rem; font-weight: 700; color: var(--text); }
+        .select-tipo-grafico { font-family: var(--font); font-size: 0.72rem; padding: 0.25rem 0.4rem;
+                                 border: 1.5px solid var(--border); border-radius: 5px; background: var(--bg2);
+                                 color: var(--muted); flex-shrink: 0; }
+        .select-tipo-grafico:focus { outline: none; border-color: var(--verde-acc); }
+        /* El propio grafico puede necesitar mas ancho que la caja (muchas
+           categorias en barras agrupadas) - scroll horizontal solo aqui dentro,
+           nunca en la pagina. */
+        .cuerpo-grafico-cat { overflow-x: auto; }
+
+        /* Pequeños multiplos (vista "Barras horizontales"): 1 mini-panel por
+           subcolectivo, en rejilla 2x2. */
+        .rejilla-horizontales { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 0.8rem; }
+        .subpanel-titulo { font-size: 0.66rem; font-weight: 700; color: var(--muted); text-align: center;
+                             margin-bottom: 0.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     </style>
 </head>
 <body>
@@ -308,7 +333,13 @@
             </div>
 
             <div id="panel-categoricas" class="panel">
-                <h2>Distribución categórica</h2>
+                <div class="cabecera-panel">
+                    <h2>Distribución categórica</h2>
+                    <div class="switch-vista" id="switch-vista-categoricas">
+                        <button type="button" class="activa" data-vista="datos" onclick="cambiarVistaCategoricas('datos')">Datos</button>
+                        <button type="button" data-vista="graficos" onclick="cambiarVistaCategoricas('graficos')">Gráficos</button>
+                    </div>
+                </div>
                 <div id="contenedor-categoricas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
             </div>
         </div>
@@ -340,6 +371,38 @@ function cambiarVistaNumericas(vista) {
         .forEach(b => b.classList.toggle('activa', b.dataset.vista === vista));
     if (ultimosSubgruposNumericos) renderizarNumericas(ultimosSubgruposNumericos);
 }
+
+let vistaCategoricas = 'datos';
+let ultimosSubgruposCategoricos = null;
+// Tipo de grafico elegido por el usuario para cada columna categorica (persiste
+// entre recalculos mientras no se recargue la pagina). "agrupadas" por defecto
+// si la columna no tiene una eleccion guardada todavia.
+let tipoGraficoPorColumna = {};
+
+function cambiarVistaCategoricas(vista) {
+    if (vista === vistaCategoricas) return;
+    vistaCategoricas = vista;
+    document.querySelectorAll('#switch-vista-categoricas button')
+        .forEach(b => b.classList.toggle('activa', b.dataset.vista === vista));
+    if (ultimosSubgruposCategoricos) renderizarCategoricas(ultimosSubgruposCategoricos);
+}
+
+// Paleta categorica para el VALOR de una columna (identidad distinta de
+// COLOR_SUBGRUPO, que identifica el subcolectivo) - 7 tonos + gris para
+// "Otros" (los valores menos frecuentes, mas alla del 7o, se pliegan ahi en
+// vez de generarles un color nuevo). Los 7 tonos vienen de la paleta de
+// referencia validada del skill de dataviz (orden que ya pasa el chequeo de
+// separacion CVD adyacente); se descarta su 8o tono (rojo) porque en este
+// diccionario ese hueco lo ocupa el gris de "Otros".
+const PALETA_VALOR = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7'];
+const COLOR_OTROS = '#9a988f';
+
+const TIPOS_GRAFICO_CATEGORICO = [
+    { valor: 'agrupadas', etiqueta: 'Barras agrupadas' },
+    { valor: 'apiladas', etiqueta: 'Barras apiladas 100%' },
+    { valor: 'horizontales', etiqueta: 'Barras horizontales' },
+    { valor: 'mapacalor', etiqueta: 'Mapa de calor' },
+];
 
 let columnasDisponibles = { numericas: [], categoricas: [] };
 let columnaSeleccionada = null; // { nombre, tipo }
@@ -675,21 +738,36 @@ function renderizarGraficosNumericos(subgrupos) {
     });
 }
 
+// Union de los valores vistos en cualquiera de los 4 subgrupos (orden de
+// aparicion, cada subgrupo ya llega ordenado de mas a menos frecuente desde
+// el backend) + un Map por subgrupo valor->entrada para consultarlo directo.
+// Compartido entre la tabla y los 4 tipos de grafico para no recalcularlo.
+function _datosColumnaCategorica(subgrupos, idx) {
+    const mapas = {};
+    const vistos = [];
+    const vistosSet = new Set();
+    for (const nombre of ORDEN_SUBGRUPOS) {
+        const entrada = subgrupos[nombre].categoricas[idx];
+        mapas[nombre] = new Map(entrada.valores.map(v => [v.valor, v]));
+        for (const v of entrada.valores) {
+            if (!vistosSet.has(v.valor)) { vistosSet.add(v.valor); vistos.push(v.valor); }
+        }
+    }
+    return { mapas, vistos };
+}
+
 function renderizarCategoricas(subgrupos) {
+    ultimosSubgruposCategoricos = subgrupos;
+    if (vistaCategoricas === 'graficos') renderizarGraficosCategoricos(subgrupos);
+    else renderizarTablaCategoricas(subgrupos);
+}
+
+function renderizarTablaCategoricas(subgrupos) {
     const columnas = subgrupos[ORDEN_SUBGRUPOS[0]].categoricas.map(d => d.columna);
     let html = '';
 
     columnas.forEach((nombreCol, idx) => {
-        const mapas = {};
-        const vistos = [];
-        const vistosSet = new Set();
-        for (const nombre of ORDEN_SUBGRUPOS) {
-            const entrada = subgrupos[nombre].categoricas[idx];
-            mapas[nombre] = new Map(entrada.valores.map(v => [v.valor, v]));
-            for (const v of entrada.valores) {
-                if (!vistosSet.has(v.valor)) { vistosSet.add(v.valor); vistos.push(v.valor); }
-            }
-        }
+        const { mapas, vistos } = _datosColumnaCategorica(subgrupos, idx);
 
         html += `<table class="tabla-categorica"><thead><tr><th></th>`;
         for (const nombre of ORDEN_SUBGRUPOS) html += `<th colspan="2">${subgrupos[nombre].etiqueta}</th>`;
@@ -709,6 +787,193 @@ function renderizarCategoricas(subgrupos) {
     });
 
     document.getElementById('contenedor-categoricas').innerHTML = html;
+}
+
+function renderizarGraficosCategoricos(subgrupos) {
+    const columnas = subgrupos[ORDEN_SUBGRUPOS[0]].categoricas.map(d => d.columna);
+    const cont = document.getElementById('contenedor-categoricas');
+    cont.innerHTML = '';
+
+    const lista = document.createElement('div');
+    lista.className = 'lista-graficos-cat';
+    cont.appendChild(lista);
+
+    columnas.forEach((nombreCol, idx) => {
+        const { mapas, vistos } = _datosColumnaCategorica(subgrupos, idx);
+
+        const caja = document.createElement('div');
+        caja.className = 'caja-grafico-cat';
+        const opciones = TIPOS_GRAFICO_CATEGORICO
+            .map(t => `<option value="${t.valor}">${t.etiqueta}</option>`).join('');
+        caja.innerHTML = `
+            <div class="cabecera-grafico-cat">
+                <span class="titulo-grafico-cat">${nombreCol}</span>
+                <select class="select-tipo-grafico">${opciones}</select>
+            </div>
+            <div class="cuerpo-grafico-cat"></div>`;
+        lista.appendChild(caja);
+
+        const select = caja.querySelector('.select-tipo-grafico');
+        select.value = tipoGraficoPorColumna[nombreCol] || 'agrupadas';
+        const cuerpo = caja.querySelector('.cuerpo-grafico-cat');
+
+        const dibujar = () => dibujarGraficoCategorico(cuerpo, select.value, subgrupos, mapas, vistos);
+        select.addEventListener('change', () => {
+            tipoGraficoPorColumna[nombreCol] = select.value;
+            dibujar();
+        });
+        dibujar();
+    });
+}
+
+function dibujarGraficoCategorico(div, tipo, subgrupos, mapas, vistos) {
+    if (tipo === 'apiladas') return dibujarApiladas(div, subgrupos, mapas, vistos);
+    if (tipo === 'horizontales') return dibujarHorizontales(div, subgrupos, mapas, vistos);
+    if (tipo === 'mapacalor') return dibujarMapaCalor(div, subgrupos, mapas, vistos);
+    return dibujarAgrupadas(div, subgrupos, mapas, vistos);
+}
+
+// Barras agrupadas: 1 grupo de 4 barras (una por subcolectivo, color por
+// identidad de subcolectivo) por cada valor de la columna. Por defecto: es
+// la lectura mas directa para comparar los 4 subcolectivos entre si dentro
+// de cada categoria, y funciona bien mientras la columna no tenga demasiados
+// valores distintos (la mayoria de las columnas configuradas tienen pocos;
+// para las que tienen muchos - provincia, actividad economica - el ancho
+// crece y el cuerpo del grafico scrollea en horizontal).
+function dibujarAgrupadas(div, subgrupos, mapas, vistos) {
+    // Limpia restos de un tipo de grafico anterior en esta misma caja (p.ej.
+    // "Barras horizontales" deja varios sub-paneles dentro de div que
+    // Plotly.newPlot no borra por si solo si no fueron creados por Plotly
+    // directamente sobre este div).
+    div.innerHTML = '';
+    const traces = ORDEN_SUBGRUPOS.map(nombre => ({
+        type: 'bar',
+        name: subgrupos[nombre].etiqueta,
+        x: vistos,
+        y: vistos.map(v => mapas[nombre].get(v)?.porcentaje ?? 0),
+        marker: { color: COLOR_SUBGRUPO[nombre] },
+        hovertemplate: `%{x}<br>${subgrupos[nombre].etiqueta}: %{y}%<extra></extra>`,
+    }));
+    const ancho = Math.max(500, vistos.length * 90);
+    div.style.minWidth = ancho + 'px';
+    Plotly.newPlot(div, traces, {
+        barmode: 'group',
+        margin: { l: 45, r: 10, t: 10, b: 100 },
+        xaxis: { tickangle: -40, automargin: true },
+        yaxis: { title: '%', rangemode: 'tozero' },
+        legend: { orientation: 'h', y: -0.55 },
+        height: 340,
+        width: ancho,
+    }, { displayModeBar: false, responsive: true });
+}
+
+// Barras apiladas al 100%: 1 barra por subcolectivo, segmentada por valor -
+// mejor para ver de un vistazo la composicion interna de cada subcolectivo.
+// Solo los 7 valores mas comunes tienen color propio; el resto se agrega en
+// "Otros" (gris) en vez de generarles un color nuevo cada vez.
+function dibujarApiladas(div, subgrupos, mapas, vistos) {
+    div.innerHTML = '';
+    const top = vistos.slice(0, 7);
+    const resto = vistos.slice(7);
+    const categorias = resto.length ? [...top, 'Otros'] : top;
+
+    const traces = categorias.map((valor, i) => ({
+        type: 'bar',
+        name: String(valor),
+        x: ORDEN_SUBGRUPOS.map(n => subgrupos[n].etiqueta),
+        y: ORDEN_SUBGRUPOS.map(n => {
+            if (valor === 'Otros') return resto.reduce((s, v) => s + (mapas[n].get(v)?.porcentaje || 0), 0);
+            return mapas[n].get(valor)?.porcentaje ?? 0;
+        }),
+        marker: { color: valor === 'Otros' ? COLOR_OTROS : PALETA_VALOR[i] },
+        hovertemplate: `%{x}<br>${valor}: %{y}%<extra></extra>`,
+    }));
+    div.style.minWidth = '';
+    Plotly.newPlot(div, traces, {
+        barmode: 'stack',
+        margin: { l: 45, r: 10, t: 10, b: 90 },
+        xaxis: { tickangle: -20, automargin: true },
+        yaxis: { title: '%', range: [0, 100] },
+        legend: { orientation: 'h', y: -0.5 },
+        height: 340,
+    }, { displayModeBar: false, responsive: true });
+}
+
+// Barras horizontales: pequeños multiplos, 1 mini-panel por subcolectivo (su
+// propio color de identidad) con sus valores mas frecuentes ordenados - la
+// opcion mas legible cuando la columna tiene muchos valores distintos
+// (provincia, actividad economica), porque cada panel solo enseña su top 8
+// en vez de amontonar todos los valores en un unico eje.
+function dibujarHorizontales(div, subgrupos, mapas, vistos) {
+    div.style.minWidth = '';
+    div.innerHTML = `<div class="rejilla-horizontales">${
+        ORDEN_SUBGRUPOS.map(n => `
+            <div>
+                <div class="subpanel-titulo">${subgrupos[n].etiqueta}</div>
+                <div class="subpanel-chart" data-n="${n}"></div>
+            </div>`).join('')
+    }</div>`;
+
+    for (const n of ORDEN_SUBGRUPOS) {
+        const entradas = [...mapas[n].values()].sort((a, b) => b.porcentaje - a.porcentaje).slice(0, 8);
+        const sub = div.querySelector(`.subpanel-chart[data-n="${n}"]`);
+        Plotly.newPlot(sub, [{
+            type: 'bar',
+            orientation: 'h',
+            x: entradas.map(e => e.porcentaje),
+            y: entradas.map(e => String(e.valor)),
+            marker: { color: COLOR_SUBGRUPO[n] },
+            text: entradas.map(e => fmt(e.porcentaje)),
+            textposition: 'outside',
+            textfont: { family: 'Nunito Sans, sans-serif', size: 9, color: '#1A2E26' },
+            cliponaxis: false,
+            hovertemplate: '%{y}: %{x}%<extra></extra>',
+        }], {
+            margin: { l: 100, r: 30, t: 4, b: 24 },
+            height: 210,
+            xaxis: { title: '%', rangemode: 'tozero' },
+            yaxis: { automargin: true, autorange: 'reversed' },
+        }, { displayModeBar: false, responsive: true });
+    }
+}
+
+// Mapa de calor: valor x subcolectivo, color = porcentaje (secuencial de un
+// solo tono, magnitud - no identidad, por eso NO usa COLOR_SUBGRUPO ni
+// PALETA_VALOR). Compacto y bueno para detectar patrones de un vistazo en
+// columnas con muchos valores; limitado a los 15 mas frecuentes para que las
+// filas no se aplasten.
+function dibujarMapaCalor(div, subgrupos, mapas, vistos) {
+    div.innerHTML = '';
+    const filas = vistos.slice(0, 15);
+    const x = ORDEN_SUBGRUPOS.map(n => subgrupos[n].etiqueta);
+    const z = filas.map(v => ORDEN_SUBGRUPOS.map(n => mapas[n].get(v)?.porcentaje ?? null));
+
+    // Escala fija 0-100% (no al maximo de cada columna): asi el mismo verde
+    // significa siempre el mismo porcentaje en cualquier mapa de calor, no
+    // solo dentro de este. zmax fijo tambien permite saber de antemano, sin
+    // mirar los datos, a partir de que valor el relleno ya es lo bastante
+    // oscuro para necesitar texto blanco en vez de tinta oscura (celdas con
+    // relleno oscuro y texto oscuro serian ilegibles - regla del skill de
+    // dataviz sobre etiquetas dentro de un relleno de color).
+    const colorTexto = z.map(fila => fila.map(n => n !== null && n >= 55 ? '#FFFFFF' : '#1A2E26'));
+
+    Plotly.newPlot(div, [{
+        type: 'heatmap',
+        x, y: filas, z,
+        colorscale: [[0, '#EAF5EF'], [1, '#00593F']],
+        zmin: 0, zmax: 100,
+        showscale: true,
+        colorbar: { title: '%', ticksuffix: '%', thickness: 12 },
+        texttemplate: '%{z}%',
+        textfont: { family: 'Nunito Sans, sans-serif', size: 10, color: colorTexto },
+        hovertemplate: '%{y} — %{x}: %{z}%<extra></extra>',
+        xgap: 2, ygap: 2,
+    }], {
+        margin: { l: 160, r: 10, t: 10, b: 90 },
+        xaxis: { tickangle: -20, automargin: true },
+        yaxis: { automargin: true, autorange: 'reversed' },
+        height: Math.max(240, filas.length * 26 + 90),
+    }, { displayModeBar: false, responsive: true });
 }
 
 async function exportarExcel() {
