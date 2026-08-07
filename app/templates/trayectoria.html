@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trayectoria IPF {{ ipf }}</title>
+    <link rel="icon" href="/static/icon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
@@ -30,9 +31,8 @@
         header { height: var(--header-h); min-height: var(--header-h); flex: none;
                  background: var(--verde-dk); display: flex; align-items: center;
                  padding: 0 1.25rem; gap: 0.75rem; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
-        .logo { width: 36px; height: 36px; background: var(--amarillo); border-radius: 8px;
-                display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
-                flex-shrink: 0; }
+        .logo { width: 36px; height: 36px; flex-shrink: 0; }
+        .logo img { width: 100%; height: 100%; object-fit: contain; }
         .header-text h1 { color: #fff; font-size: 1.2rem; font-weight: 800; line-height: 1.2; margin: 0; }
         .header-text p { color: var(--verde-claro); font-size: 0.72rem; margin: 0.1rem 0 0; }
         .header-badges { margin-left: auto; display: flex; gap: 0.4rem; }
@@ -51,7 +51,7 @@
 </head>
 <body>
     <header>
-        <div class="logo">🧭</div>
+        <div class="logo"><img src="/static/icon.ico" alt=""></div>
         <div class="header-text">
             <h1>MCVL Analyser SEPE</h1>
             <p>Observatorio de las Ocupaciones · SEPE</p>
