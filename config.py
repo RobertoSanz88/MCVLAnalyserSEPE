@@ -58,7 +58,14 @@ def get_parquet_dir() -> Path:
 #     asi el filtro sigue funcionando sin tocar codigo cuando cambie el anyo).
 # "limite": maximo de categorias a mostrar, las mas frecuentes primero
 #     (None = todas). Pensado para columnas con muchas categorias posibles,
-#     como act_econ_ppal (CNAE, ~230 valores).
+#     como act_econ_ppal (CNAE, ~230 valores) o prov_trabajo_ppal (~52
+#     provincias). Se aplica por subcolectivo (backend, LIMIT en la query de
+#     cada uno de los 4 filtros), y el grafico/tabla del frontend pinta
+#     despues la UNION de esos 4 top-N (_datosColumnaCategorica en
+#     colectivos.html) - si los subcolectivos no coinciden en sus valores mas
+#     frecuentes, el total visible puede superar el limite. 15 (en vez de un
+#     numero mas alto) es a proposito para dejar margen a esa union sin que
+#     el grafico acabe mostrando demasiadas categorias.
 #
 # Entradas sin columna correspondiente en el Parquet actual se ignoran en
 # silencio (permite un config.py valido para varios anyos de datos).
@@ -72,8 +79,8 @@ CATEGORICAS_COLECTIVOS = [
     {"columna": "reg_cotiz_ppal", "limite": None},
     {"columna": "grupo_cotiz_ppal", "limite": None},
     {"columna": "tipo_contrato_ppal_agrupado", "limite": None},
-    {"columna": "prov_trabajo_ppal", "limite": None},
-    {"columna": "act_econ_ppal", "limite": 20},
+    {"columna": "prov_trabajo_ppal", "limite": 15},
+    {"columna": "act_econ_ppal", "limite": 15},
     {"columna": "discap_fiscal", "limite": None},
     {"columna": "discap_afiliacion", "limite": None},
     {"columna": "discap_pension", "limite": None},
