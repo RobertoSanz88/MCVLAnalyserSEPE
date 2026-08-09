@@ -15,6 +15,8 @@ import re
 import numpy as np
 import pandas as pd
 
+from etl.tipo_contrato_claves_sucesoras import decodificar_agrupado, sql_bin_corregido, sql_corregido
+
 UN_DIA = pd.Timedelta(days=1)
 CERO_DIAS = pd.Timedelta(days=0)
 
@@ -245,28 +247,42 @@ def extraer_grupo_a(con, parquet_folder):
         SELECT ipf AS "01 IPF", dur AS "t_contrato_mas_largo" FROM ranked WHERE rn = 1
     """).fetchdf()
 
-    # Tipo_Contrato_ppal_Agrupado / T_tot_tipo_contrato_ppal
+    # Tipo_Contrato_ppal_Agrupado / T_tot_tipo_contrato_ppal.
+    # Corrige claves sucesoras de 04 TIPO_CONTRATO A NIVEL DE EPISODIO, antes
+    # de sumar DURACION_EMPLEO por (ipf, codigo) - no despues de decidir el
+    # contrato principal. Importa por que: si se corrigiera solo el codigo ya
+    # ganador, un codigo deprecado (p.ej. "001", sucesora 100) y su propio
+    # sucesor "100" competirian como 2 codigos distintos por la duracion
+    # acumulada de esa persona, en vez de sumar juntos como el mismo tipo de
+    # contrato real - podia hacer ganar a un tercer codigo con menos duracion
+    # real. Logica de correccion importada de
+    # etl/tipo_contrato_claves_sucesoras.py (compartida con la trayectoria
+    # categorica de Afiliacion en app/, no reimplementada aqui).
+    val_corregido = sql_corregido('"04 TIPO_CONTRATO"', '"05 COEF_T_PARCIAL"')
+    cubeta_ganador = sql_bin_corregido("val")
     df_tipo = con.execute(f"""
-        WITH sumado AS (
-            SELECT "01 IPF" AS ipf, "04 TIPO_CONTRATO" AS val, SUM("DURACION_EMPLEO") AS total
-            FROM read_parquet('{afiliacion}') WHERE "04 TIPO_CONTRATO" IS NOT NULL GROUP BY 1, 2
+        WITH episodios AS (
+            SELECT "01 IPF" AS ipf, ({val_corregido}) AS val, "DURACION_EMPLEO" AS duracion
+            FROM read_parquet('{afiliacion}')
+            WHERE "04 TIPO_CONTRATO" IS NOT NULL
+        ), sumado AS (
+            SELECT ipf, val, SUM(duracion) AS total
+            FROM episodios GROUP BY 1, 2
         ), ranked AS (
             SELECT ipf, val, total,
                    ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, val ASC) AS rn
             FROM sumado
         )
-        SELECT ipf AS "01 IPF",
-               CASE
-                   WHEN val >= 100 AND val < 200 THEN 'indefinido_t_completo'
-                   WHEN val >= 200 AND val < 300 THEN 'Indefinido_t_parcial'
-                   WHEN val >= 300 AND val < 400 THEN 'Indefinido_fijo_discontinuo'
-                   WHEN val >= 400 AND val < 500 THEN 'Temporal_t_completo'
-                   WHEN val >= 500 AND val < 600 THEN 'Temporal_t_parcial'
-                   ELSE NULL
-               END AS "Tipo_Contrato_ppal_Agrupado",
-               total AS "T_tot_tipo_contrato_ppal"
+        SELECT ipf AS "01 IPF", ({cubeta_ganador}) AS cubeta, total AS "T_tot_tipo_contrato_ppal"
         FROM ranked WHERE rn = 1
     """).fetchdf()
+    # Cubeta (int compacto, ver sql_bin_corregido) -> etiqueta final, igual
+    # patron ya usado en este mismo Grupo H para GRUPOS_COTIZ_DICT: 'No
+    # consta' (000) y 'Otros' (990 + huerfanos sin sucesora) son categorias
+    # explicitas aqui, no NaN - a diferencia de la version anterior (ELSE
+    # NULL), que dejaba esos casos como NaN silencioso.
+    df_tipo["Tipo_Contrato_ppal_Agrupado"] = df_tipo["cubeta"].map(decodificar_agrupado)
+    df_tipo = df_tipo.drop(columns=["cubeta"])
 
     # DuckDB devuelve las duraciones como enteros (microsegundos, ver Fase 1), no como
     # Timedelta de pandas. Se convierten aqui para que la conversion automatica a anyos del

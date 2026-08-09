@@ -4,15 +4,14 @@ colectivo ya definido en /colectivos). La vista de colectivo vive como
 pestana dentro de colectivos.html (no como pagina propia), asi que este
 modulo solo expone el endpoint de datos, no una ruta HTML."""
 
-import csv
 import json
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from etl import tipo_contrato_claves_sucesoras
 from app.routers.colectivos import ORDEN_SUBGRUPOS, SubgruposRequest, calcular_condiciones_subgrupos
 
 router = APIRouter()
@@ -141,99 +140,11 @@ def _decodificar_identidad(codigo) -> str:
 #
 # TIPO_CONTRATO: a diferencia de las demas, antes de agrupar corrige claves
 # sucesoras (04 TIPO_CONTRATO trae 147 codigos crudos, muchos deprecados) -
-# codigo nuevo aqui, NO una copia del bucketing de Tipo_Contrato_ppal_Agrupado
-# en etl/personas_extendida.py, que agrupa directamente el codigo crudo sin
-# corregir claves sucesoras (mismo problema de fondo que llevo a excluir
-# esta variable en un primer momento). Datos de la correccion, leidos de
-# etl/metadata/tipo_contrato_claves_sucesoras.csv (tabla publica de codigos,
-# no dato MCVL restringido - mismo criterio que provincias_dict.csv/
-# cnae_3d_dict.csv):
-#   - Codigo deprecado (columna "deprecada"="B") con 1 sola clave sucesora
-#     -> se sustituye por ella directamente.
-#   - Codigo deprecado con 2 claves sucesoras (17 codigos; solo 014 y 015
-#     tienen peso real, ~1,5% cada uno) -> decision explicita del usuario
-#     (2026-08-10, corregida tras comprobar la escala real del dato):
-#     COEF_T_PARCIAL no va de 0 a 1, va de 0 a 999 (0 = no aplica/tiempo
-#     completo, >0 = jornada parcial, p.ej. 500 = 50% - verificado con
-#     datos reales: 99,4% de las filas de 014 y 99,1% de las de 015 tienen
-#     COEF_T_PARCIAL=0). Regla final: COEF_T_PARCIAL > 0 -> la sucesora de
-#     tiempo PARCIAL (clave_sucesora_2); 0 o NULL -> la de tiempo COMPLETO
-#     (clave_sucesora_1).
-#   - Codigo deprecado SIN sucesora listada (~30 codigos, 1,09% del total en
-#     conjunto) -> se queda con su codigo crudo (no se corrige), que despues
-#     no encaja en ningun bin [100,600)/000/990 - decision explicita del
-#     usuario: pliega en 'Otros', igual que el 990 explicito (no se
-#     categoriza por el texto de la denominacion del CSV).
-# Agrupacion final (5 categorias "ya conocidas" - mismos nombres que
-# Tipo_Contrato_ppal_Agrupado en Personas, para no inventar etiquetas
-# nuevas - + No consta + Otros como categorias explicitas, no NaN):
-#   000 -> No consta; [100,200) -> indefinido_t_completo; [200,300) ->
-#   Indefinido_t_parcial; [300,400) -> Indefinido_fijo_discontinuo;
-#   [400,500) -> Temporal_t_completo; [500,600) -> Temporal_t_parcial;
-#   cualquier otra cosa (990 explicito + huerfanos sin sucesora) -> Otros.
-def _cargar_claves_sucesoras_tipo_contrato() -> dict[int, dict]:
-    ruta = Path(__file__).resolve().parents[2] / "etl" / "metadata" / "tipo_contrato_claves_sucesoras.csv"
-    claves = {}
-    with open(ruta, encoding="utf-8") as f:
-        for fila in csv.DictReader(f):
-            if fila["deprecada"] != "B":
-                continue
-            suc1 = fila["clave_sucesora_1"].strip()
-            suc2 = fila["clave_sucesora_2"].strip()
-            claves[int(fila["clave"])] = {
-                "sucesora_1": int(suc1) if suc1 else None,
-                "sucesora_2": int(suc2) if suc2 else None,
-            }
-    return claves
-
-
-def _sql_tipo_contrato_corregido(columna_codigo: str, columna_coef: str) -> str:
-    """CASE que sustituye codigos deprecados por su clave sucesora (ver
-    _cargar_claves_sucesoras_tipo_contrato). Codigos sin entrada en el CSV o
-    sin ninguna sucesora listada llegan al ELSE tal cual (codigo original)."""
-    whens = []
-    for codigo, info in _cargar_claves_sucesoras_tipo_contrato().items():
-        s1, s2 = info["sucesora_1"], info["sucesora_2"]
-        if s1 is not None and s2 is not None:
-            whens.append(
-                f"WHEN {columna_codigo} = {codigo} "
-                f"THEN CASE WHEN {columna_coef} > 0 THEN {s2} ELSE {s1} END"
-            )
-        elif s1 is not None:
-            whens.append(f"WHEN {columna_codigo} = {codigo} THEN {s1}")
-    return f"CASE {' '.join(whens)} ELSE {columna_codigo} END"
-
-
-_ETIQUETAS_TIPO_CONTRATO_AGRUPADO = {
-    0: "No consta",
-    1: "indefinido_t_completo",
-    2: "Indefinido_t_parcial",
-    3: "Indefinido_fijo_discontinuo",
-    4: "Temporal_t_completo",
-    5: "Temporal_t_parcial",
-    6: "Otros",
-}
-
-
-def _decodificar_tipo_contrato_agrupado(cubeta) -> str:
-    return _ETIQUETAS_TIPO_CONTRATO_AGRUPADO.get(cubeta, "Otros")
-
-
-def _sql_cubeta_tipo_contrato() -> str:
-    corregido = f"({_sql_tipo_contrato_corregido('t.tipo_contrato', 't.coef_t_parcial')})"
-    return f"""
-        CASE
-            WHEN {corregido} = 0 THEN 0
-            WHEN {corregido} >= 100 AND {corregido} < 200 THEN 1
-            WHEN {corregido} >= 200 AND {corregido} < 300 THEN 2
-            WHEN {corregido} >= 300 AND {corregido} < 400 THEN 3
-            WHEN {corregido} >= 400 AND {corregido} < 500 THEN 4
-            WHEN {corregido} >= 500 AND {corregido} < 600 THEN 5
-            ELSE 6
-        END
-    """
-
-
+# logica compartida con etl/personas_extendida.py (Tipo_Contrato_ppal_Agrupado,
+# Grupo A) via etl/tipo_contrato_claves_sucesoras.py, para no reimplementarla
+# en los 2 sitios - ver ese modulo para el detalle completo de las reglas
+# (claves sucesoras con 1 vs 2 sucesoras, desambiguacion por COEF_T_PARCIAL,
+# codigos huerfanos, agrupacion final en 7 categorias).
 VARIABLES_CATEGORICAS = {
     "tipo_pension": {"tabla": "pensiones", "columna": "tipo_pension", "columna_anio": "ano_dato"},
     "trl": {"tabla": "afiliacion", "expr": "t.trl"},
@@ -241,7 +152,11 @@ VARIABLES_CATEGORICAS = {
     "reg_cotizacion": {"tabla": "afiliacion", "expr": _SQL_CUBETA_REG_COTIZACION, "decodificar": _decodificar_reg_cotizacion},
     "cnae2009_cc": {"tabla": "afiliacion", "expr": "t.cnae2009_cc", "top_n": 20},
     "provincia_domic_cc_ppal": {"tabla": "afiliacion", "expr": "t.provincia_domic_cc_ppal"},
-    "tipo_contrato": {"tabla": "afiliacion", "expr": _sql_cubeta_tipo_contrato(), "decodificar": _decodificar_tipo_contrato_agrupado},
+    "tipo_contrato": {
+        "tabla": "afiliacion",
+        "expr": tipo_contrato_claves_sucesoras.sql_cubeta_agrupado("t.tipo_contrato", "t.coef_t_parcial"),
+        "decodificar": tipo_contrato_claves_sucesoras.decodificar_agrupado,
+    },
 }
 
 
