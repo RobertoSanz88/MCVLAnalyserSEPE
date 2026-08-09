@@ -136,19 +136,23 @@ TABLES = {
             "16 BCC_ANUAL_TOTAL": "bcc_anual_total",
         },
     ),
-    # Pensiones: solo las columnas que usa /trayectorias/colectivo/pensiones.
-    # Ingresos_pension_bruto_anual ya viene calculada desde el ETL a partir de
-    # IMPORTE_MES_TOTAL_PRESTACION (x14, o x12 para la excepcion de clase de
-    # prestacion 17 - ver fase2_pensiones_extendida en
-    # etl/personas_extendida.py) - no recalcular ese x14 aqui, perderia esa
-    # excepcion. IMPORTE_MES_TOTAL_PRESTACION en si no se registra: es la
-    # misma cifra sin anualizar, redundante con la anual.
+    # Pensiones: solo las columnas que usan /trayectorias/colectivo/pensiones y
+    # /trayectorias/colectivo/categorica. Ingresos_pension_bruto_anual ya viene
+    # calculada desde el ETL a partir de IMPORTE_MES_TOTAL_PRESTACION (x14, o
+    # x12 para la excepcion de clase de prestacion 17 - ver
+    # fase2_pensiones_extendida en etl/personas_extendida.py) - no recalcular
+    # ese x14 aqui, perderia esa excepcion. IMPORTE_MES_TOTAL_PRESTACION en si
+    # no se registra: es la misma cifra sin anualizar, redundante con la
+    # anual. Tipo_pension tambien viene ya calculada del ETL (misma fase,
+    # _categorizar_tipo_pension) - no hace falta reimplementar esa
+    # categorizacion en la app.
     "pensiones": (
         "tabla_pensiones_extendida.parquet",
         {
             "01 IPF": "ipf",
             "02 ANO_DATO": "ano_dato",
             "Ingresos_pension_bruto_anual": "ingresos_pension_bruto_anual",
+            "Tipo_pension": "tipo_pension",
         },
     ),
 }

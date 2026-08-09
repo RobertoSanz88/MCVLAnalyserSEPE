@@ -123,6 +123,19 @@
                               border: 1.5px solid var(--border); border-radius: 5px; background: var(--bg);
                               color: var(--text); margin-left: 0.4rem; }
         #grafico-trayectoria { flex: 1; min-height: 420px; }
+        .nota-trayectoria-categorica { font-size: 0.78rem; color: var(--muted); font-style: italic;
+                                          margin: 0 0 0.8rem; flex: none; }
+
+        /* --- Trayectoria categorica: rejilla 2x2 de areas apiladas, una por subcolectivo --- */
+        /* Leyenda de categorias (color por identidad, PALETA_VALOR) una unica vez encima de
+           la rejilla - igual que en dibujarApiladas/dibujarMapaCalor, no se repite dentro de
+           cada uno de los 4 mini-graficos (showlegend:false ahi). */
+        .leyenda-categorias-trayectoria { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem;
+                                             margin-bottom: 0.8rem; font-size: 0.78rem; color: var(--text); flex: none; }
+        .rejilla-trayectoria-categorica { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+        .subpanel-trayectoria-cat { border: 1px solid var(--border); border-radius: 7px;
+                                       background: var(--bg); padding: 0.5rem; }
+        .mini-grafico-cat { width: 100%; }
 
         .panel::-webkit-scrollbar, #sidebar::-webkit-scrollbar,
         #lista-columnas::-webkit-scrollbar, #lista-categorias::-webkit-scrollbar { width: 6px; }
@@ -445,6 +458,10 @@
                             <button type="button" data-valor="mediana" onclick="cambiarEstadisticoTrayectorias('mediana')">Mediana</button>
                         </div>
                     </div>
+                    <p class="nota-trayectoria-categorica" id="nota-trayectoria-categorica" style="display:none">
+                        Una misma persona puede tener más de una categoría a la vez (p. ej. varios tipos de pensión el mismo año):
+                        los porcentajes de cada punto pueden sumar más de 100%, no es una distribución exclusiva.
+                    </p>
                     <div id="grafico-trayectoria"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en el panel de la izquierda para ver las trayectorias del colectivo.</p></div>
                 </div>
             </div>
@@ -798,64 +815,120 @@ async function calcular() {
 
 // --- Pestana "Trayectorias de colectivos" (Bases de cotizacion / Pensiones) ---
 
-// Por debajo de esto, la media/mediana de ese punto es poco fiable - se
-// corta la linea ahi en vez de seguir dibujando (mas simple que atenuar, y
-// evita una linea con tramos de fiabilidad distinta dificiles de leer). El
-// propio N (todos los puntos, incluidos los descartados) se ve como
-// referencia en el eje secundario.
+// Por debajo de esto, un punto (numerico o categorico) es poco fiable - se
+// corta la linea/area ahi en vez de seguir dibujando (mas simple que atenuar,
+// y evita una linea con tramos de fiabilidad distinta dificiles de leer). En
+// la trayectoria numerica el propio N se ve como referencia en el eje
+// secundario; en la categorica, N es el denominador de cada punto (personas
+// distintas del colectivo ahi, sin distinguir categoria).
 const N_MINIMO = 30;
 
-// Variables de cada tabla, para la franja "Variables" (#lista-variables-trayectorias).
-// Una unica variable fija por tabla (checkbox informativo, sin interaccion) -
-// pensado para el dia que una tabla tenga varias variables de verdad
-// distintas entre si que se puedan superponer en el mismo grafico. Pensiones
-// NO tiene una variable "mensual" aparte de la anual: son la misma cifra
-// (IMPORTE_MES_TOTAL_PRESTACION x12 o x14 segun el caso, ver
-// Ingresos_pension_bruto_anual en fase2_pensiones_extendida), asi que mostrar
-// las dos seria redundante, no dos variables distintas.
-const ETIQUETA_VARIABLE_TABLA = {
-    bases: 'Base de cotización anual',
-    pensiones: 'Pensión anual',
+// Registro de variables por tabla, para la franja "Variables"
+// (#lista-variables-trayectorias). tipo:'numerica' -> linea (una por
+// subcolectivo, mismo grafico) via /trayectorias/colectivo/<tabla>. tipo:
+// 'categorica' -> motor generico /trayectorias/colectivo/categorica (rejilla
+// 2x2 de areas apiladas, ver dibujarGraficoCategoricoTrayectoria). Pensado
+// para que Afiliacion (TIPO_CONTRATO, GRU_COTIZACION) se anyada aqui mas
+// adelante sin tocar el resto del motor - ver VARIABLES_CATEGORICAS en
+// trayectorias.py, esa tabla necesita antes su propio paso de preparacion
+// (episodios -> filas por anyo) que hoy no existe.
+// Pensiones NO tiene una variable "mensual" aparte de la anual: son la misma
+// cifra (IMPORTE_MES_TOTAL_PRESTACION x12 o x14 segun el caso, ver
+// Ingresos_pension_bruto_anual en fase2_pensiones_extendida), asi que no se
+// expone por separado.
+const VARIABLES_POR_TABLA = {
+    bases: [
+        { valor: 'unica', etiqueta: 'Base de cotización anual', tipo: 'numerica', endpoint: '/trayectorias/colectivo/bases' },
+    ],
+    pensiones: [
+        { valor: 'cuantia_anual', etiqueta: 'Cuantía pensión anual', tipo: 'numerica', endpoint: '/trayectorias/colectivo/pensiones' },
+        { valor: 'tipo_pension', etiqueta: 'Tipo de pensión', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
+    ],
 };
 
 let tablaTrayectorias = 'bases'; // 'bases' | 'pensiones'
+let variableTrayectoria = VARIABLES_POR_TABLA.bases[0].valor;
 let ejeXTrayectorias = 'anos_vl';
 let estadisticoTrayectorias = 'media';
 let ultimoResultadoTrayectorias = null;
-// Clave (tabla + filtro1-4) que produjo ultimoResultadoTrayectorias - si al
-// entrar en la pestana (o cambiar de tabla) el colectivo actual ya coincide,
-// no hace falta repetir la peticion (~20-30s, recorre toda la tabla de Bases
-// de cotizacion o Pensiones).
+// Clave (tabla + variable + filtro1-4) que produjo ultimoResultadoTrayectorias
+// - si al entrar en la pestana (o cambiar de tabla/variable) el colectivo
+// actual ya coincide, no hace falta repetir la peticion (~20-30s, recorre
+// toda la tabla de Bases de cotizacion o Pensiones).
 let ultimoCuerpoTrayectorias = null;
 
+function variableActivaInfo() {
+    return VARIABLES_POR_TABLA[tablaTrayectorias].find(v => v.valor === variableTrayectoria);
+}
+
 function renderizarVariablesTrayectorias() {
-    document.getElementById('lista-variables-trayectorias').innerHTML =
-        `<label><input type="checkbox" checked disabled> ${ETIQUETA_VARIABLE_TABLA[tablaTrayectorias]}</label>`;
+    const variables = VARIABLES_POR_TABLA[tablaTrayectorias];
+    const cont = document.getElementById('lista-variables-trayectorias');
+    if (variables.length === 1) {
+        // Unica variable de la tabla: checkbox informativo, sin interaccion.
+        cont.innerHTML = `<label><input type="checkbox" checked disabled> ${variables[0].etiqueta}</label>`;
+        return;
+    }
+    // Varias variables: checkbox pero MUTUAMENTE EXCLUYENTES (una sola
+    // trayectoria a la vez, decision ya tomada con Pensiones - numerica y
+    // categorica no son comparables en el mismo grafico). El onchange se
+    // dispara marques o desmarques la casilla; siempre fija variableTrayectoria
+    // a la que se ha tocado y vuelve a pintar la lista, asi que intentar
+    // desmarcar la unica activa la deja marcada otra vez.
+    cont.innerHTML = variables.map(v => `
+        <label><input type="checkbox" ${v.valor === variableTrayectoria ? 'checked' : ''}
+            onchange="cambiarVariableTrayectoria('${v.valor}')"> ${v.etiqueta}</label>
+    `).join('');
+}
+
+function cambiarVariableTrayectoria(valor) {
+    variableTrayectoria = valor;
+    renderizarVariablesTrayectorias();
+    actualizarControlesSegunVariable();
+    sincronizarTrayectorias();
+}
+
+// Media/Mediana no aplica a una trayectoria categorica (son porcentajes, no
+// hay dos estadisticos entre los que elegir) y la nota de "puede sumar mas de
+// 100%" solo aplica ahi - se muestran/ocultan segun el tipo de la variable activa.
+function actualizarControlesSegunVariable() {
+    const esCategorica = variableActivaInfo().tipo === 'categorica';
+    document.getElementById('switch-estadistico-trayectorias').style.display = esCategorica ? 'none' : 'flex';
+    document.getElementById('nota-trayectoria-categorica').style.display = esCategorica ? 'block' : 'none';
 }
 
 function cambiarTablaTrayectorias(tabla) {
     if (tabla === tablaTrayectorias) return;
     tablaTrayectorias = tabla;
+    variableTrayectoria = VARIABLES_POR_TABLA[tabla][0].valor;
     document.getElementById('pestana-tabla-bases').classList.toggle('activa', tabla === 'bases');
     document.getElementById('pestana-tabla-pensiones').classList.toggle('activa', tabla === 'pensiones');
     renderizarVariablesTrayectorias();
+    actualizarControlesSegunVariable();
     sincronizarTrayectorias();
 }
 
 function cambiarEjeXTrayectorias(valor) {
     ejeXTrayectorias = valor;
-    dibujarGraficoTrayectorias();
+    redibujarTrayectoria();
 }
 
 function cambiarEstadisticoTrayectorias(valor) {
     estadisticoTrayectorias = valor;
     document.querySelectorAll('#switch-estadistico-trayectorias button')
         .forEach(b => b.classList.toggle('activa', b.dataset.valor === valor));
-    dibujarGraficoTrayectorias();
+    redibujarTrayectoria();
 }
 
 function tituloEjeYTrayectorias() {
-    return tablaTrayectorias === 'bases' ? 'Bases anuales (€)' : 'Pensión anual (€)';
+    return `${variableActivaInfo().etiqueta} (€)`;
+}
+
+// Punto de entrada unico para (re)pintar el grafico segun el tipo de la
+// variable activa - numerica (linea) o categorica (rejilla 2x2 de areas).
+function redibujarTrayectoria() {
+    if (variableActivaInfo().tipo === 'categorica') dibujarGraficoCategoricoTrayectoria();
+    else dibujarGraficoTrayectorias();
 }
 
 function dibujarGraficoTrayectorias() {
@@ -904,6 +977,89 @@ function dibujarGraficoTrayectorias() {
     }, { displayModeBar: false, responsive: true });
 }
 
+// Trayectoria categorica: rejilla 2x2 (una por subcolectivo) de areas
+// apiladas por categoria - NO un unico grafico con las 4 lineas superpuestas
+// como en la numerica, aqui no encaja (serian 4 subcolectivos x hasta 7
+// categorias apiladas cada uno, ilegible en un solo plano). Motor generico:
+// no sabe nada especifico de "tipo de pension", solo lee
+// r.categorias/r.series del resultado de /trayectorias/colectivo/categorica.
+function dibujarGraficoCategoricoTrayectoria() {
+    if (!ultimoResultadoTrayectorias) return;
+    const cont = document.getElementById('grafico-trayectoria');
+    cont.innerHTML = '<div class="leyenda-categorias-trayectoria" id="leyenda-cat-trayectoria"></div>'
+        + '<div class="rejilla-trayectoria-categorica" id="rejilla-trayectoria-cat"></div>';
+
+    // Categorias combinadas de los 4 subcolectivos: top-7 por peso total (n
+    // sumado en todos los puntos y subcolectivos, PALETA_VALOR solo tiene 7
+    // tonos - ver dibujarApiladas), el resto se pliega en "Otros valores"
+    // (gris, COLOR_OTROS). Mismo color por identidad de categoria en los 4
+    // mini-graficos, para poder comparar subcolectivos entre si de un vistazo.
+    const pesoTotal = new Map();
+    for (const nombre of ORDEN_SUBGRUPOS) {
+        for (const p of ultimoResultadoTrayectorias[nombre].series[ejeXTrayectorias]) {
+            for (const [cat, v] of Object.entries(p.valores)) {
+                pesoTotal.set(cat, (pesoTotal.get(cat) || 0) + v.n);
+            }
+        }
+    }
+    const topCategorias = [...pesoTotal.keys()]
+        .sort((a, b) => pesoTotal.get(b) - pesoTotal.get(a))
+        .slice(0, PALETA_VALOR.length);
+    const colorPorCategoria = Object.fromEntries(topCategorias.map((cat, i) => [cat, PALETA_VALOR[i]]));
+    const hayOtras = pesoTotal.size > topCategorias.length;
+
+    const leyenda = document.getElementById('leyenda-cat-trayectoria');
+    leyenda.innerHTML = topCategorias.map(cat =>
+        `<span><span class="leyenda-swatch" style="background:${colorPorCategoria[cat]}"></span>${cat}</span>`
+    ).join('') + (hayOtras ? `<span><span class="leyenda-swatch" style="background:${COLOR_OTROS}"></span>Otros valores</span>` : '');
+
+    const rejilla = document.getElementById('rejilla-trayectoria-cat');
+    for (const nombre of ORDEN_SUBGRUPOS) {
+        const r = ultimoResultadoTrayectorias[nombre];
+        // Mismo corte por fiabilidad que la trayectoria numerica: por debajo
+        // de N_MINIMO personas distintas en ese punto, no se dibuja.
+        const serie = r.series[ejeXTrayectorias].filter(p => p.n >= N_MINIMO);
+
+        const sub = document.createElement('div');
+        sub.className = 'subpanel-trayectoria-cat';
+        sub.innerHTML = `<div class="subpanel-titulo">${r.etiqueta}</div><div class="mini-grafico-cat"></div>`;
+        rejilla.appendChild(sub);
+
+        const traces = topCategorias.map(cat => ({
+            type: 'scatter', mode: 'lines', name: cat, stackgroup: 'uno',
+            x: serie.map(p => p.x),
+            y: serie.map(p => p.valores[cat]?.pct ?? 0),
+            line: { color: colorPorCategoria[cat], width: 0.5 },
+            fillcolor: colorPorCategoria[cat],
+            hovertemplate: `${cat}<br>%{x}: %{y:.1f}%<extra></extra>`,
+        }));
+        if (hayOtras) {
+            traces.push({
+                type: 'scatter', mode: 'lines', name: 'Otros valores', stackgroup: 'uno',
+                x: serie.map(p => p.x),
+                y: serie.map(p => {
+                    const sumaTop = topCategorias.reduce((s, cat) => s + (p.valores[cat]?.pct ?? 0), 0);
+                    const sumaTotal = Object.values(p.valores).reduce((s, v) => s + v.pct, 0);
+                    return Math.max(0, sumaTotal - sumaTop);
+                }),
+                line: { color: COLOR_OTROS, width: 0.5 },
+                fillcolor: COLOR_OTROS,
+                hovertemplate: `Otros valores<br>%{x}: %{y:.1f}%<extra></extra>`,
+            });
+        }
+
+        Plotly.newPlot(sub.querySelector('.mini-grafico-cat'), traces, {
+            margin: { l: 42, r: 10, t: 8, b: 38 },
+            xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años de vida laboral' : 'Edad' },
+            yaxis: { title: '%', rangemode: 'tozero' },
+            showlegend: false,
+            font: { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26', size: 10 },
+            paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+            height: 260,
+        }, { displayModeBar: false, responsive: true });
+    }
+}
+
 async function sincronizarTrayectorias() {
     const div = document.getElementById('grafico-trayectoria');
     if (!filtrosListos()) {
@@ -911,15 +1067,16 @@ async function sincronizarTrayectorias() {
         return;
     }
 
+    const info = variableActivaInfo();
     const cuerpo = cuerpoPeticion();
-    const clave = tablaTrayectorias + ':' + JSON.stringify(cuerpo);
+    if (info.tipo === 'categorica') cuerpo.variable = info.valor;
+    const clave = tablaTrayectorias + ':' + info.valor + ':' + JSON.stringify(cuerpo);
     if (clave === ultimoCuerpoTrayectorias) return; // mismo colectivo+tabla+variable, el grafico ya esta al dia
 
     const nombreTabla = tablaTrayectorias === 'bases' ? 'Bases de cotización' : 'Pensiones';
     div.innerHTML = `<p class="aviso-vacio">Calculando trayectorias del colectivo… puede tardar un rato (recorre toda la tabla de ${nombreTabla}).</p>`;
 
-    const endpoint = tablaTrayectorias === 'bases' ? '/trayectorias/colectivo/bases' : '/trayectorias/colectivo/pensiones';
-    const resp = await fetch(endpoint, {
+    const resp = await fetch(info.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cuerpo),
@@ -931,7 +1088,7 @@ async function sincronizarTrayectorias() {
     ultimoCuerpoTrayectorias = clave;
     ultimoResultadoTrayectorias = await resp.json();
     renderizarRecuentosEnTodos(ultimoResultadoTrayectorias);
-    dibujarGraficoTrayectorias();
+    redibujarTrayectoria();
 }
 
 // Punto de millar puesto a mano (cada 3 cifras desde la derecha) en vez de con
@@ -1458,6 +1615,7 @@ async function exportarExcel() {
 
 cargarColumnas();
 renderizarVariablesTrayectorias();
+actualizarControlesSegunVariable();
 </script>
 </body>
 </html>

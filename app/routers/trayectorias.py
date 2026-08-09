@@ -5,6 +5,7 @@ pestana dentro de colectivos.html (no como pagina propia), asi que este
 modulo solo expone el endpoint de datos, no una ruta HTML."""
 
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -14,6 +15,21 @@ from app.routers.colectivos import ORDEN_SUBGRUPOS, SubgruposRequest, calcular_c
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+# Registro de variables del motor generico de "trayectoria categorica" (ver
+# trayectorias_colectivo_categorica): que tabla/columna consultar para cada
+# variable. tipo_pension es la primera; TIPO_CONTRATO y GRU_COTIZACION de
+# Afiliacion se anyadiran aqui mas adelante - esa tabla es episodica
+# (fecha_alta/fecha_baja, no una fila por anyo como pensiones/bases), asi que
+# necesitara antes un paso propio que expanda episodios a filas por anyo
+# antes de poder reutilizar esta misma query tal cual.
+VARIABLES_CATEGORICAS = {
+    "tipo_pension": {"tabla": "pensiones", "columna": "tipo_pension", "columna_anio": "ano_dato"},
+}
+
+
+class TrayectoriaCategoricaRequest(SubgruposRequest):
+    variable: Literal["tipo_pension"]
 
 
 @router.post("/trayectorias/colectivo/bases")
@@ -145,6 +161,99 @@ def trayectorias_colectivo_pensiones(request: Request, body: SubgruposRequest):
             series[eje].append({"x": x, "media": media, "mediana": mediana, "n": n})
 
         resultado[nombre] = {"etiqueta": c["etiqueta"], "recuento": recuento, "series": series}
+
+    return resultado
+
+
+@router.post("/trayectorias/colectivo/categorica")
+def trayectorias_colectivo_categorica(request: Request, body: TrayectoriaCategoricaRequest):
+    """Motor generico de 'trayectoria categorica': evolucion de la
+    composicion categorica (p.ej. Tipo_pension) de los 4 subgrupos de un
+    colectivo. Pensado para reutilizarse con TIPO_CONTRATO/GRU_COTIZACION de
+    Afiliacion mas adelante (ver VARIABLES_CATEGORICAS) - esta query en si ya
+    es generica (tabla/columna vienen del registro), solo falta que Afiliacion
+    tenga una tabla en forma de una fila por (ipf, anyo) como pensiones.
+
+    Para cada punto del eje X, el % de cada categoria se calcula sobre el
+    numero de IPFs DISTINTOS del colectivo en ese punto (no sobre filas): una
+    persona puede tener varias filas el mismo anyo con distinta categoria
+    (p.ej. cobra viudedad y orfandad a la vez), asi que los porcentajes de un
+    mismo punto pueden sumar mas de 100% - no es una distribucion exclusiva,
+    el frontend lo deja explicito. N (personas distintas del colectivo en ese
+    punto, sin distinguir categoria) sirve para el mismo corte por
+    fiabilidad ya usado en /trayectorias/colectivo/bases y /pensiones."""
+    con = request.app.state.con.cursor()
+    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+
+    info = VARIABLES_CATEGORICAS[body.variable]
+    tabla, columna, columna_anio = info["tabla"], info["columna"], info["columna_anio"]
+
+    resultado = {}
+    for nombre in ORDEN_SUBGRUPOS:
+        c = condiciones[nombre]
+        recuento = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
+
+        filas = con.execute(
+            f"""
+            WITH colectivo AS (
+                SELECT ipf, fecha_nacimiento, fecha_ini_primer_empleo
+                FROM personas
+                WHERE {c['where']}
+            ), datos AS (
+                -- DISTINCT: si la tabla de origen tuviera una fila repetida
+                -- para el mismo (ipf, anyo, categoria) no debe contar doble.
+                SELECT DISTINCT t.ipf, t.{columna_anio} AS anio, t.{columna} AS categoria
+                FROM {tabla} t
+                WHERE t.ipf IN (SELECT ipf FROM colectivo) AND t.{columna} IS NOT NULL
+            ), unido AS (
+                SELECT
+                    d.ipf, d.categoria,
+                    CASE WHEN c.fecha_ini_primer_empleo IS NOT NULL
+                         THEN (d.anio - date_part('year', c.fecha_ini_primer_empleo))::INTEGER END AS anos_vl,
+                    (d.anio - date_part('year', c.fecha_nacimiento))::INTEGER AS edad
+                FROM datos d
+                JOIN colectivo c USING (ipf)
+            ), total_por_x AS (
+                -- Denominador: IPFs distintos en ese punto, sin distinguir
+                -- categoria (una persona con 2 categorias el mismo punto
+                -- cuenta 1 vez aqui, aunque cuente en las 2 categorias abajo).
+                SELECT 'anos_vl' AS eje, anos_vl AS x, COUNT(DISTINCT ipf) AS n
+                FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2
+                UNION ALL
+                -- edad >= 18: mismo criterio que Bases/Pensiones (numerico).
+                SELECT 'edad' AS eje, edad AS x, COUNT(DISTINCT ipf) AS n
+                FROM unido WHERE edad >= 18 GROUP BY 1, 2
+            ), por_categoria AS (
+                SELECT 'anos_vl' AS eje, anos_vl AS x, categoria, COUNT(DISTINCT ipf) AS n_categoria
+                FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2, 3
+                UNION ALL
+                SELECT 'edad' AS eje, edad AS x, categoria, COUNT(DISTINCT ipf) AS n_categoria
+                FROM unido WHERE edad >= 18 GROUP BY 1, 2, 3
+            )
+            SELECT t.eje, t.x, t.n, pc.categoria, pc.n_categoria
+            FROM total_por_x t
+            JOIN por_categoria pc USING (eje, x)
+            ORDER BY 1, 2, 4
+            """,
+            c["params"],
+        ).fetchall()
+
+        series = {"anos_vl": {}, "edad": {}}
+        categorias_vistas = []
+        for eje, x, n, categoria, n_categoria in filas:
+            punto = series[eje].setdefault(x, {"x": x, "n": n, "valores": {}})
+            punto["valores"][categoria] = {"n": n_categoria, "pct": round(100 * n_categoria / n, 1) if n else 0.0}
+            if categoria not in categorias_vistas:
+                categorias_vistas.append(categoria)
+
+        series = {eje: sorted(puntos.values(), key=lambda p: p["x"]) for eje, puntos in series.items()}
+
+        resultado[nombre] = {
+            "etiqueta": c["etiqueta"],
+            "recuento": recuento,
+            "categorias": categorias_vistas,
+            "series": series,
+        }
 
     return resultado
 
