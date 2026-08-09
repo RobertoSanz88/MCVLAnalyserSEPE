@@ -122,7 +122,7 @@
         .controles-trayectorias select { font-family: var(--font); font-size: 0.82rem; padding: 0.3rem 0.5rem;
                               border: 1.5px solid var(--border); border-radius: 5px; background: var(--bg);
                               color: var(--text); margin-left: 0.4rem; }
-        #grafico-bases { flex: 1; min-height: 420px; }
+        #grafico-trayectoria { flex: 1; min-height: 420px; }
 
         .panel::-webkit-scrollbar, #sidebar::-webkit-scrollbar,
         #lista-columnas::-webkit-scrollbar, #lista-categorias::-webkit-scrollbar { width: 6px; }
@@ -423,14 +423,12 @@
                 <div id="panel-tablas-trayectorias" class="panel">
                     <h2>Tabla y variable</h2>
                     <div class="selector-tablas">
-                        <div class="pestana-tabla activa">Bases de cotización</div>
-                        <div class="pestana-tabla deshabilitada">Pensiones<span class="nota-futuro">(próximamente)</span></div>
+                        <div class="pestana-tabla activa" id="pestana-tabla-bases" onclick="cambiarTablaTrayectorias('bases')">Bases de cotización</div>
+                        <div class="pestana-tabla" id="pestana-tabla-pensiones" onclick="cambiarTablaTrayectorias('pensiones')">Pensiones</div>
                         <div class="pestana-tabla deshabilitada">Afiliación<span class="nota-futuro">(próximamente)</span></div>
                     </div>
                     <h3>Variables</h3>
-                    <div id="lista-variables-trayectorias">
-                        <label><input type="checkbox" checked disabled> Base de cotización anual</label>
-                    </div>
+                    <div id="lista-variables-trayectorias"></div>
                 </div>
 
                 <div id="panel-trayectorias" class="panel">
@@ -447,7 +445,7 @@
                             <button type="button" data-valor="mediana" onclick="cambiarEstadisticoTrayectorias('mediana')">Mediana</button>
                         </div>
                     </div>
-                    <div id="grafico-bases"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en el panel de la izquierda para ver las trayectorias del colectivo.</p></div>
+                    <div id="grafico-trayectoria"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en el panel de la izquierda para ver las trayectorias del colectivo.</p></div>
                 </div>
             </div>
         </div>
@@ -542,9 +540,9 @@ function cambiarVista(vista) {
 
     // Trayectorias es navegable desde el principio (el usuario decide en que
     // pestana define el colectivo, da igual cual - panel-filtros es comun a
-    // las dos), pero sin Filtro 1 + Filtro 2 listos no hay colectivo que pedir
-    // todavia: se queda con el aviso-vacio inicial de #grafico-bases.
-    if (vista === 'trayectorias' && filtrosListos()) sincronizarTrayectorias();
+    // las dos); sincronizarTrayectorias() ya comprueba internamente si hay
+    // colectivo, si no deja el aviso-vacio de #grafico-trayectoria.
+    if (vista === 'trayectorias') sincronizarTrayectorias();
 }
 
 // Misma condicion que ya usaba Calcular: cruce de ejes completo -> ya hay una
@@ -798,7 +796,7 @@ async function calcular() {
     renderizarCategoricas(ultimoResultado.subgrupos);
 }
 
-// --- Pestana "Trayectorias de colectivo" (Bases de cotizacion) ---
+// --- Pestana "Trayectorias de colectivos" (Bases de cotizacion / Pensiones) ---
 
 // Por debajo de esto, la media/mediana de ese punto es poco fiable - se
 // corta la linea ahi en vez de seguir dibujando (mas simple que atenuar, y
@@ -807,13 +805,42 @@ async function calcular() {
 // referencia en el eje secundario.
 const N_MINIMO = 30;
 
+// Variables de cada tabla, para la franja "Variables" (#lista-variables-trayectorias).
+// Una unica variable fija por tabla (checkbox informativo, sin interaccion) -
+// pensado para el dia que una tabla tenga varias variables de verdad
+// distintas entre si que se puedan superponer en el mismo grafico. Pensiones
+// NO tiene una variable "mensual" aparte de la anual: son la misma cifra
+// (IMPORTE_MES_TOTAL_PRESTACION x12 o x14 segun el caso, ver
+// Ingresos_pension_bruto_anual en fase2_pensiones_extendida), asi que mostrar
+// las dos seria redundante, no dos variables distintas.
+const ETIQUETA_VARIABLE_TABLA = {
+    bases: 'Base de cotización anual',
+    pensiones: 'Pensión anual',
+};
+
+let tablaTrayectorias = 'bases'; // 'bases' | 'pensiones'
 let ejeXTrayectorias = 'anos_vl';
 let estadisticoTrayectorias = 'media';
 let ultimoResultadoTrayectorias = null;
-// JSON del cuerpo (filtro1-4) que produjo ultimoResultadoTrayectorias - si al
-// entrar en la pestana el colectivo actual coincide, no hace falta repetir
-// la peticion (~20-30s, recorre toda Bases de cotizacion).
+// Clave (tabla + filtro1-4) que produjo ultimoResultadoTrayectorias - si al
+// entrar en la pestana (o cambiar de tabla) el colectivo actual ya coincide,
+// no hace falta repetir la peticion (~20-30s, recorre toda la tabla de Bases
+// de cotizacion o Pensiones).
 let ultimoCuerpoTrayectorias = null;
+
+function renderizarVariablesTrayectorias() {
+    document.getElementById('lista-variables-trayectorias').innerHTML =
+        `<label><input type="checkbox" checked disabled> ${ETIQUETA_VARIABLE_TABLA[tablaTrayectorias]}</label>`;
+}
+
+function cambiarTablaTrayectorias(tabla) {
+    if (tabla === tablaTrayectorias) return;
+    tablaTrayectorias = tabla;
+    document.getElementById('pestana-tabla-bases').classList.toggle('activa', tabla === 'bases');
+    document.getElementById('pestana-tabla-pensiones').classList.toggle('activa', tabla === 'pensiones');
+    renderizarVariablesTrayectorias();
+    sincronizarTrayectorias();
+}
 
 function cambiarEjeXTrayectorias(valor) {
     ejeXTrayectorias = valor;
@@ -827,9 +854,13 @@ function cambiarEstadisticoTrayectorias(valor) {
     dibujarGraficoTrayectorias();
 }
 
+function tituloEjeYTrayectorias() {
+    return tablaTrayectorias === 'bases' ? 'Bases anuales (€)' : 'Pensión anual (€)';
+}
+
 function dibujarGraficoTrayectorias() {
     if (!ultimoResultadoTrayectorias) return;
-    const div = document.getElementById('grafico-bases');
+    const div = document.getElementById('grafico-trayectoria');
     div.innerHTML = '';
     const traces = [];
 
@@ -865,7 +896,7 @@ function dibujarGraficoTrayectorias() {
     Plotly.newPlot(div, traces, {
         margin: { l: 60, r: 55, t: 10, b: 45 },
         xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años de vida laboral' : 'Edad' },
-        yaxis: { title: 'Bases anuales (€)', rangemode: 'tozero' },
+        yaxis: { title: tituloEjeYTrayectorias(), rangemode: 'tozero' },
         yaxis2: { title: 'N', overlaying: 'y', side: 'right', rangemode: 'tozero', showgrid: false },
         legend: { orientation: 'h', y: -0.2 },
         font: { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26' },
@@ -874,14 +905,21 @@ function dibujarGraficoTrayectorias() {
 }
 
 async function sincronizarTrayectorias() {
+    const div = document.getElementById('grafico-trayectoria');
+    if (!filtrosListos()) {
+        div.innerHTML = '<p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en el panel de la izquierda para ver las trayectorias del colectivo.</p>';
+        return;
+    }
+
     const cuerpo = cuerpoPeticion();
-    const clave = JSON.stringify(cuerpo);
-    if (clave === ultimoCuerpoTrayectorias) return; // el colectivo no ha cambiado, el grafico ya esta al dia
+    const clave = tablaTrayectorias + ':' + JSON.stringify(cuerpo);
+    if (clave === ultimoCuerpoTrayectorias) return; // mismo colectivo+tabla+variable, el grafico ya esta al dia
 
-    const div = document.getElementById('grafico-bases');
-    div.innerHTML = '<p class="aviso-vacio">Calculando trayectorias del colectivo… puede tardar un rato (recorre toda la tabla de Bases de cotización).</p>';
+    const nombreTabla = tablaTrayectorias === 'bases' ? 'Bases de cotización' : 'Pensiones';
+    div.innerHTML = `<p class="aviso-vacio">Calculando trayectorias del colectivo… puede tardar un rato (recorre toda la tabla de ${nombreTabla}).</p>`;
 
-    const resp = await fetch('/trayectorias/colectivo/bases', {
+    const endpoint = tablaTrayectorias === 'bases' ? '/trayectorias/colectivo/bases' : '/trayectorias/colectivo/pensiones';
+    const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cuerpo),
@@ -1419,6 +1457,7 @@ async function exportarExcel() {
 }
 
 cargarColumnas();
+renderizarVariablesTrayectorias();
 </script>
 </body>
 </html>

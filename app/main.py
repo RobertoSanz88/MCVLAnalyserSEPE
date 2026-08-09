@@ -17,6 +17,14 @@ app.include_router(colectivos.router)
 
 @app.on_event("startup")
 def startup():
+    # Una unica conexion DuckDB para toda la app; los endpoints NO deben usarla
+    # directamente (peticiones concurrentes de verdad corrompen el estado
+    # interno de una misma Connection - visto con datos reales: una peticion
+    # devolvia "Columna desconocida" para una columna que si existe, al
+    # solaparse con otra peticion en curso). Cada endpoint saca su propio
+    # con.cursor() (ver routers/colectivos.py y routers/trayectorias.py) - es
+    # barato, comparte la misma base de datos en memoria, y aisla la ejecucion
+    # entre peticiones simultaneas.
     app.state.con = get_connection()
 
 

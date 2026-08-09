@@ -210,7 +210,7 @@ def columnas(request: Request):
     selector de atributos del panel izquierdo). "ipf" es el identificador de
     persona (clave de union entre tablas), no un atributo por el que tenga
     sentido filtrar o construir un colectivo."""
-    con = request.app.state.con
+    con = request.app.state.con.cursor()
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
     numericas = [c for c in numericas if c != "ipf"]
@@ -221,7 +221,7 @@ def columnas(request: Request):
 def valores(request: Request, columna: str):
     """Valores distintos de una columna categorica (para el selector de
     categorias al configurar un filtro)."""
-    con = request.app.state.con
+    con = request.app.state.con.cursor()
     columnas_validas = _columnas_personas(con)
     _, categoricas = _clasificar_columnas(columnas_validas)
     if columna not in categoricas:
@@ -418,7 +418,7 @@ def recuentos(request: Request, body: SubgruposRequest):
     cada subgrupo, sin las estadisticas numericas/categoricas (mucho mas
     caras de calcular). Pensada para refrescarse en vivo mientras se
     configuran los filtros en el frontend, antes de pulsar Calcular."""
-    con = request.app.state.con
+    con = request.app.state.con.cursor()
     condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
     resultado = {}
     for nombre, c in condiciones.items():
@@ -429,7 +429,7 @@ def recuentos(request: Request, body: SubgruposRequest):
 
 @router.post("/colectivos/subgrupos")
 def subgrupos(request: Request, body: SubgruposRequest):
-    con = request.app.state.con
+    con = request.app.state.con.cursor()
     return {
         "filtro1": body.filtro1,
         "filtro2": body.filtro2,
@@ -524,7 +524,7 @@ def _construir_excel(resultados: dict) -> bytes:
 
 @router.post("/colectivos/exportar")
 def exportar(request: Request, body: SubgruposRequest):
-    con = request.app.state.con
+    con = request.app.state.con.cursor()
     resultados = _calcular_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
     contenido = _construir_excel(resultados)
     return StreamingResponse(

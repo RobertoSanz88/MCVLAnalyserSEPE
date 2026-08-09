@@ -23,7 +23,7 @@ def trayectorias_colectivo_bases(request: Request, body: SubgruposRequest):
     por edad - el frontend elige con cual pintar el grafico sin pedir otra
     vez al backend. N por punto para que el frontend pueda cortar/atenuar la
     linea donde la muestra es pequenya (< 30)."""
-    con = request.app.state.con
+    con = request.app.state.con.cursor()
     condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
 
     resultado = {}
@@ -87,9 +87,71 @@ def trayectorias_colectivo_bases(request: Request, body: SubgruposRequest):
     return resultado
 
 
+@router.post("/trayectorias/colectivo/pensiones")
+def trayectorias_colectivo_pensiones(request: Request, body: SubgruposRequest):
+    """Evolucion de la pension anual (Ingresos_pension_bruto_anual) de los 4
+    subgrupos de un colectivo - mismo patron que /trayectorias/colectivo/bases.
+    Ingresos_pension_bruto_anual ya viene calculada en el ETL a partir de
+    IMPORTE_MES_TOTAL_PRESTACION con su excepcion de 12 pagas (clase de
+    prestacion 17, ~0,002% de las filas) en vez de 14 - no se recalcula ese
+    x14 aqui para no perder esa excepcion (ver fase2_pensiones_extendida en
+    etl/personas_extendida.py). No hay variable mensual aparte: es la misma
+    cifra sin anualizar, redundante con esta. Si una persona cobra mas de una
+    pension el mismo anyo (p.ej. viudedad + orfandad), se suman."""
+    con = request.app.state.con.cursor()
+    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+
+    resultado = {}
+    for nombre in ORDEN_SUBGRUPOS:
+        c = condiciones[nombre]
+        recuento = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
+
+        filas = con.execute(
+            f"""
+            WITH colectivo AS (
+                SELECT ipf, fecha_nacimiento, fecha_ini_primer_empleo
+                FROM personas
+                WHERE {c['where']}
+            ), pension_anio AS (
+                -- Los importes vienen en centimos (igual que bcc_anual_total en
+                -- Bases de cotizacion, ver project_bases_cotizacion_centimos).
+                SELECT ipf, ano_dato AS anio, SUM(ingresos_pension_bruto_anual) / 100.0 AS valor
+                FROM pensiones
+                WHERE ipf IN (SELECT ipf FROM colectivo)
+                GROUP BY 1, 2
+            ), unido AS (
+                SELECT
+                    p.valor,
+                    CASE WHEN c.fecha_ini_primer_empleo IS NOT NULL
+                         THEN (p.anio - date_part('year', c.fecha_ini_primer_empleo))::INTEGER END AS anos_vl,
+                    (p.anio - date_part('year', c.fecha_nacimiento))::INTEGER AS edad
+                FROM pension_anio p
+                JOIN colectivo c USING (ipf)
+            )
+            SELECT 'anos_vl' AS eje, anos_vl AS x, AVG(valor), MEDIAN(valor), COUNT(*)
+            FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2
+            UNION ALL
+            -- edad >= 18: mismo criterio ya aplicado en Bases de cotizacion
+            -- (ver /trayectorias/colectivo/bases), misma naturaleza de dato.
+            SELECT 'edad' AS eje, edad AS x, AVG(valor), MEDIAN(valor), COUNT(*)
+            FROM unido WHERE edad >= 18 GROUP BY 1, 2
+            ORDER BY 1, 2
+            """,
+            c["params"],
+        ).fetchall()
+
+        series = {"anos_vl": [], "edad": []}
+        for eje, x, media, mediana, n in filas:
+            series[eje].append({"x": x, "media": media, "mediana": mediana, "n": n})
+
+        resultado[nombre] = {"etiqueta": c["etiqueta"], "recuento": recuento, "series": series}
+
+    return resultado
+
+
 @router.get("/trayectorias/{ipf}", response_class=HTMLResponse)
 def trayectoria(request: Request, ipf: int):
-    con = request.app.state.con
+    con = request.app.state.con.cursor()
     episodios = con.execute(
         """
         SELECT
