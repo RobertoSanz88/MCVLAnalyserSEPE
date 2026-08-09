@@ -851,9 +851,9 @@ const N_MINIMO = 30;
 // Pensiones NO tiene una variable "mensual" aparte de la anual: son la misma
 // cifra (IMPORTE_MES_TOTAL_PRESTACION x12 o x14 segun el caso, ver
 // Ingresos_pension_bruto_anual en fase2_pensiones_extendida), asi que no se
-// expone por separado. TIPO_CONTRATO de Afiliacion queda fuera a proposito:
-// 147 codigos crudos muy asimetricos y sin una categorizacion fiable
-// disponible todavia (ver VARIABLES_CATEGORICAS en trayectorias.py).
+// expone por separado. TIPO_CONTRATO de Afiliacion corrige claves sucesoras
+// antes de agrupar (147 codigos crudos, muchos deprecados) - ver
+// VARIABLES_CATEGORICAS en trayectorias.py para el detalle completo.
 const VARIABLES_POR_TABLA = {
     bases: [
         { valor: 'unica', etiqueta: 'Base de cotización anual', tipo: 'numerica', unidad: '€', endpoint: '/trayectorias/colectivo/bases' },
@@ -869,6 +869,7 @@ const VARIABLES_POR_TABLA = {
         { valor: 'reg_cotizacion', etiqueta: 'Régimen de cotización', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
         { valor: 'cnae2009_cc', etiqueta: 'Actividad económica (CNAE 2009)', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
         { valor: 'provincia_domic_cc_ppal', etiqueta: 'Provincia del centro de trabajo', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
+        { valor: 'tipo_contrato', etiqueta: 'Tipo de contrato', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
     ],
 };
 
