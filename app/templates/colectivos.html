@@ -137,6 +137,16 @@
                                        background: var(--bg); padding: 0.5rem; }
         .mini-grafico-cat { width: 100%; }
 
+        /* --- Trayectoria categorica: vista "Categorias" (1 panel por categoria, no 2x2 fijo) --- */
+        /* auto-fill en vez de un numero fijo de columnas: esta vista puede tener desde 6
+           categorias (Tipo_pension) hasta ~53 (provincia, sin limite a proposito, ver
+           VARIABLES_CATEGORICAS) - el numero de columnas se adapta solo y el panel entero
+           (ya con overflow-y:auto por ser .panel) scrollea en vertical sin mas ajuste. Dentro
+           de cada panel van las 4 lineas de subcolectivo (COLOR_SUBGRUPO) superpuestas, sin
+           repetir su leyenda (ya vive en el rectangulo de recuentos de arriba). */
+        .grid-categorias-trayectoria { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+                                          gap: 0.7rem; }
+
         .panel::-webkit-scrollbar, #sidebar::-webkit-scrollbar,
         #lista-columnas::-webkit-scrollbar, #lista-categorias::-webkit-scrollbar { width: 6px; }
         .panel::-webkit-scrollbar-thumb, #sidebar::-webkit-scrollbar-thumb,
@@ -438,7 +448,7 @@
                     <div class="selector-tablas">
                         <div class="pestana-tabla activa" id="pestana-tabla-bases" onclick="cambiarTablaTrayectorias('bases')">Bases de cotización</div>
                         <div class="pestana-tabla" id="pestana-tabla-pensiones" onclick="cambiarTablaTrayectorias('pensiones')">Pensiones</div>
-                        <div class="pestana-tabla deshabilitada">Afiliación<span class="nota-futuro">(próximamente)</span></div>
+                        <div class="pestana-tabla" id="pestana-tabla-afiliacion" onclick="cambiarTablaTrayectorias('afiliacion')">Afiliación</div>
                     </div>
                     <h3>Variables</h3>
                     <div id="lista-variables-trayectorias"></div>
@@ -457,10 +467,15 @@
                             <button type="button" class="activa" data-valor="media" onclick="cambiarEstadisticoTrayectorias('media')">Media</button>
                             <button type="button" data-valor="mediana" onclick="cambiarEstadisticoTrayectorias('mediana')">Mediana</button>
                         </div>
+                        <div class="switch-vista" id="switch-vista-categorica" style="display:none">
+                            <button type="button" class="activa" data-valor="rejilla" onclick="cambiarVistaCategoricaTrayectoria('rejilla')">Rejilla 2×2</button>
+                            <button type="button" data-valor="categorias" onclick="cambiarVistaCategoricaTrayectoria('categorias')">Categorías</button>
+                        </div>
                     </div>
                     <p class="nota-trayectoria-categorica" id="nota-trayectoria-categorica" style="display:none">
-                        Una misma persona puede tener más de una categoría a la vez (p. ej. varios tipos de pensión el mismo año):
-                        los porcentajes de cada punto pueden sumar más de 100%, no es una distribución exclusiva.
+                        Una misma persona puede tener más de una categoría a la vez (p. ej. varios tipos de pensión el mismo año,
+                        o dos contratos concurrentes con distinto régimen): los porcentajes de cada punto pueden sumar más de 100%,
+                        no es una distribución exclusiva.
                     </p>
                     <div id="grafico-trayectoria"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en el panel de la izquierda para ver las trayectorias del colectivo.</p></div>
                 </div>
@@ -825,37 +840,65 @@ const N_MINIMO = 30;
 
 // Registro de variables por tabla, para la franja "Variables"
 // (#lista-variables-trayectorias). tipo:'numerica' -> linea (una por
-// subcolectivo, mismo grafico) via /trayectorias/colectivo/<tabla>. tipo:
-// 'categorica' -> motor generico /trayectorias/colectivo/categorica (rejilla
-// 2x2 de areas apiladas, ver dibujarGraficoCategoricoTrayectoria). Pensado
-// para que Afiliacion (TIPO_CONTRATO, GRU_COTIZACION) se anyada aqui mas
-// adelante sin tocar el resto del motor - ver VARIABLES_CATEGORICAS en
-// trayectorias.py, esa tabla necesita antes su propio paso de preparacion
-// (episodios -> filas por anyo) que hoy no existe.
+// subcolectivo, mismo grafico) via su propio endpoint, con "unidad" para el
+// titulo del eje Y (tituloEjeYTrayectorias). tipo:'categorica' -> motor
+// generico /trayectorias/colectivo/categorica, con 2 vistas seleccionables
+// (rejilla 2x2 de areas apiladas o 1 panel por categoria - ver
+// vistaCategoricaTrayectoria, dibujarGraficoCategoricoTrayectoria y
+// dibujarGraficoPorCategorias). "variable" es la clave que espera el backend
+// en VARIABLES_CATEGORICAS (trayectorias.py) - solo hace falta cuando difiere
+// de "valor" (aqui coinciden siempre, se manda tal cual en sincronizarTrayectorias).
 // Pensiones NO tiene una variable "mensual" aparte de la anual: son la misma
 // cifra (IMPORTE_MES_TOTAL_PRESTACION x12 o x14 segun el caso, ver
 // Ingresos_pension_bruto_anual en fase2_pensiones_extendida), asi que no se
-// expone por separado.
+// expone por separado. TIPO_CONTRATO de Afiliacion queda fuera a proposito:
+// 147 codigos crudos muy asimetricos y sin una categorizacion fiable
+// disponible todavia (ver VARIABLES_CATEGORICAS en trayectorias.py).
 const VARIABLES_POR_TABLA = {
     bases: [
-        { valor: 'unica', etiqueta: 'Base de cotización anual', tipo: 'numerica', endpoint: '/trayectorias/colectivo/bases' },
+        { valor: 'unica', etiqueta: 'Base de cotización anual', tipo: 'numerica', unidad: '€', endpoint: '/trayectorias/colectivo/bases' },
     ],
     pensiones: [
-        { valor: 'cuantia_anual', etiqueta: 'Cuantía pensión anual', tipo: 'numerica', endpoint: '/trayectorias/colectivo/pensiones' },
+        { valor: 'cuantia_anual', etiqueta: 'Cuantía pensión anual', tipo: 'numerica', unidad: '€', endpoint: '/trayectorias/colectivo/pensiones' },
         { valor: 'tipo_pension', etiqueta: 'Tipo de pensión', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
+    ],
+    afiliacion: [
+        { valor: 'num_trabajs_cc_2', etiqueta: 'Nº trabajadores de la empresa', tipo: 'numerica', unidad: 'trabajadores', endpoint: '/trayectorias/colectivo/afiliacion' },
+        { valor: 'trl', etiqueta: 'TRL', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
+        { valor: 'gru_cotizacion', etiqueta: 'Grupo de cotización', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
+        { valor: 'reg_cotizacion', etiqueta: 'Régimen de cotización', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
+        { valor: 'cnae2009_cc', etiqueta: 'Actividad económica (CNAE 2009)', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
+        { valor: 'provincia_domic_cc_ppal', etiqueta: 'Provincia del centro de trabajo', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
     ],
 };
 
-let tablaTrayectorias = 'bases'; // 'bases' | 'pensiones'
+let tablaTrayectorias = 'bases'; // 'bases' | 'pensiones' | 'afiliacion'
 let variableTrayectoria = VARIABLES_POR_TABLA.bases[0].valor;
+// Solo relevante si la variable activa es categorica: 'rejilla' (2x2, areas
+// apiladas por subcolectivo) o 'categorias' (1 panel por categoria, con las
+// 4 lineas de subcolectivo dentro). Se resetea a 'rejilla' al cambiar de
+// tabla o variable (ver cambiarTablaTrayectorias/cambiarVariableTrayectoria) -
+// evita que cambiar a una variable con muchas categorias (provincia, ~53)
+// abra de golpe la vista mas pesada sin que el usuario la haya pedido.
+let vistaCategoricaTrayectoria = 'rejilla';
 let ejeXTrayectorias = 'anos_vl';
 let estadisticoTrayectorias = 'media';
 let ultimoResultadoTrayectorias = null;
 // Clave (tabla + variable + filtro1-4) que produjo ultimoResultadoTrayectorias
 // - si al entrar en la pestana (o cambiar de tabla/variable) el colectivo
-// actual ya coincide, no hace falta repetir la peticion (~20-30s, recorre
-// toda la tabla de Bases de cotizacion o Pensiones).
+// actual ya coincide, no hace falta repetir la peticion (~20-30s a 1min,
+// recorre toda la tabla de Bases de cotizacion, Pensiones o Afiliacion).
 let ultimoCuerpoTrayectorias = null;
+// Token monotono - mismo patron que tokenRecuentos: si el usuario cambia de
+// tabla/variable varias veces seguidas antes de que la anterior peticion
+// termine, varias peticiones de trayectoria quedan en vuelo a la vez y
+// pueden volver en cualquier orden. Sin esto, una respuesta VIEJA que
+// resuelve tarde (p.ej. Afiliacion con top_n, que hace una consulta extra y
+// tarda mas) puede llegar despues de una mas nueva y pisar su resultado -
+// bug real visto con datos reales el 2026-08-09 (Grupo de cotizacion
+// quedandose pintado tras pedir CNAE2009_CC). Solo se aplica la respuesta de
+// la ultima peticion lanzada.
+let tokenTrayectorias = 0;
 
 function variableActivaInfo() {
     return VARIABLES_POR_TABLA[tablaTrayectorias].find(v => v.valor === variableTrayectoria);
@@ -883,26 +926,48 @@ function renderizarVariablesTrayectorias() {
 
 function cambiarVariableTrayectoria(valor) {
     variableTrayectoria = valor;
+    vistaCategoricaTrayectoria = 'rejilla';
     renderizarVariablesTrayectorias();
     actualizarControlesSegunVariable();
     sincronizarTrayectorias();
 }
 
-// Media/Mediana no aplica a una trayectoria categorica (son porcentajes, no
-// hay dos estadisticos entre los que elegir) y la nota de "puede sumar mas de
-// 100%" solo aplica ahi - se muestran/ocultan segun el tipo de la variable activa.
+// Media/Mediana y el switch Rejilla/Categorias son mutuamente excluyentes -
+// el primero solo tiene sentido con una variable numerica (dos estadisticos
+// entre los que elegir), el segundo solo con una categorica (dos formas de
+// ver la misma composicion por categorias); la nota de "puede sumar mas de
+// 100%" tambien es exclusiva de las categoricas. Se muestran/ocultan segun
+// el tipo de la variable activa.
 function actualizarControlesSegunVariable() {
     const esCategorica = variableActivaInfo().tipo === 'categorica';
     document.getElementById('switch-estadistico-trayectorias').style.display = esCategorica ? 'none' : 'flex';
+    document.getElementById('switch-vista-categorica').style.display = esCategorica ? 'flex' : 'none';
     document.getElementById('nota-trayectoria-categorica').style.display = esCategorica ? 'block' : 'none';
+    // Sincroniza los botones con vistaCategoricaTrayectoria (siempre
+    // 'rejilla' en este punto, ver cambiarTablaTrayectorias/
+    // cambiarVariableTrayectoria) - si no, tras cambiar de variable el boton
+    // "Categorias" podia quedarse marcado como activo aunque ya se hubiera
+    // vuelto a la rejilla.
+    document.querySelectorAll('#switch-vista-categorica button')
+        .forEach(b => b.classList.toggle('activa', b.dataset.valor === vistaCategoricaTrayectoria));
+}
+
+function cambiarVistaCategoricaTrayectoria(valor) {
+    if (valor === vistaCategoricaTrayectoria) return;
+    vistaCategoricaTrayectoria = valor;
+    document.querySelectorAll('#switch-vista-categorica button')
+        .forEach(b => b.classList.toggle('activa', b.dataset.valor === valor));
+    redibujarTrayectoria();
 }
 
 function cambiarTablaTrayectorias(tabla) {
     if (tabla === tablaTrayectorias) return;
     tablaTrayectorias = tabla;
     variableTrayectoria = VARIABLES_POR_TABLA[tabla][0].valor;
+    vistaCategoricaTrayectoria = 'rejilla';
     document.getElementById('pestana-tabla-bases').classList.toggle('activa', tabla === 'bases');
     document.getElementById('pestana-tabla-pensiones').classList.toggle('activa', tabla === 'pensiones');
+    document.getElementById('pestana-tabla-afiliacion').classList.toggle('activa', tabla === 'afiliacion');
     renderizarVariablesTrayectorias();
     actualizarControlesSegunVariable();
     sincronizarTrayectorias();
@@ -921,14 +986,19 @@ function cambiarEstadisticoTrayectorias(valor) {
 }
 
 function tituloEjeYTrayectorias() {
-    return `${variableActivaInfo().etiqueta} (€)`;
+    const info = variableActivaInfo();
+    return `${info.etiqueta} (${info.unidad})`;
 }
 
 // Punto de entrada unico para (re)pintar el grafico segun el tipo de la
-// variable activa - numerica (linea) o categorica (rejilla 2x2 de areas).
+// variable activa (numerica -> linea; categorica -> rejilla 2x2 o 1 panel
+// por categoria, ver vistaCategoricaTrayectoria) y, si es categorica, la
+// vista elegida dentro de ella.
 function redibujarTrayectoria() {
-    if (variableActivaInfo().tipo === 'categorica') dibujarGraficoCategoricoTrayectoria();
-    else dibujarGraficoTrayectorias();
+    const info = variableActivaInfo();
+    if (info.tipo !== 'categorica') { dibujarGraficoTrayectorias(); return; }
+    if (vistaCategoricaTrayectoria === 'categorias') dibujarGraficoPorCategorias();
+    else dibujarGraficoCategoricoTrayectoria();
 }
 
 function dibujarGraficoTrayectorias() {
@@ -1060,6 +1130,64 @@ function dibujarGraficoCategoricoTrayectoria() {
     }
 }
 
+// Trayectoria categorica, vista "Categorias": 1 panel por categoria (union
+// de las vistas en cualquiera de los 4 subgrupos), con las 4 lineas de
+// subcolectivo (color por identidad de subcolectivo, COLOR_SUBGRUPO - igual
+// que en Bases/Pensiones numerico) superpuestas dentro. A diferencia de la
+// rejilla 2x2 no hay limite de paleta que aplicar aqui (1 panel por
+// categoria, no una serie mas apilada en el mismo grafico), asi que se
+// muestran TODAS las categorias que devuelva el backend tal cual (ya
+// limitadas ahi si toca - ver top_n en VARIABLES_CATEGORICAS, p.ej.
+// CNAE2009_CC); con provincia (~53, sin limite a proposito) el panel entero
+// scrollea en vertical (ya es .panel, overflow-y:auto), no hace falta nada
+// especial aqui. La leyenda subcolectivo->color ya vive en el rectangulo de
+// recuentos de arriba, por eso showlegend:false en cada mini-grafico.
+function dibujarGraficoPorCategorias() {
+    if (!ultimoResultadoTrayectorias) return;
+    const cont = document.getElementById('grafico-trayectoria');
+    cont.innerHTML = '<div class="grid-categorias-trayectoria" id="grid-categorias-trayectoria"></div>';
+    const grid = document.getElementById('grid-categorias-trayectoria');
+
+    const categorias = [];
+    const vistas = new Set();
+    for (const nombre of ORDEN_SUBGRUPOS) {
+        for (const cat of ultimoResultadoTrayectorias[nombre].categorias) {
+            if (!vistas.has(cat)) { vistas.add(cat); categorias.push(cat); }
+        }
+    }
+
+    for (const categoria of categorias) {
+        const panel = document.createElement('div');
+        panel.className = 'subpanel-trayectoria-cat';
+        panel.innerHTML = `<div class="subpanel-titulo">${categoria}</div><div class="mini-grafico-cat"></div>`;
+        grid.appendChild(panel);
+
+        const traces = ORDEN_SUBGRUPOS.map(nombre => {
+            const r = ultimoResultadoTrayectorias[nombre];
+            const x = [], y = [];
+            for (const p of r.series[ejeXTrayectorias]) {
+                if (p.n >= N_MINIMO && p.valores[categoria]) { x.push(p.x); y.push(p.valores[categoria].pct); }
+            }
+            return {
+                type: 'scatter', mode: 'lines', name: r.etiqueta,
+                x, y,
+                line: { color: COLOR_SUBGRUPO[nombre], width: 2 },
+                hovertemplate: `${r.etiqueta}<br>%{x}: %{y:.1f}%<extra></extra>`,
+            };
+        });
+
+        Plotly.newPlot(panel.querySelector('.mini-grafico-cat'), traces, {
+            margin: { l: 40, r: 10, t: 8, b: 35 },
+            xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años de vida laboral' : 'Edad' },
+            yaxis: { title: '%', rangemode: 'tozero' },
+            showlegend: false,
+            font: { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26', size: 10 },
+            paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+            height: 220,
+        }, { displayModeBar: false, responsive: true });
+    }
+}
+
 async function sincronizarTrayectorias() {
     const div = document.getElementById('grafico-trayectoria');
     if (!filtrosListos()) {
@@ -1073,20 +1201,25 @@ async function sincronizarTrayectorias() {
     const clave = tablaTrayectorias + ':' + info.valor + ':' + JSON.stringify(cuerpo);
     if (clave === ultimoCuerpoTrayectorias) return; // mismo colectivo+tabla+variable, el grafico ya esta al dia
 
-    const nombreTabla = tablaTrayectorias === 'bases' ? 'Bases de cotización' : 'Pensiones';
+    const NOMBRE_TABLA = { bases: 'Bases de cotización', pensiones: 'Pensiones', afiliacion: 'Afiliación' };
+    const nombreTabla = NOMBRE_TABLA[tablaTrayectorias];
     div.innerHTML = `<p class="aviso-vacio">Calculando trayectorias del colectivo… puede tardar un rato (recorre toda la tabla de ${nombreTabla}).</p>`;
 
+    const miToken = ++tokenTrayectorias;
     const resp = await fetch(info.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cuerpo),
     });
+    if (miToken !== tokenTrayectorias) return; // ya hay una peticion mas nueva en marcha, esta respuesta es vieja
     if (!resp.ok) {
         div.innerHTML = '<p class="aviso-vacio">Error al calcular: ' + (await resp.text()) + '</p>';
         return;
     }
+    const datos = await resp.json();
+    if (miToken !== tokenTrayectorias) return; // idem, por si una peticion mas nueva se adelanto mientras se parseaba la respuesta
     ultimoCuerpoTrayectorias = clave;
-    ultimoResultadoTrayectorias = await resp.json();
+    ultimoResultadoTrayectorias = datos;
     renderizarRecuentosEnTodos(ultimoResultadoTrayectorias);
     redibujarTrayectoria();
 }
