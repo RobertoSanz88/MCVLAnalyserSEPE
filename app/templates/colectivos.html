@@ -24,6 +24,7 @@
           --muted:       #7A9A8E;
           --nav-w:       190px;
           --sidebar-w:   340px;
+          --tablas-w:    230px;
           --header-h:    64px;
           --font:        'Nunito Sans', Calibri, sans-serif;
           --mono:        'Source Code Pro', 'Courier New', monospace;
@@ -93,16 +94,28 @@
                           border-right: 1px solid var(--border); }
         #panel-numericas { flex: 1; min-width: 320px; background: var(--bg2); border-right: 1px solid var(--border); }
         #panel-categoricas { flex: 1; min-width: 320px; background: var(--bg2); }
+        /* Franja vertical propia de Trayectorias, a la derecha de panel-filtros:
+           selector de tabla (Bases/Pensiones/Afiliacion) + variables de esa tabla.
+           Ancho fijo, igual de espiritu que panel-filtros pero mas estrecho -
+           aqui solo caben botones y checkboxes, no formularios. */
+        #panel-tablas-trayectorias { width: var(--tablas-w); flex: none; background: var(--bg2);
+                                       border-right: 1px solid var(--border); }
         #panel-trayectorias { flex: 1; min-width: 320px; background: var(--bg2);
                                 display: flex; flex-direction: column; }
 
-        /* --- Selector de tabla (Bases/Pensiones/Afiliacion) dentro de Trayectorias --- */
-        .selector-tablas { display: flex; gap: 0.5rem; margin-bottom: 0.9rem; flex: none; }
-        .pestana-tabla { padding: 0.5rem 0.9rem; border-radius: 7px; font-size: 0.82rem; font-weight: 700;
+        /* --- Selector de tabla (Bases/Pensiones/Afiliacion), vertical, dentro de panel-tablas-trayectorias --- */
+        .selector-tablas { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.1rem; flex: none; }
+        .pestana-tabla { display: block; text-align: left; padding: 0.5rem 0.9rem; border-radius: 7px;
+                           font-size: 0.82rem; font-weight: 700;
                            border: 1.5px solid var(--border); background: var(--bg); color: var(--muted); }
         .pestana-tabla.activa { background: var(--verde-dk); color: #fff; border-color: var(--verde-dk); }
         .pestana-tabla.deshabilitada { color: var(--border); cursor: default; }
         .pestana-tabla .nota-futuro { display: block; font-size: 0.6rem; font-weight: 400; margin-top: 0.1rem; }
+
+        /* Variables seleccionables de la tabla activa (checkbox, pensado a
+           futuro: hoy Bases solo tiene una, pero el hueco ya queda listo para
+           cuando haya varias que se puedan superponer en el mismo grafico). */
+        #lista-variables-trayectorias label { display: block; font-size: 0.82rem; padding: 0.25rem 0; color: var(--text); }
 
         .controles-trayectorias { display: flex; align-items: center; gap: 1.4rem; margin: 0.9rem 0; flex: none; }
         .controles-trayectorias label { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
@@ -209,7 +222,12 @@
         /* --- Graficos de barras (numericas) --- */
         .leyenda-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 
-        /* --- Recuento absoluto por subcolectivo (numericas, Datos y Graficos) --- */
+        /* --- Recuento absoluto por subcolectivo: nombres + pastilla de cifras --- */
+        /* Rectangulo fijo, con el mismo aspecto en las dos pestanas (Analisis y
+           Trayectorias) - misma clase .recuentos-colectivo en #recuentos-numericas
+           y #recuentos-trayectorias (ver renderizarRecuentosEnTodos), reutilizado
+           tal cual en vez de dos widgets distintos. En Analisis va encima de
+           "Estadisticas numericas"; en Trayectorias, encima del grafico. */
         /* 2 columnas: lista de nombres a la izquierda (1 fila por subcolectivo,
            igual que antes) + una "pastilla" a la derecha con las 4 cifras en
            columna, cada una subrayada del color de su subcolectivo. Separada de
@@ -220,16 +238,15 @@
            (Datos y Graficos) y para los mini-graficos de mas abajo, que ya no
            repiten los nombres. */
         /* justify-content: space-between empuja la columna de la pastilla al borde
-           derecho de esta zona - queda justo debajo del switch Datos/Graficos, que
-           vive en la cabecera de arriba con el mismo alineado a la derecha.
-           align-items: flex-end en vez de stretch: "Personas" ocupa una fila
-           propia encima solo de la pastilla, asi que se alinean por abajo, no por
-           arriba, para que las 4 filas de cifras sigan a la misma altura que las
-           4 de nombres. Los numeros 1-4 delante de cada nombre son la unica
-           referencia numero->subcolectivo (los graficos ya no la repiten, ver
-           dibujarApiladas/dibujarMapaCalor). */
-        #recuentos-numericas { display: flex; align-items: flex-end; justify-content: space-between;
-                              gap: 0.9rem; margin-bottom: 1rem; }
+           derecho de esta zona. align-items: flex-end en vez de stretch:
+           "Personas" ocupa una fila propia encima solo de la pastilla, asi que se
+           alinean por abajo, no por arriba, para que las 4 filas de cifras sigan a
+           la misma altura que las 4 de nombres. Los numeros 1-4 delante de cada
+           nombre son la unica referencia numero->subcolectivo (los graficos ya no
+           la repiten, ver dibujarApiladas/dibujarMapaCalor). */
+        .recuentos-colectivo { display: flex; align-items: flex-end; justify-content: space-between;
+                              gap: 0.9rem; margin-bottom: 1rem; padding: 0.65rem 0.85rem;
+                              background: var(--bg3); border: 1.5px solid var(--border); border-radius: 7px; }
         .lista-recuentos { display: flex; flex-direction: column; justify-content: space-between;
                               gap: 0.32rem; font-size: 0.72rem; color: var(--muted); font-weight: 600;
                               line-height: 1.3; }
@@ -299,7 +316,7 @@
     <div id="app">
         <div id="sidebar">
             <div class="pestana activa" id="pestana-analisis" onclick="cambiarVista('analisis')">Análisis de colectivos</div>
-            <div class="pestana deshabilitada" id="pestana-trayectorias" onclick="cambiarVista('trayectorias')">Trayectorias de colectivo</div>
+            <div class="pestana" id="pestana-trayectorias" onclick="cambiarVista('trayectorias')">Trayectorias de colectivos</div>
             <div class="pestana deshabilitada">Cluster
                 <span class="nota-futuro">(próximamente)</span>
             </div>
@@ -379,6 +396,7 @@
 
             <div id="contenido-analisis" class="contenido-vista">
                 <div id="panel-numericas" class="panel">
+                    <div id="recuentos-numericas" class="recuentos-colectivo"></div>
                     <div class="cabecera-panel">
                         <h2>Estadísticas numéricas</h2>
                         <div class="switch-vista" id="switch-vista-numericas">
@@ -386,7 +404,6 @@
                             <button type="button" data-vista="graficos" onclick="cambiarVistaNumericas('graficos')">Gráficos</button>
                         </div>
                     </div>
-                    <div id="recuentos-numericas"></div>
                     <div id="contenedor-numericas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
                 </div>
 
@@ -403,13 +420,21 @@
             </div>
 
             <div id="contenido-trayectorias" class="contenido-vista" style="display:none">
-                <div id="panel-trayectorias" class="panel">
+                <div id="panel-tablas-trayectorias" class="panel">
+                    <h2>Tabla y variable</h2>
                     <div class="selector-tablas">
                         <div class="pestana-tabla activa">Bases de cotización</div>
                         <div class="pestana-tabla deshabilitada">Pensiones<span class="nota-futuro">(próximamente)</span></div>
                         <div class="pestana-tabla deshabilitada">Afiliación<span class="nota-futuro">(próximamente)</span></div>
                     </div>
-                    <div id="recuentos-trayectorias"></div>
+                    <h3>Variables</h3>
+                    <div id="lista-variables-trayectorias">
+                        <label><input type="checkbox" checked disabled> Base de cotización anual</label>
+                    </div>
+                </div>
+
+                <div id="panel-trayectorias" class="panel">
+                    <div id="recuentos-trayectorias" class="recuentos-colectivo"></div>
                     <div class="controles-trayectorias">
                         <label>Eje X:
                             <select id="select-eje-x" onchange="cambiarEjeXTrayectorias(this.value)">
@@ -422,7 +447,7 @@
                             <button type="button" data-valor="mediana" onclick="cambiarEstadisticoTrayectorias('mediana')">Mediana</button>
                         </div>
                     </div>
-                    <div id="grafico-bases"></div>
+                    <div id="grafico-bases"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en el panel de la izquierda para ver las trayectorias del colectivo.</p></div>
                 </div>
             </div>
         </div>
@@ -507,8 +532,6 @@ let contracolectivo = { 1: true, 2: true };
 let vistaActiva = 'analisis';
 
 function cambiarVista(vista) {
-    const pestana = document.getElementById('pestana-' + vista);
-    if (pestana.classList.contains('deshabilitada')) return; // trayectorias sin filtro1+filtro2 listos: no navegable
     if (vista === vistaActiva) return;
     vistaActiva = vista;
 
@@ -517,7 +540,19 @@ function cambiarVista(vista) {
     document.getElementById('contenido-analisis').style.display = vista === 'analisis' ? 'flex' : 'none';
     document.getElementById('contenido-trayectorias').style.display = vista === 'trayectorias' ? 'flex' : 'none';
 
-    if (vista === 'trayectorias') sincronizarTrayectorias();
+    // Trayectorias es navegable desde el principio (el usuario decide en que
+    // pestana define el colectivo, da igual cual - panel-filtros es comun a
+    // las dos), pero sin Filtro 1 + Filtro 2 listos no hay colectivo que pedir
+    // todavia: se queda con el aviso-vacio inicial de #grafico-bases.
+    if (vista === 'trayectorias' && filtrosListos()) sincronizarTrayectorias();
+}
+
+// Misma condicion que ya usaba Calcular: cruce de ejes completo -> ya hay una
+// lista de IPFs por subcolectivo, aunque no se haya pulsado Calcular.
+function filtrosListos() {
+    const ejeA = filtros[1] && (contracolectivo[1] || filtros[3]);
+    const ejeB = filtros[2] && (contracolectivo[2] || filtros[4]);
+    return !!(ejeA && ejeB);
 }
 
 function toggleContracolectivo(n) {
@@ -545,19 +580,17 @@ function toggleContracolectivo(n) {
 }
 
 // Unico punto que reacciona a cualquier cambio en filtros/contracolectivo:
-// habilita Calcular Y la pestana "Trayectorias de colectivo" (misma condicion
-// - en cuanto el cruce de ejes esta completo ya hay una lista de IPFs por
-// subcolectivo, no hace falta esperar a Calcular para eso) y dispara el
-// recuento en vivo. Si ya se esta viendo la pestana de Trayectorias cuando
-// cambian los filtros, tambien refresca su grafico (sincronizarTrayectorias
-// no repite la peticion si el colectivo no ha cambiado de verdad).
+// habilita Calcular y dispara el recuento en vivo (en cuanto el cruce de ejes
+// esta completo ya hay una lista de IPFs por subcolectivo, no hace falta
+// esperar a Calcular para eso). Si ya se esta viendo la pestana de
+// Trayectorias cuando cambian los filtros, tambien refresca su grafico
+// (sincronizarTrayectorias no repite la peticion si el colectivo no ha
+// cambiado de verdad). La pestana "Trayectorias de colectivos" en si ya no se
+// deshabilita nunca - ver [[cambiarVista]] y filtrosListos().
 function actualizarEstadoFiltros() {
-    const ejeA = filtros[1] && (contracolectivo[1] || filtros[3]);
-    const ejeB = filtros[2] && (contracolectivo[2] || filtros[4]);
-    const listo = !!(ejeA && ejeB);
+    const listo = filtrosListos();
 
     document.getElementById('boton-calcular').disabled = !listo;
-    document.getElementById('pestana-trayectorias').classList.toggle('deshabilitada', !listo);
 
     actualizarRecuentosEnVivo(listo);
     if (listo && vistaActiva === 'trayectorias') sincronizarTrayectorias();
