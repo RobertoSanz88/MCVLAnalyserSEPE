@@ -49,6 +49,26 @@
         .badge { border: 1px solid rgba(255,255,255,0.3); color: rgba(255,255,255,0.85);
                  border-radius: 12px; padding: 0.15rem 0.65rem; font-size: 0.65rem; font-weight: 600; }
 
+        /* --- Aviso flotante (sustituye a alert()) --- */
+        /* alert()/confirm() nativos muestran el origen ("127.0.0.1:8000 dice"),
+           algo que no se puede personalizar via JS (lo pinta el navegador, no
+           la pagina) y ademas bloquean el hilo entero mientras estan abiertos.
+           Este aviso propio, con el mismo estilo que el resto de la app,
+           sustituye a los alert() de validacion/errores - ver mostrarAviso(). */
+        #aviso-flotante { position: fixed; top: calc(var(--header-h) + 0.8rem); left: 50%;
+                           transform: translateX(-50%); z-index: 1000; max-width: 480px;
+                           background: var(--bg2); border: 1.5px solid var(--border); border-radius: 8px;
+                           padding: 0.7rem 0.9rem; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+                           font-size: 0.85rem; display: none; align-items: flex-start; gap: 0.6rem; }
+        #aviso-flotante.visible { display: flex; }
+        #aviso-flotante.error { border-color: #C0392B; }
+        #aviso-flotante .aviso-texto { flex: 1; }
+        #aviso-flotante.error .aviso-texto { color: #C0392B; }
+        #aviso-flotante .aviso-cerrar { background: none; border: none; padding: 0; margin: 0;
+                                          color: var(--muted); font-size: 1rem; font-weight: 700;
+                                          line-height: 1; box-shadow: none; }
+        #aviso-flotante .aviso-cerrar:hover:not(:disabled) { color: var(--text); border-color: transparent; }
+
         /* --- Layout general --- */
         #app { flex: 1; display: flex; overflow: hidden; }
 
@@ -212,11 +232,19 @@
         .bloque-filtro .colectivo { margin: 0.2rem 0; }
         .bloque-filtro .colectivo b { color: var(--azul-marino); }
 
-        #boton-calcular { margin-top: 1.1rem; width: 100%; background: var(--verde-dk); color: #fff;
+        /* Calcular y Exportar viven en el rail de pestanas (#sidebar), no en
+           panel-filtros: son acciones compartidas por Analisis y Trayectorias
+           (una sola definicion de colectivo para las dos, ver vistaActiva),
+           ancladas abajo del todo con margin-top:auto. */
+        #bloque-acciones-sidebar { margin-top: auto; padding-right: 0.6rem;
+                                     display: flex; flex-direction: column; gap: 0.5rem; }
+        #boton-calcular { width: 100%; background: var(--verde-dk); color: #fff;
                            border: none; padding: 0.7rem; font-weight: 800; letter-spacing: 0.02em;
                            box-shadow: 0 4px 14px rgba(0,129,90,0.32); }
         #boton-calcular:hover:not(:disabled) { background: var(--verde-acc); box-shadow: 0 6px 18px rgba(4,160,110,0.38); color: #fff; }
         #boton-calcular:disabled { background: var(--border); color: var(--muted); box-shadow: none; cursor: not-allowed; }
+        #boton-exportar { width: 100%; font-size: 0.78rem; padding: 0.55rem 0.4rem; }
+        #boton-exportar:disabled { color: var(--border); border-color: var(--border); cursor: not-allowed; }
 
         /* --- Tabla numericas --- */
         /* Tamano de los datos (no de las cabeceras, que ya tienen su propio font-size mas
@@ -336,12 +364,22 @@
         </div>
     </header>
 
+    <div id="aviso-flotante">
+        <span class="aviso-texto" id="aviso-flotante-texto"></span>
+        <button type="button" class="aviso-cerrar" onclick="ocultarAviso()">&times;</button>
+    </div>
+
     <div id="app">
         <div id="sidebar">
             <div class="pestana activa" id="pestana-analisis" onclick="cambiarVista('analisis')">Análisis de colectivos</div>
             <div class="pestana" id="pestana-trayectorias" onclick="cambiarVista('trayectorias')">Trayectorias de colectivos</div>
             <div class="pestana deshabilitada">Cluster
                 <span class="nota-futuro">(próximamente)</span>
+            </div>
+
+            <div id="bloque-acciones-sidebar">
+                <button id="boton-calcular" onclick="alPulsarCalcular()" disabled>Calcular</button>
+                <button id="boton-exportar" onclick="exportarExcel()" disabled>Exportar Excel</button>
             </div>
         </div>
 
@@ -409,12 +447,6 @@
                     <div id="resumen-filtro4" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
                 </div>
 
-                <button id="boton-calcular" onclick="calcular()" disabled>Calcular</button>
-                <!-- Exportar a Excel y Ver trayectorias vivian aqui como botones - ya no.
-                     Trayectorias es ahora una pestana propia (ver #sidebar); Exportar se
-                     retira de aqui a peticion del usuario, pendiente de decidir su nuevo
-                     sitio (exportarExcel() se queda definida sin usar, lista para
-                     re-engancharse en cuanto se decida donde). -->
             </div>
 
             <div id="contenido-analisis" class="contenido-vista">
@@ -477,13 +509,28 @@
                         o dos contratos concurrentes con distinto régimen): los porcentajes de cada punto pueden sumar más de 100%,
                         no es una distribución exclusiva.
                     </p>
-                    <div id="grafico-trayectoria"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en el panel de la izquierda para ver las trayectorias del colectivo.</p></div>
+                    <div id="grafico-trayectoria"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular, para ver las trayectorias del colectivo.</p></div>
                 </div>
             </div>
         </div>
     </div>
 
 <script>
+// Sustituye a alert(): no bloquea el hilo (un alert() nativo deja la pagina
+// congelada mientras esta abierto) y no muestra el origen "127.0.0.1:8000
+// dice" que pinta el navegador y que no se puede personalizar via JS.
+// tipo: 'info' (por defecto, borde neutro) o 'error' (borde/texto rojo).
+function mostrarAviso(mensaje, tipo) {
+    const div = document.getElementById('aviso-flotante');
+    document.getElementById('aviso-flotante-texto').textContent = mensaje;
+    div.classList.toggle('error', tipo === 'error');
+    div.classList.add('visible');
+}
+
+function ocultarAviso() {
+    document.getElementById('aviso-flotante').classList.remove('visible');
+}
+
 const ORDEN_SUBGRUPOS = ["filtro1_si__filtro2_si", "filtro1_si__filtro2_no",
                           "filtro1_no__filtro2_si", "filtro1_no__filtro2_no"];
 
@@ -572,9 +619,10 @@ function cambiarVista(vista) {
 
     // Trayectorias es navegable desde el principio (el usuario decide en que
     // pestana define el colectivo, da igual cual - panel-filtros es comun a
-    // las dos); sincronizarTrayectorias() ya comprueba internamente si hay
-    // colectivo, si no deja el aviso-vacio de #grafico-trayectoria.
-    if (vista === 'trayectorias') sincronizarTrayectorias();
+    // las dos). Ya no se recalcula sola al entrar: igual que en Analisis, el
+    // colectivo (recuentos) se ve al momento pero el grafico se queda como
+    // estaba (o con el aviso inicial) hasta que se pulse Calcular - ver
+    // alPulsarCalcular().
 }
 
 // Misma condicion que ya usaba Calcular: cruce de ejes completo -> ya hay una
@@ -610,20 +658,20 @@ function toggleContracolectivo(n) {
 }
 
 // Unico punto que reacciona a cualquier cambio en filtros/contracolectivo:
-// habilita Calcular y dispara el recuento en vivo (en cuanto el cruce de ejes
-// esta completo ya hay una lista de IPFs por subcolectivo, no hace falta
-// esperar a Calcular para eso). Si ya se esta viendo la pestana de
-// Trayectorias cuando cambian los filtros, tambien refresca su grafico
-// (sincronizarTrayectorias no repite la peticion si el colectivo no ha
-// cambiado de verdad). La pestana "Trayectorias de colectivos" en si ya no se
+// habilita Calcular/Exportar y dispara el recuento en vivo (en cuanto el
+// cruce de ejes esta completo ya hay una lista de IPFs por subcolectivo, no
+// hace falta esperar a Calcular para eso - ni en Analisis ni en Trayectorias,
+// ver renderizarRecuentosEnTodos). El calculo pesado (estadisticas de
+// Analisis o trayectoria) NO se dispara solo: espera siempre a
+// alPulsarCalcular(). La pestana "Trayectorias de colectivos" en si ya no se
 // deshabilita nunca - ver [[cambiarVista]] y filtrosListos().
 function actualizarEstadoFiltros() {
     const listo = filtrosListos();
 
     document.getElementById('boton-calcular').disabled = !listo;
+    document.getElementById('boton-exportar').disabled = !listo;
 
     actualizarRecuentosEnVivo(listo);
-    if (listo && vistaActiva === 'trayectorias') sincronizarTrayectorias();
 }
 
 // Contador monotono: si el usuario cambia los filtros varias veces seguidas,
@@ -710,11 +758,11 @@ function aplicarFiltro() {
     if (columnaSeleccionada.tipo === 'numerica') {
         const operador = document.getElementById('operador-numerico').value;
         const valor = parseFloat(document.getElementById('valor-numerico').value);
-        if (isNaN(valor)) { alert('Introduce un valor numérico.'); return; }
+        if (isNaN(valor)) { mostrarAviso('Introduce un valor numérico.', 'error'); return; }
         filtro = { columna: columnaSeleccionada.nombre, tipo: 'numerica', operador, valor };
     } else {
         const marcadas = [...document.querySelectorAll('#lista-categorias input:checked')].map(i => i.value);
-        if (marcadas.length === 0) { alert('Marca al menos una categoría.'); return; }
+        if (marcadas.length === 0) { mostrarAviso('Marca al menos una categoría.', 'error'); return; }
         filtro = { columna: columnaSeleccionada.nombre, tipo: 'categorica', categorias: marcadas };
     }
 
@@ -809,23 +857,35 @@ function cuerpoPeticion() {
 }
 
 async function calcular() {
-    const boton = document.getElementById('boton-calcular');
-    boton.disabled = true;
-    boton.textContent = 'Calculando...';
-
     const cuerpo = cuerpoPeticion();
     const resp = await fetch('/colectivos/subgrupos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cuerpo),
     });
-    boton.disabled = false;
-    boton.textContent = 'Calcular';
-
-    if (!resp.ok) { alert('Error al calcular: ' + (await resp.text())); return; }
+    if (!resp.ok) { mostrarAviso('Error al calcular: ' + (await resp.text()), 'error'); return; }
     ultimoResultado = await resp.json();
     renderizarNumericas(ultimoResultado.subgrupos);
     renderizarCategoricas(ultimoResultado.subgrupos);
+}
+
+// Unico onclick de #boton-calcular, compartido por las 2 pestanas (ver
+// #bloque-acciones-sidebar): Analisis dispara calcular() (estadisticas
+// numericas/categoricas del colectivo), Trayectorias dispara
+// sincronizarTrayectorias() (la trayectoria de la tabla/variable activa). El
+// estado del boton (disabled/texto) se gestiona aqui, no dentro de cada
+// funcion, porque ahora es el mismo boton para las dos.
+async function alPulsarCalcular() {
+    const boton = document.getElementById('boton-calcular');
+    boton.disabled = true;
+    boton.textContent = 'Calculando...';
+    try {
+        if (vistaActiva === 'analisis') await calcular();
+        else await sincronizarTrayectorias();
+    } finally {
+        boton.disabled = false;
+        boton.textContent = 'Calcular';
+    }
 }
 
 // --- Pestana "Trayectorias de colectivos" (Bases de cotizacion / Pensiones) ---
@@ -930,7 +990,8 @@ function cambiarVariableTrayectoria(valor) {
     vistaCategoricaTrayectoria = 'rejilla';
     renderizarVariablesTrayectorias();
     actualizarControlesSegunVariable();
-    sincronizarTrayectorias();
+    // No se recalcula sola: como con los filtros, hace falta pulsar Calcular
+    // (ver alPulsarCalcular) - el grafico se queda como estaba hasta entonces.
 }
 
 // Media/Mediana y el switch Rejilla/Categorias son mutuamente excluyentes -
@@ -971,7 +1032,7 @@ function cambiarTablaTrayectorias(tabla) {
     document.getElementById('pestana-tabla-afiliacion').classList.toggle('activa', tabla === 'afiliacion');
     renderizarVariablesTrayectorias();
     actualizarControlesSegunVariable();
-    sincronizarTrayectorias();
+    // No se recalcula sola - ver cambiarVariableTrayectoria/alPulsarCalcular.
 }
 
 function cambiarEjeXTrayectorias(valor) {
@@ -1189,10 +1250,13 @@ function dibujarGraficoPorCategorias() {
     }
 }
 
+// Solo se llama desde alPulsarCalcular (boton Calcular) - ya no se dispara
+// sola al cambiar filtro/tabla/variable, ver actualizarEstadoFiltros,
+// cambiarTablaTrayectorias y cambiarVariableTrayectoria.
 async function sincronizarTrayectorias() {
     const div = document.getElementById('grafico-trayectoria');
     if (!filtrosListos()) {
-        div.innerHTML = '<p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en el panel de la izquierda para ver las trayectorias del colectivo.</p>';
+        div.innerHTML = '<p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular, para ver las trayectorias del colectivo.</p>';
         return;
     }
 
@@ -1737,7 +1801,7 @@ async function exportarExcel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cuerpoPeticion()),
     });
-    if (!resp.ok) { alert('Error al exportar: ' + (await resp.text())); return; }
+    if (!resp.ok) { mostrarAviso('Error al exportar: ' + (await resp.text()), 'error'); return; }
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
