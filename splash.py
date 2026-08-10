@@ -15,7 +15,9 @@ import urllib.request
 from ctypes import wintypes
 from pathlib import Path
 
-URL_SALUD = "http://127.0.0.1:8000/health"
+from config import get_puerto
+
+URL_SALUD = f"http://127.0.0.1:{get_puerto()}/health"
 IMAGEN = Path(__file__).parent / "app" / "static" / "splash.png"
 COLOR_CLAVE = "#010203"  # fuera de la paleta real del icono: se vuelve transparente
 INTERVALO_MS = 300

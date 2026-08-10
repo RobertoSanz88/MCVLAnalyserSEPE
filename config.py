@@ -31,6 +31,23 @@ def _pedir_carpeta_parquet() -> Path:
     return Path(carpeta)
 
 
+PUERTO_POR_DEFECTO = 8000
+
+
+def get_puerto() -> int:
+    """Puerto donde arranca el servidor. 8000 salvo que el usuario tenga
+    "puerto" en config.json - pensado para el caso (visto en el PC
+    corporativo) de que el 8000 ya este ocupado de forma permanente por otro
+    servicio de la empresa (wgssSigCaptX_Service.exe, firma digital) y no se
+    pueda liberar. Sin wizard propio: se edita config.json a mano si hace
+    falta, es un caso raro que no justifica una pantalla nueva."""
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("puerto", PUERTO_POR_DEFECTO)
+    return PUERTO_POR_DEFECTO
+
+
 def get_parquet_dir() -> Path:
     """Devuelve la carpeta de Parquet del usuario, pidiendola la primera vez."""
     if CONFIG_FILE.exists():

@@ -30,8 +30,15 @@ pause
 exit /b 1
 
 :arrancar
+REM Puerto real (normalmente 8000, salvo que config.json diga otro - ver
+REM config.get_puerto): se resuelve aqui y se pasa por variable de entorno a
+REM esperar_y_abrir.bat, que es .bat puro y no puede leer config.json solo.
+set PUERTO=
+for /f %%P in ('python -c "from config import get_puerto; print(get_puerto())" 2^>nul') do set PUERTO=%%P
+if not defined PUERTO set PUERTO=8000
+
 echo.
-echo Arrancando MCVL Analyser SEPE en http://127.0.0.1:8000/ ...
+echo Arrancando MCVL Analyser SEPE en http://127.0.0.1:%PUERTO%/ ...
 REM El navegador se abre solo cuando el servidor ya responde de verdad (ver
 REM esperar_y_abrir.bat) - abrirlo aqui a ciegas fallaba en PCs donde las
 REM importaciones de python tardan varios segundos (antivirus corporativo).
