@@ -168,11 +168,21 @@ def get_connection() -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(database=":memory:")
     for view_name, (filename, columns) in TABLES.items():
         parquet_path = PARQUET_DIR / filename
+        # "src." delante de cada columna cruda (no solo _quote(raw)) a
+        # proposito: sin cualificar, columnas como "Reg_cotiz_ppal" AS
+        # reg_cotiz_ppal (mismas letras, solo cambia mayus/minus) chocan con
+        # un bug real del binder de DuckDB (regresion desde v1.1.1,
+        # duckdb/duckdb#14275) que las trata como una autorreferencia
+        # circular y lanza BinderException "cannot be referenced before it
+        # is defined" - visto en produccion con duckdb mas antiguo que el
+        # 1.5.5 de este entorno de desarrollo (que no lo reproduce). Requiere
+        # duckdb>=1.5.5 (ver requirements.txt) para evitarlo aunque alguien
+        # quite esta cualificacion sin darse cuenta.
         select_list = ", ".join(
-            f"{_quote(raw)} AS {clean}" for raw, clean in columns.items()
+            f"src.{_quote(raw)} AS {clean}" for raw, clean in columns.items()
         )
         con.execute(
             f"CREATE OR REPLACE VIEW {view_name} AS "
-            f"SELECT {select_list} FROM read_parquet('{parquet_path.as_posix()}')"
+            f"SELECT {select_list} FROM read_parquet('{parquet_path.as_posix()}') AS src"
         )
     return con

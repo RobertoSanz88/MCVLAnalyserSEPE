@@ -1,7 +1,7 @@
 pandas
 numpy
 pyarrow
-duckdb
+duckdb>=1.5.5
 fastapi
 uvicorn
 jinja2
