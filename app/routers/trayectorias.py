@@ -234,16 +234,17 @@ def trayectorias_colectivo_bases(request: Request, body: SubgruposRequest):
             SELECT 'anos_vl' AS eje, anos_vl AS x, AVG(bases_anuales), MEDIAN(bases_anuales), COUNT(*)
             FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2
             UNION ALL
-            -- edad >= 18 (no >= 0): investigado el 2026-08-07 por que aparecian
-            -- edades menores. El 96,5% de las filas con edad<18 son edad 16-17
-            -- (trabajo legal en Espana desde los 16, dato real, no error); el
-            -- resto es una cola suave hasta valores negativos (~5.700 filas,
-            -- 0,02% del total) - unos pocos casos de fecha_nacimiento o
-            -- ano_cotizacion erroneos en el dato MCVL, no un fallo de esta
-            -- query. Decision explicita del usuario: no representar nada por
-            -- debajo de 18 en ningun caso, exista o no.
+            -- edad >= 16 (no >= 0): investigado el 2026-08-07 por que aparecian
+            -- edades menores de 18. El 96,5% de esas filas son edad 16-17
+            -- (trabajo legal en Espana desde los 16, dato real, no error) -
+            -- se cortaba en 18 igualmente por decision explicita del usuario
+            -- en aquel momento; corregido el 2026-08-10 a 16, el limite legal
+            -- real, para no ocultar esos dos anyos legitimos. El resto (cola
+            -- suave hasta valores negativos, ~5.700 filas, 0,02% del total -
+            -- fecha_nacimiento o ano_cotizacion erroneos en el dato MCVL, no
+            -- un fallo de esta query) se sigue descartando con el corte en 16.
             SELECT 'edad' AS eje, edad AS x, AVG(bases_anuales), MEDIAN(bases_anuales), COUNT(*)
-            FROM unido WHERE edad >= 18 GROUP BY 1, 2
+            FROM unido WHERE edad >= 16 GROUP BY 1, 2
             ORDER BY 1, 2
             """,
             c["params"],
@@ -302,10 +303,10 @@ def trayectorias_colectivo_pensiones(request: Request, body: SubgruposRequest):
             SELECT 'anos_vl' AS eje, anos_vl AS x, AVG(valor), MEDIAN(valor), COUNT(*)
             FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2
             UNION ALL
-            -- edad >= 18: mismo criterio ya aplicado en Bases de cotizacion
+            -- edad >= 16: mismo criterio ya aplicado en Bases de cotizacion
             -- (ver /trayectorias/colectivo/bases), misma naturaleza de dato.
             SELECT 'edad' AS eje, edad AS x, AVG(valor), MEDIAN(valor), COUNT(*)
-            FROM unido WHERE edad >= 18 GROUP BY 1, 2
+            FROM unido WHERE edad >= 16 GROUP BY 1, 2
             ORDER BY 1, 2
             """,
             c["params"],
@@ -399,7 +400,7 @@ def trayectorias_colectivo_afiliacion(request: Request, body: SubgruposRequest):
             FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2
             UNION ALL
             SELECT 'edad' AS eje, edad AS x, AVG(valor), MEDIAN(valor), COUNT(*)
-            FROM unido WHERE edad >= 18 GROUP BY 1, 2
+            FROM unido WHERE edad >= 16 GROUP BY 1, 2
             ORDER BY 1, 2
             """,
             c["params"],
@@ -501,15 +502,15 @@ def _trayectoria_categorica_periodica(con, condiciones: dict, info: dict) -> dic
                 SELECT 'anos_vl' AS eje, anos_vl AS x, COUNT(DISTINCT ipf) AS n
                 FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2
                 UNION ALL
-                -- edad >= 18: mismo criterio que Bases/Pensiones (numerico).
+                -- edad >= 16: mismo criterio que Bases/Pensiones (numerico).
                 SELECT 'edad' AS eje, edad AS x, COUNT(DISTINCT ipf) AS n
-                FROM unido WHERE edad >= 18 GROUP BY 1, 2
+                FROM unido WHERE edad >= 16 GROUP BY 1, 2
             ), por_categoria AS (
                 SELECT 'anos_vl' AS eje, anos_vl AS x, categoria, COUNT(DISTINCT ipf) AS n_categoria
                 FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2, 3
                 UNION ALL
                 SELECT 'edad' AS eje, edad AS x, categoria, COUNT(DISTINCT ipf) AS n_categoria
-                FROM unido WHERE edad >= 18 GROUP BY 1, 2, 3
+                FROM unido WHERE edad >= 16 GROUP BY 1, 2, 3
             )
             SELECT t.eje, t.x, t.n, pc.categoria, pc.n_categoria
             FROM total_por_x t
@@ -602,13 +603,13 @@ def _trayectoria_categorica_afiliacion(con, condiciones: dict, info: dict) -> di
                 FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2
                 UNION ALL
                 SELECT 'edad' AS eje, edad AS x, COUNT(DISTINCT ipf) AS n
-                FROM unido WHERE edad >= 18 GROUP BY 1, 2
+                FROM unido WHERE edad >= 16 GROUP BY 1, 2
             ), por_categoria AS (
                 SELECT 'anos_vl' AS eje, anos_vl AS x, categoria, COUNT(DISTINCT ipf) AS n_categoria
                 FROM unido WHERE anos_vl >= 0 GROUP BY 1, 2, 3
                 UNION ALL
                 SELECT 'edad' AS eje, edad AS x, categoria, COUNT(DISTINCT ipf) AS n_categoria
-                FROM unido WHERE edad >= 18 GROUP BY 1, 2, 3
+                FROM unido WHERE edad >= 16 GROUP BY 1, 2, 3
             )
             SELECT t.eje, t.x, t.n, pc.categoria, pc.n_categoria
             FROM total_por_x t

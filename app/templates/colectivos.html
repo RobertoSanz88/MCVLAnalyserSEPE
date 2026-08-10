@@ -271,7 +271,13 @@
         .aviso-vacio { color: var(--muted); font-style: italic; font-size: 0.85rem; }
 
         /* --- Graficos de barras (numericas) --- */
-        .leyenda-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+        /* display:inline-block imprescindible aqui: es un <span>, y un inline
+           normal ignora width/height por completo - sin esto el swatch
+           "existe" en el DOM pero ocupa 0x0 y no se ve ningun color (bug
+           real visto en la leyenda de Rejilla 2x2 de trayectorias
+           categoricas, que no tenia el override que si tenia .lista-recuentos
+           mas abajo). */
+        .leyenda-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 
         /* --- Recuento absoluto por subcolectivo: nombres + pastilla de cifras --- */
         /* Rectangulo fijo, con el mismo aspecto en las dos pestanas (Analisis y
@@ -303,7 +309,7 @@
                               line-height: 1.3; }
         .lista-recuentos .numero-subgrupo { display: inline-block; width: 1em; font-weight: 800;
                               color: var(--text); }
-        .lista-recuentos .leyenda-swatch { display: inline-block; vertical-align: middle; margin-right: 0.35rem; }
+        .lista-recuentos .leyenda-swatch { vertical-align: middle; margin-right: 0.35rem; }
         .columna-pastilla { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
         .titulo-pastilla { font-size: 0.65rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
                               letter-spacing: 0.03em; }
