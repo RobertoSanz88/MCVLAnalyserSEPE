@@ -333,11 +333,32 @@ def extraer_grupo_a(con, parquet_folder):
 # ---------------------------------------------------------------------------
 
 # Tipos de contrato excluidos al buscar el primer empleo "significativo" (parciales,
-# practicas, formacion...) - mismo listado que el cuaderno.
+# practicas, formacion...) - lista original identica al cuaderno, ampliada el
+# 2026-08-20 tras verificar codigo a codigo contra la tabla completa de TIPO_CONTRATO
+# de la guia MCVL (existian huecos reales, no solo teoricos: afecta a 14.049 personas
+# verificado con datos reales).
 TIPOS_CONTRATO_A_ELIMINAR = (
     3, 4, 6, 23, 24, 25, 29, 34, 63, 81, 89, 95, 98, 200, 209, 230, 231, 239, 241, 250, 251, 252,
     253, 254, 255, 256, 257, 289, 500, 501, 502, 503, 508, 510, 518, 520, 530, 531, 540, 541, 550,
     551, 552, 557, 26, 36, 46, 58, 420, 7, 27, 37, 47, 85, 97, 404, 421,
+    # Formacion/practicas/aprendizaje: familia "FORM.RD.1992/84"/"FOR.RD.1992.MIN"
+    # (variantes por edad/FP/fecha), 087 (APRENDIZAJE. DURACION DETERMINADA, sucesora
+    # 421 que si estaba en la lista original) y 096 (PRACTICAS discapacidad,
+    # sucesora 420, tambien ya en la lista) - confirmados literalmente en la guia,
+    # faltaban en el listado original.
+    53, 54, 55, 56, 57, 66, 67, 68, 77, 78, 79, 87, 96,
+    # Tiempo parcial identificado por "T.PAR"/"T.P." en la denominacion de la guia:
+    # familia INTER.SUST.EXC (sustitucion por excedencia familiar/maternidad, variantes
+    # a tiempo parcial de 1/2/3 anyos) y otros sueltos (038, 064/065, 102, 186) que
+    # tambien faltaban.
+    38, 64, 65, 73, 74, 76, 83, 84, 93, 94, 102, 186,
+    # Codigos deprecados cuya clave sucesora se bifurca en completo/parcial (005->441
+    # /541, 009->130/230, 016->410/510, 017->100/200, 049->100/200, 059->130/230,
+    # 069/070/071->100/200) - mismo criterio de precaucion que ya se aplicaba al 029
+    # (misma bifurcacion, ya en la lista original): al no poder saber si un episodio
+    # historico concreto era completo o parcial, se excluyen por consistencia con el
+    # 029 (decision explicita del usuario, 2026-08-20).
+    5, 9, 16, 17, 49, 59, 69, 70, 71,
 )
 DURACION_MINIMA_EMPLEO_US = 270 * 86_400_000_000  # 270 dias en microsegundos
 
