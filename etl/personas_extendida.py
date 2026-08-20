@@ -399,17 +399,29 @@ def extraer_grupo_b(con, parquet_folder):
     """).fetchdf()
 
     # Fecha_1er_Empleo_Signif / Duracion_1er_Empleo_Signif / Grupo_cotiz_1er_Empleo_Signif:
-    # primer episodio (por fecha de alta) que no sea de los tipos excluidos y dure >= 270 dias
+    # primer episodio (por fecha de alta) que no sea de los tipos excluidos y dure >= 270 dias.
+    # Desempate (2026-08-20, pospuesto varias sesiones): sin el, 5.371 personas tenian mas de
+    # un episodio candidato con la misma fecha_alta minima, y el resultado de DuckDB no estaba
+    # garantizado que fuera estable. Igual criterio que Grupo_Ultimo_Empleo (mas arriba): fecha
+    # primero, luego duracion DESC (el episodio "significativo" mas largo entre los empatados,
+    # coherente con que la variable ya exige duracion minima), y CCC_PPAL como ultimo criterio
+    # deterministico (mismo patron que el "episodio dominante" de NUM_TRABAJS_CC_2 en
+    # app/routers/trayectorias.py). Tras los 3 niveles quedan 550 personas genuinamente
+    # ambiguas (empatan tambien en duracion y CCC_PPAL) - residual aceptado, mismo espiritu que
+    # los 2.717 casos irresolubles de Grupo_Ultimo_Empleo.
     df_signif = con.execute(f"""
         WITH filtrado AS (
             SELECT "01 IPF" AS ipf, "03 GRU_COTIZACION" AS grupo,
-                   "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta, "DURACION_EMPLEO" AS dur
+                   "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta, "DURACION_EMPLEO" AS dur,
+                   "20 CCC_PPAL" AS ccc_ppal
             FROM read_parquet('{afiliacion}')
             WHERE "04 TIPO_CONTRATO" NOT IN ({tipos_sql})
               AND "DURACION_EMPLEO" >= {DURACION_MINIMA_EMPLEO_US}
         ), ranked AS (
             SELECT ipf, grupo, fecha_alta, dur,
-                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY fecha_alta ASC) AS rn
+                   ROW_NUMBER() OVER (
+                       PARTITION BY ipf ORDER BY fecha_alta ASC, dur DESC, ccc_ppal ASC
+                   ) AS rn
             FROM filtrado
         )
         SELECT ipf AS "01 IPF", fecha_alta AS "Fecha_1er_Empleo_Signif",
