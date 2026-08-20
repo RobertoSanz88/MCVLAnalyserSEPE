@@ -630,14 +630,25 @@ def extraer_grupo_d(con, parquet_folder):
     # continua de cobro. Se replica el bucle del cuaderno (que examina hasta 5 episodios y va
     # quitando pares consecutivos que coinciden) con un AND acumulativo por ventana: la racha
     # se corta en el primer episodio (de los 5 mas recientes) que no tenga TRL de cobro.
-    # NULL para quien no esta cobrando ahora mismo - decision explicita del usuario de no
-    # rellenar con un texto tipo "No cobra del SEPE en la actualidad" en el propio dato
-    # (mezclaria fecha y texto en la misma columna, forzando pandas a "object" y rompiendo
-    # o degradando la escritura a Parquet) - ese texto, si se quiere, es cosa del frontend.
+    # BUG REAL corregido 2026-08-20 (encontrado por el usuario, verificado con ejemplos reales
+    # - IPFs con su ultima prestacion cerrada en 1999, 2014, 2023...): la primera version de
+    # este fix solo miraba si el TRL coincidia, sin comprobar si el episodio mas reciente de
+    # la persona seguia ABIERTO (fecha_baja=2099) o ya se habia cerrado hace anyos/decadas -
+    # de las 172.644 personas con un valor, solo 40.606 (23,5%) cobraban de verdad ahora mismo,
+    # el resto (132.038) tenia su ultima prestacion/subsidio ya cerrada, algunas desde hace mas
+    # de 20 anyos. Ahora se exige ademas que el episodio MAS RECIENTE (rn=1, no solo el que
+    # empieza la racha) siga con fecha_baja=2099 - asi el nombre (en presente, "cobrando...
+    # desde esta fecha") coincide con lo que realmente mide. NULL para quien no esta cobrando
+    # ahora mismo (incluye a los 132.038 recolocados como NULL) - decision explicita del
+    # usuario de no rellenar con un texto tipo "No cobra del SEPE en la actualidad" en el
+    # propio dato (mezclaria fecha y texto en la misma columna, forzando pandas a "object" y
+    # rompiendo o degradando la escritura a Parquet) - ese texto, si se quiere, es cosa del
+    # frontend.
     trl_sql = ", ".join(str(t) for t in TRL_COBRO_SEPE)
     df_fechainicioparo = con.execute(f"""
         WITH ranked AS (
             SELECT "01 IPF" AS ipf, "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta,
+                   "07 FECHA_BAJA_REAL_AFIL" AS fecha_baja,
                    "15 TRL" IN ({trl_sql}) AS coincide,
                    ROW_NUMBER() OVER (
                        PARTITION BY "01 IPF"
@@ -645,17 +656,23 @@ def extraer_grupo_d(con, parquet_folder):
                    ) AS rn
             FROM read_parquet('{afiliacion}')
         ), top5 AS (
-            SELECT * FROM ranked WHERE rn <= 5
+            SELECT *,
+                   bool_or(CASE WHEN rn = 1 THEN date_part('year', fecha_baja) = 2099 END) OVER (
+                       PARTITION BY ipf
+                   ) AS aun_activo
+            FROM ranked WHERE rn <= 5
         ), acumulado AS (
             SELECT *, bool_and(coincide) OVER (
                 PARTITION BY ipf ORDER BY rn ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             ) AS racha
             FROM top5
         ), elegido AS (
-            SELECT ipf, fecha_alta, ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY rn DESC) AS rn2
+            SELECT ipf, fecha_alta, aun_activo,
+                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY rn DESC) AS rn2
             FROM acumulado WHERE racha
         )
-        SELECT ipf AS "01 IPF", fecha_alta AS "Cobrando_del_SEPE_desde_esta_fecha" FROM elegido WHERE rn2 = 1
+        SELECT ipf AS "01 IPF", fecha_alta AS "Cobrando_del_SEPE_desde_esta_fecha"
+        FROM elegido WHERE rn2 = 1 AND aun_activo
     """).fetchdf()
 
     return [df_discap, df_situacion, df_ultimabaja, df_fechainicioparo]
