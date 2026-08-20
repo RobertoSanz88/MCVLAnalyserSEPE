@@ -231,11 +231,21 @@ def extraer_grupo_a(con, parquet_folder):
         FROM ranked WHERE rn = 1
     """).fetchdf()
 
-    # Grupo_cotiz_ppal / t_tot_grupo_ppal: grupo de cotizacion con mas duracion acumulada
+    # Grupo_cotiz_ppal / t_tot_grupo_ppal: grupo de cotizacion con mas duracion acumulada.
+    # La guia de campos MCVL solo documenta claves 00-12 para este campo, y dice literalmente
+    # que "en determinados regimenes como el R.E. de Autonomos... no se asigna grupo de
+    # cotizacion" y que "valores distintos de los que figuran en la tabla deben considerarse
+    # como casos en que el dato no consta". Verificado con datos reales: claves fuera de 00-12
+    # (13, 14, 19, 20, 21, 23, 31, 63 en la muestra actual) aparecen casi todas en regimenes de
+    # cuenta propia/autonomos (0721 R.E. Agrario Cuenta Propia, o ligadas a TRL 751/752 de
+    # prestacion de desempleo) - exactamente el caso que describe la guia, no una tabla de
+    # categorias real sin documentar. Se excluyen del ranking (like NULL) en vez de listar los
+    # codigos concretos vistos hoy, para cubrir tambien claves fuera de rango que aparezcan en
+    # futuras ediciones de la MCVL sin tener que tocar este codigo otra vez.
     df_grupo = con.execute(f"""
         WITH sumado AS (
             SELECT "01 IPF" AS ipf, "03 GRU_COTIZACION" AS val, SUM("DURACION_EMPLEO") AS total
-            FROM read_parquet('{afiliacion}') WHERE "03 GRU_COTIZACION" IS NOT NULL GROUP BY 1, 2
+            FROM read_parquet('{afiliacion}') WHERE "03 GRU_COTIZACION" BETWEEN 0 AND 12 GROUP BY 1, 2
         ), ranked AS (
             SELECT ipf, val, total,
                    ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, val ASC) AS rn
