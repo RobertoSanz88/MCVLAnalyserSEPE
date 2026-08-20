@@ -709,10 +709,18 @@ def extraer_grupo_e(df_pensiones, anio_datos):
     Grupo E. Devuelve (lista_de_extracciones, nombre_columna_cobra_pension)."""
     df = df_pensiones
 
-    df_ultimo_anio = df.groupby("01 IPF")["02 ANO_DATO"].max().reset_index()
-    df_ultimo_anio.columns = ["01 IPF", "ultimo_anio"]
-    df_con_ultimo = pd.merge(df, df_ultimo_anio, on="01 IPF")
-    df_ultimo = df_con_ultimo[df_con_ultimo["02 ANO_DATO"] == df_con_ultimo["ultimo_anio"]]
+    # Pension_actual / Cobra_pension_{anio}: filtra por el ANYO DE REFERENCIA real
+    # (anio_datos, p.ej. 2024 - el mismo que ya usa el nombre de Cobra_pension_2024/5),
+    # no por el maximo ANO_DATO propio de cada persona (bug real corregido 2026-08-20).
+    # La guia (campo "4.002 ANYO DEL DATO") dice que cada pension tiene una fila por cada
+    # anyo natural en que SI se percibio - el maximo propio de una persona puede ser un
+    # anyo antiguo si dejo de cobrar hace tiempo, y con el filtro viejo esa persona salia
+    # igualmente marcada "Cobra_pension_2024/5=SI" y con esa pension antigua como
+    # "Pension_actual", aunque llevara anyos sin cobrar nada. Verificado con datos reales:
+    # 19.288 personas (de 408.670 en Pensiones) tenian su ultimo ANO_DATO anterior a 2024.
+    # ">=" en vez de "==" para no descartar datos mas recientes que el anyo de referencia
+    # si los hubiera (2.523 personas con ANO_DATO=2025 en los datos reales).
+    df_ultimo = df[df["02 ANO_DATO"] >= anio_datos]
 
     df_estudio_pensionactual = df_ultimo.groupby("01 IPF")["Tipo_pension"].apply(list).reset_index()
     df_estudio_pensionactual.columns = ["01 IPF", "Pension_actual"]
@@ -720,7 +728,13 @@ def extraer_grupo_e(df_pensiones, anio_datos):
     nombre_col_cobra_pension = f"Cobra_pension_{anio_datos}/{str(anio_datos + 1)[-1]}"
     df_estudio_pensionactual[nombre_col_cobra_pension] = "SI"
 
-    df_estudio_pensiontodas = df.groupby("01 IPF")["Tipo_pension"].apply(list).reset_index()
+    # Tipos DISTINTOS de pension cobrados alguna vez (no una entrada por cada anyo de
+    # historico) - decision explicita del usuario, 2026-08-20: sin deduplicar, la media
+    # real es ~14 filas/anyos por persona pero solo ~1,2 tipos distintos, asi que salia
+    # una lista con el mismo tipo repetido muchas veces (ej. 10x "Jubilacion" para
+    # alguien que la cobro 10 anyos seguidos). Series.unique() preserva el orden de
+    # primera aparicion (no ordena alfabeticamente).
+    df_estudio_pensiontodas = df.groupby("01 IPF")["Tipo_pension"].apply(lambda s: list(s.unique())).reset_index()
     df_estudio_pensiontodas.columns = ["01 IPF", "Pension_todas_cobradas"]
 
     df_por_anio = df[["01 IPF", "02 ANO_DATO", "Ingresos_pension_bruto_anual"]].groupby(
