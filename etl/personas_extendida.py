@@ -975,6 +975,17 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     df["Edad_Ultimo_Empleo"] = df["Edad_Ultimo_Empleo"] / 12
     df["Edad_Primer_Empleo_Signif"] = df["Edad_Primer_Empleo_Signif"] / 12
 
+    # Edad negativa (episodio de Afiliacion anterior a la fecha de nacimiento) -> NULL, no un
+    # valor imposible (decision explicita del usuario, 2026-08-20, para no falsear
+    # estadisticas). Verificado con datos reales: 194 personas en Edad_Primer_Empleo_Signif
+    # (hasta -33,7 anyos) y 14 en Edad_Ultimo_Empleo - casos aislados, probable reutilizacion
+    # del IPF entre dos personas distintas (la guia MCVL ya avisa de que el IPF, aunque
+    # normalmente unico de por vida, "en la mayoria de los casos" puede excepcionalmente
+    # reasignarse). No hay forma de saber cual de los dos datos (fecha de nacimiento o
+    # episodio de Afiliacion) es el erroneo para estos casos concretos.
+    df.loc[df["Edad_Ultimo_Empleo"] < 0, "Edad_Ultimo_Empleo"] = np.nan
+    df.loc[df["Edad_Primer_Empleo_Signif"] < 0, "Edad_Primer_Empleo_Signif"] = np.nan
+
     # Edad_Actual_Fecha_Corte: edad a la fecha de corte de esta MCVL (FECHA_CORTE), NUNCA la
     # fecha real del sistema - si no, se desincroniza del resto del snapshot segun cuando se
     # ejecute la app.
