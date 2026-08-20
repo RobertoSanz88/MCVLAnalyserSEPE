@@ -48,7 +48,12 @@ def fase1_afiliacion_extendida(parquet_folder, output_name="tabla_afiliacion_ext
 
     # Los episodios con TRL 700-799 son periodos de cobro de prestacion/subsidio, no de empleo
     condicion_trl_700 = (df["15 TRL"] >= 700) & (df["15 TRL"] < 800)
-    df.loc[condicion_trl_700, "DURACION_EMPLEO"] = CERO_DIAS
+    # TRL 400: la guia de campos MCVL dice literalmente "Tienen alguna peculiaridad por la
+    # que no se consideran alta laboral" - igual que 700-799, no cuenta como DURACION_EMPLEO.
+    # No toca DURACION_DESEMPLEO (mas abajo): esa es especificamente prestacion/subsidio de
+    # desempleo (700-799), 400 no encaja ahi y no se ha pedido tratarlo como tal.
+    condicion_no_empleo = condicion_trl_700 | (df["15 TRL"] == 400)
+    df.loc[condicion_no_empleo, "DURACION_EMPLEO"] = CERO_DIAS
 
     condicion_duracion_negativa = df["DURACION_EMPLEO"] < CERO_DIAS
     df.loc[condicion_duracion_negativa, "DURACION_EMPLEO"] = pd.NaT
@@ -107,6 +112,11 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
         CREATE OR REPLACE VIEW _fase1_base AS
         SELECT *,
             COALESCE("15 TRL" >= 700 AND "15 TRL" < 800, FALSE) AS _trl700,
+            -- TRL 400: la guia de campos MCVL dice literalmente "Tienen alguna peculiaridad
+            -- por la que no se consideran alta laboral" - igual que 700-799, no cuenta como
+            -- DURACION_EMPLEO. No afecta a DURACION_DESEMPLEO (sigue solo _trl700 mas abajo):
+            -- esa es especificamente prestacion/subsidio de desempleo, 400 no encaja ahi.
+            COALESCE("15 TRL" >= 700 AND "15 TRL" < 800, FALSE) OR COALESCE("15 TRL" = 400, FALSE) AS _no_empleo,
             CASE WHEN date_part('year', "07 FECHA_BAJA_REAL_AFIL") = 2099
                  THEN TIMESTAMP '2025-06-01'
                  ELSE "07 FECHA_BAJA_REAL_AFIL"
@@ -118,7 +128,7 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
         CREATE OR REPLACE VIEW _fase1_duraciones AS
         SELECT *,
             (date_diff('day', "06 FECHA_ALTA_REAL_AFIL", "Baja_modificada") + 1) AS _dias_bruto,
-            CASE WHEN _trl700 THEN 0
+            CASE WHEN _no_empleo THEN 0
                  WHEN (date_diff('day', "06 FECHA_ALTA_REAL_AFIL", "Baja_modificada") + 1) < 0 THEN NULL
                  ELSE (date_diff('day', "06 FECHA_ALTA_REAL_AFIL", "Baja_modificada") + 1) * {US_POR_DIA}
             END AS "DURACION_EMPLEO",
@@ -152,7 +162,7 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
     con.execute(f"""
         COPY (
             SELECT
-                * EXCLUDE (_trl700, _dias_bruto, _rn_ultimo, "DURACION_NO_EMPLEO"),
+                * EXCLUDE (_trl700, _no_empleo, _dias_bruto, _rn_ultimo, "DURACION_NO_EMPLEO"),
                 CASE WHEN _rn_ultimo = 1
                      THEN date_diff('day', "Baja_modificada", TIMESTAMP '2025-06-01') * {US_POR_DIA}
                      ELSE "DURACION_NO_EMPLEO"
