@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from etl import tipo_contrato_claves_sucesoras
+from etl import reg_cotizacion_agrupado, tipo_contrato_claves_sucesoras
 from app.routers.colectivos import ORDEN_SUBGRUPOS, SubgruposRequest, calcular_condiciones_subgrupos
 
 router = APIRouter()
@@ -20,9 +20,10 @@ router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent.parent / "templates")
 
 # GRU_COTIZACION/REG_COTIZACION reutilizan la categorizacion ya definida en
-# el ETL (GRUPOS_COTIZ_DICT / _clasificar_regimen en
-# etl/personas_extendida.py, Fase H) en vez de reimplementarla desde cero -
-# pero aqui la "expr" de cada variable en VARIABLES_CATEGORICAS produce un
+# el ETL (GRUPOS_COTIZ_DICT en etl/personas_extendida.py, Grupo A; y
+# etl/reg_cotizacion_agrupado.py, compartido con Reg_cotiz_ppal_Agrupado) en
+# vez de reimplementarla desde cero - pero aqui la "expr" de cada variable en
+# VARIABLES_CATEGORICAS produce un
 # CODIGO/CUBETA COMPACTO (SMALLINT), NUNCA la etiqueta de texto directamente,
 # y solo se decodifica a texto al final, en Python, sobre las pocas filas ya
 # agregadas (ver _decodificar_gru_cotizacion/_decodificar_reg_cotizacion mas
@@ -43,10 +44,14 @@ templates = Jinja2Templates(directory=Path(__file__).resolve().parent.parent / "
 #      sumar sus COUNT(DISTINCT ipf) por separado. Haciendo el pliegue
 #      ANTES de agregar (aqui, con la cubeta) el COUNT(DISTINCT ipf) de la
 #      query ya deduplica esa persona correctamente dentro de su cubeta.
-# GRU_COTIZACION: 0-11 es su propio codigo (mapeo 1 a 1, ver
-# _GRUPOS_COTIZ_DICT), fuera de ese dominio se pliega a -1 ("NO CONSTA",
-# ~5,3% de las filas, dominado por el codigo 13 - ver informe al usuario).
-_SQL_CUBETA_GRU_COTIZACION = "CASE WHEN t.gru_cotizacion BETWEEN 0 AND 11 THEN t.gru_cotizacion ELSE -1 END"
+# GRU_COTIZACION: 0-12 es su propio codigo (mapeo 1 a 1, ver
+# _GRUPOS_COTIZ_DICT - la guia documenta hasta el 12 "TRABAJADORES MENORES
+# DE 17 AÑOS"; "BETWEEN 0 AND 11" dejaba fuera esa categoria por error,
+# corregido 2026-08-20), fuera de ese dominio se pliega a -1 ("NO CONSTA" -
+# dominado por el codigo 13, que la guia dice tratar como "no consta" para
+# regimenes de cuenta propia, ver Grupo_cotiz_ppal en
+# etl/personas_extendida.py).
+_SQL_CUBETA_GRU_COTIZACION = "CASE WHEN t.gru_cotizacion BETWEEN 0 AND 12 THEN t.gru_cotizacion ELSE -1 END"
 
 _GRUPOS_COTIZ_DICT = {
     0: "0 NO CONSTA",
@@ -61,6 +66,7 @@ _GRUPOS_COTIZ_DICT = {
     9: "9 OFICIALES DE TERCERA Y ESPECIALISTAS",
     10: "10 MAYORES DE 18 AÑOS NO CUALIFICADOS",
     11: "11 TRABAJADORES MENORES DE 18 AÑOS",
+    12: "12 TRABAJADORES MENORES DE 17 AÑOS",
 }
 
 
@@ -70,47 +76,12 @@ def _decodificar_gru_cotizacion(cubeta) -> str:
     return _GRUPOS_COTIZ_DICT.get(int(cubeta), "NO CONSTA")
 
 
-# REG_COTIZACION: replica _clasificar_regimen (codigo 138 -> caso especial,
-# si no el 3er digito desde el final decide el regimen - "2" requiere ademas
-# que el 4o digito sea "1" -, cualquier otro caso -> NO CONSTA/cubeta 0) pero
-# devolviendo una cubeta SMALLINT 0-8, no la etiqueta de texto. SUBSTR(x,-3,1)
-# en DuckDB es el mismo caracter que codigo_str[-3] en Python (verificado).
-# Verificado tambien que las 9 etiquetas (via _ETIQUETAS_REG_COTIZACION)
-# coinciden exactamente con _clasificar_regimen para las 43 REG_COTIZACION
-# reales del Parquet.
-_SQL_CUBETA_REG_COTIZACION = """
-    CASE
-        WHEN t.reg_cotizacion IS NULL THEN 0
-        WHEN t.reg_cotizacion = 138 THEN 8
-        WHEN LENGTH(CAST(t.reg_cotizacion AS VARCHAR)) < 3 THEN 0
-        WHEN SUBSTR(CAST(t.reg_cotizacion AS VARCHAR), -3, 1) = '1' THEN 1
-        WHEN SUBSTR(CAST(t.reg_cotizacion AS VARCHAR), -3, 1) = '5' THEN 2
-        WHEN SUBSTR(CAST(t.reg_cotizacion AS VARCHAR), -3, 1) = '6' THEN 3
-        WHEN SUBSTR(CAST(t.reg_cotizacion AS VARCHAR), -3, 1) = '7' THEN 4
-        WHEN SUBSTR(CAST(t.reg_cotizacion AS VARCHAR), -3, 1) = '8' THEN 5
-        WHEN SUBSTR(CAST(t.reg_cotizacion AS VARCHAR), -3, 1) = '9' THEN 6
-        WHEN SUBSTR(CAST(t.reg_cotizacion AS VARCHAR), -3, 1) = '2'
-             AND LENGTH(CAST(t.reg_cotizacion AS VARCHAR)) >= 4
-             AND SUBSTR(CAST(t.reg_cotizacion AS VARCHAR), -4, 1) = '1' THEN 7
-        ELSE 0
-    END
-"""
-
-_ETIQUETAS_REG_COTIZACION = {
-    0: "NO CONSTA",
-    1: "RÉGIMEN GENERAL",
-    2: "R.E. AUTÓNOMOS",
-    3: "R.E. AGRARIO CUENTA AJENA",
-    4: "R.E. AGRARIO CUENTA PROPIA",
-    5: "R.E. MAR",
-    6: "R.E. MINERÍA CARBÓN",
-    7: "R.E. EMPLEADOS HOGAR",
-    8: "RÉGIMEN GENERAL (S.E.C. EMPLEADOS HOGAR)",
-}
-
-
-def _decodificar_reg_cotizacion(cubeta) -> str:
-    return _ETIQUETAS_REG_COTIZACION.get(cubeta, "NO CONSTA")
+# REG_COTIZACION: cubeta/etiquetas de etl/reg_cotizacion_agrupado.py, el
+# mismo modulo que usa Reg_cotiz_ppal_Agrupado (Grupo A) - antes cada uno
+# tenia su propia copia verificada a mano para que coincidieran, ahora una
+# unica fuente de verdad.
+_SQL_CUBETA_REG_COTIZACION = reg_cotizacion_agrupado.sql_cubeta_agrupado("t.reg_cotizacion")
+_decodificar_reg_cotizacion = reg_cotizacion_agrupado.decodificar_agrupado
 
 
 def _decodificar_identidad(codigo) -> str:
@@ -347,7 +318,7 @@ def trayectorias_colectivo_afiliacion(request: Request, body: SubgruposRequest):
     dentro de ese anyo); si siguen empatando (~7% de los solapes tras ese
     desempate), CCC_PPAL como ultimo criterio deterministico (mismo espiritu
     que el 'val ASC' que ya usa el ETL en casos similares, p.ej.
-    Reg_cotiz_ppal en etl/personas_extendida.py)."""
+    Reg_cotiz_ppal_Agrupado en etl/personas_extendida.py)."""
     con = request.app.state.con.cursor()
     condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
 

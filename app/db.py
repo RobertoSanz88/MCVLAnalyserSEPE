@@ -26,7 +26,7 @@ TABLES = {
             "07 DOMIC_RESID_HABITUAL": "domic_resid_habitual",
             "08 FECHA_FALLECIMIENTO": "fecha_fallecimiento",
             "09 PAIS_NACIMIENTO": "pais_nacimiento",
-            "Reg_cotiz_ppal": "reg_cotiz_ppal",
+            "Reg_cotiz_ppal_Agrupado": "reg_cotiz_ppal_agrupado",
             "T_tot_reg_ppal": "t_tot_reg_ppal",
             "Grupo_cotiz_ppal": "grupo_cotiz_ppal",
             "t_tot_grupo_ppal": "t_tot_grupo_ppal",

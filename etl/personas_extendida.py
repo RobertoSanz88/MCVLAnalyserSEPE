@@ -15,6 +15,7 @@ import re
 import numpy as np
 import pandas as pd
 
+from etl import reg_cotizacion_agrupado
 from etl.tipo_contrato_claves_sucesoras import decodificar_agrupado, sql_bin_corregido, sql_corregido
 
 UN_DIA = pd.Timedelta(days=1)
@@ -217,19 +218,31 @@ def extraer_grupo_a(con, parquet_folder):
     (33M filas) para no cargarla en pandas."""
     afiliacion = _ruta(parquet_folder, "tabla_afiliacion_extendida.parquet")
 
-    # Reg_cotiz_ppal / T_tot_reg_ppal: regimen con mas DURACION_EMPLEO acumulada por persona
+    # Reg_cotiz_ppal_Agrupado / T_tot_reg_ppal: familia de regimen (ver
+    # etl/reg_cotizacion_agrupado.py) con mas DURACION_EMPLEO acumulada por
+    # persona. Agrupa A NIVEL DE EPISODIO, ANTES de sumar por (ipf, familia) -
+    # mismo motivo que Tipo_Contrato_ppal_Agrupado (ver mas abajo): si se
+    # agrupara DESPUES de elegir el codigo crudo ganador, dos codigos de la
+    # misma familia (p.ej. 111 y 140, ambos Regimen General) competirian como
+    # 2 codigos distintos por la duracion de esa persona en vez de sumar
+    # juntos - verificado con datos reales que esto pasaba de verdad: 6.571
+    # personas cambiaban de familia ganadora, y otras 227.130 se quedaban en
+    # la misma familia pero con una duracion acumulada incorrecta.
+    cubeta_reg = reg_cotizacion_agrupado.sql_cubeta_agrupado('"02 REG_COTIZACION"')
     df_reg = con.execute(f"""
         WITH sumado AS (
-            SELECT "01 IPF" AS ipf, "02 REG_COTIZACION" AS val, SUM("DURACION_EMPLEO") AS total
-            FROM read_parquet('{afiliacion}') WHERE "02 REG_COTIZACION" IS NOT NULL GROUP BY 1, 2
+            SELECT "01 IPF" AS ipf, ({cubeta_reg}) AS cubeta, SUM("DURACION_EMPLEO") AS total
+            FROM read_parquet('{afiliacion}') GROUP BY 1, 2
         ), ranked AS (
-            SELECT ipf, val, total,
-                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, val ASC) AS rn
+            SELECT ipf, cubeta, total,
+                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, cubeta ASC) AS rn
             FROM sumado
         )
-        SELECT ipf AS "01 IPF", val AS "Reg_cotiz_ppal", total AS "T_tot_reg_ppal"
+        SELECT ipf AS "01 IPF", cubeta, total AS "T_tot_reg_ppal"
         FROM ranked WHERE rn = 1
     """).fetchdf()
+    df_reg["Reg_cotiz_ppal_Agrupado"] = df_reg["cubeta"].map(reg_cotizacion_agrupado.decodificar_agrupado)
+    df_reg = df_reg.drop(columns=["cubeta"])
 
     # Grupo_cotiz_ppal / t_tot_grupo_ppal: grupo de cotizacion con mas duracion acumulada.
     # La guia de campos MCVL solo documenta claves 00-12 para este campo, y dice literalmente
@@ -796,7 +809,7 @@ NUEVO_ORDEN = [
     "num_altas_anual_promedio", "num_bajas_anual_promedio",
     "T_total_EMPLEO", "T_total_DESEMPLEO",
     "%T_total_EMPLEO", "%T_total_DESEMPLEO",
-    "Reg_cotiz_ppal", "T_tot_reg_ppal",
+    "Reg_cotiz_ppal_Agrupado", "T_tot_reg_ppal",
     "Grupo_cotiz_ppal", "t_tot_grupo_ppal",
     "Tipo_Contrato_ppal_Agrupado", "T_tot_tipo_contrato_ppal",
     "Prov_trabajo_ppal", "t_tot_prov_ppal",
@@ -808,41 +821,6 @@ NUEVO_ORDEN = [
     "fecha_ultima_baja", "Situacion_actual_afiliacion", "Situacion_Paro_Ocupacion",
     "fecha_inicio_paro", "duracion_paro_dias",
 ]
-
-
-def _clasificar_regimen(codigo):
-    if pd.isna(codigo):
-        return "NO CONSTA"
-    try:
-        codigo_int = int(codigo)
-    except (ValueError, TypeError):
-        return "NO CONSTA"
-
-    if codigo_int == 138:
-        return "RÉGIMEN GENERAL (S.E.C. EMPLEADOS HOGAR)"
-
-    codigo_str = str(codigo_int)
-    if len(codigo_str) < 3:
-        return "NO CONSTA"
-
-    tercer_digito = codigo_str[-3]
-    if tercer_digito == "1":
-        return "RÉGIMEN GENERAL"
-    elif tercer_digito == "5":
-        return "R.E. AUTÓNOMOS"
-    elif tercer_digito == "6":
-        return "R.E. AGRARIO CUENTA AJENA"
-    elif tercer_digito == "7":
-        return "R.E. AGRARIO CUENTA PROPIA"
-    elif tercer_digito == "8":
-        return "R.E. MAR"
-    elif tercer_digito == "9":
-        return "R.E. MINERÍA CARBÓN"
-    elif tercer_digito == "2":
-        if len(codigo_str) >= 4 and codigo_str[-4] == "1":
-            return "R.E. EMPLEADOS HOGAR"
-        return "NO CONSTA"
-    return "NO CONSTA"
 
 
 def _tiene_jubilacion(x):
@@ -968,9 +946,6 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     # Diccionario de grupos de cotizacion
     for columna in ["Grupo_cotiz_ppal", "Grupo_cotiz_1er_Empleo_Signif", "Grupo_Ultimo_Empleo"]:
         df[columna] = df[columna].map(GRUPOS_COTIZ_DICT).fillna("NO CONSTA").astype("category")
-
-    # Regimenes de cotizacion
-    df["Reg_cotiz_ppal"] = df["Reg_cotiz_ppal"].apply(_clasificar_regimen).astype("category")
 
     # Filtrar personas sin fecha de nacimiento
     antes = df.shape[0]
