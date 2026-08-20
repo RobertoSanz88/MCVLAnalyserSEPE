@@ -1072,9 +1072,17 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     # aqui tambien (bug real: se habia quedado con el nombre viejo, que ya no aparece
     # nunca en Situacion_actual_afiliacion, asi que ninguna de esas personas entraba en
     # usa_fecha_inicio_paro por esta via).
+    # "Baja_de_prestacion"/"Baja_de_subsidio" QUITADAS de esta lista (corregido 2026-08-20,
+    # efecto colateral del fix de Cobrando_del_SEPE_desde_esta_fecha en commit 839d80a): esas
+    # 2 categorias, por construccion, SOLO se dan cuando el episodio ya termino (nunca cuando
+    # sigue activo) - con el fix de esa variable (ahora solo tiene valor si sigue activo),
+    # Cobrando_del_SEPE_desde_esta_fecha nunca tiene valor para estas 2 categorias, dejando a
+    # 82.524 personas sin duracion_paro_dias por ninguna de las 2 vias. Ahora caen en la rama
+    # de fecha_ultima_baja (dias desde que se les acabo la prestacion/subsidio) - decision
+    # explicita del usuario. "Asimilado_otros" SI se queda (puede darse tanto con episodio
+    # activo como ya terminado, no es mutuamente excluyente con "aun activo" de la misma forma).
     usa_cobrando_sepe = df["Situacion_actual_afiliacion"].isin(
-        ["Asimilado_otros", "Asimilado_al_alta_subs52", "Asimilado_al_alta_prest_subs",
-         "Baja_de_prestacion", "Baja_de_subsidio"]
+        ["Asimilado_otros", "Asimilado_al_alta_subs52", "Asimilado_al_alta_prest_subs"]
     )
     dias_desde_inicio = (FECHA_REFERENCIA_45 - df["Cobrando_del_SEPE_desde_esta_fecha"]).dt.days
     dias_desde_ultima_baja = (FECHA_REFERENCIA_45 - df["fecha_ultima_baja"]).dt.days
