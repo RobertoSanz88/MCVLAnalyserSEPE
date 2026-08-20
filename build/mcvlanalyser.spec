@@ -5,7 +5,19 @@ a = Analysis(
     ['..\\run.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    # Plantillas Jinja2 e iconos/imagenes estaticas (app/), y SOLO el CSV de
+    # claves sucesoras de tipo de contrato (etl/metadata, usado en tiempo de
+    # import por etl/tipo_contrato_claves_sucesoras.py, que a su vez importa
+    # app/routers/trayectorias.py) - ninguno se detecta solo, PyInstaller solo
+    # sigue imports de codigo Python, no ficheros de datos sueltos.
+    # OJO: no meter aqui toda la carpeta etl/metadata/ - provincias_dict.csv y
+    # cnae_3d_dict.csv son solo para etl/webui (construccion del Parquet, uso
+    # restringido, ver CLAUDE.md), la app de analisis no los necesita.
+    datas=[
+        ('..\\app\\templates', 'app\\templates'),
+        ('..\\app\\static', 'app\\static'),
+        ('..\\etl\\metadata\\tipo_contrato_claves_sucesoras.csv', 'etl\\metadata'),
+    ],
     hiddenimports=['uvicorn.loops.auto', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on', 'uvicorn.logging'],
     hookspath=[],
     hooksconfig={},

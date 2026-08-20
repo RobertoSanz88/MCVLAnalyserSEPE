@@ -5,6 +5,7 @@ pestana dentro de colectivos.html (no como pagina propia), asi que este
 modulo solo expone el endpoint de datos, no una ruta HTML."""
 
 import json
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Request
@@ -15,7 +16,8 @@ from etl import tipo_contrato_claves_sucesoras
 from app.routers.colectivos import ORDEN_SUBGRUPOS, SubgruposRequest, calcular_condiciones_subgrupos
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+# Ver comentario equivalente en colectivos.py: ruta relativa al fichero, no al CWD.
+templates = Jinja2Templates(directory=Path(__file__).resolve().parent.parent / "templates")
 
 # GRU_COTIZACION/REG_COTIZACION reutilizan la categorizacion ya definida en
 # el ETL (GRUPOS_COTIZ_DICT / _clasificar_regimen en

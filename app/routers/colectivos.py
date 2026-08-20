@@ -38,6 +38,7 @@ omiten.
 """
 
 import io
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -50,7 +51,11 @@ from pydantic import BaseModel
 from config import CATEGORICAS_COLECTIVOS
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+# Ruta relativa al propio fichero (no al directorio de trabajo del proceso):
+# en dev coincide con "app/templates", pero en el .exe empaquetado con
+# PyInstaller el CWD no esta garantizado (solo el .bat de dev fuerza cd a la
+# raiz del repo) - mismo criterio que ya usa el mount de /static en main.py.
+templates = Jinja2Templates(directory=Path(__file__).resolve().parent.parent / "templates")
 
 
 @router.get("/colectivos", response_class=HTMLResponse)
