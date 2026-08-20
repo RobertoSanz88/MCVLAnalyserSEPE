@@ -779,11 +779,23 @@ def extraer_grupo_f(parquet_folder, anio_datos):
     # Tributaria/SEPE), ni el cuaderno ni la version anterior de este script lo
     # dividian - decision explicita del usuario tras detectar el error (medias de
     # ~2,2M € sin sentido en vez de ~22.000 €).
-    df_sumado = (df.groupby("01 IPF")["07 PERC_INTEGRA_DIN_NO_DERIVADA_IL"].sum() / 100).reset_index()
-    nombre_col_ingresos_brutos = f"Ingresos_bruto_anual_{anio_datos}"
-    df_estudio_ingresosbrutos = df_sumado.rename(
-        columns={"07 PERC_INTEGRA_DIN_NO_DERIVADA_IL": nombre_col_ingresos_brutos}
+    # Suma "07 PERC_INTEGRA_DIN_NO_DERIVADA_IL" + "08 PERC_INTEGRA_DIN_DERIVADA_IL"
+    # (corregido 2026-08-20, decision explicita del usuario): la guia (Tabla 6, Datos
+    # Fiscales) describe el campo 07 como "Percepcion integra dineraria NO derivada de
+    # IL" (IL = Incapacidad Laboral, baja medica) y el 08 como la parte SI derivada de
+    # IL - son dos partidas de ingreso bruto distintas y complementarias, no una
+    # alternativa. Sumar solo la 07 (como hacia el codigo anterior) dejaba fuera lo
+    # cobrado por prestacion de incapacidad laboral, incompleto para una variable
+    # llamada "ingreso bruto anual".
+    # fillna(0) antes de sumar: si a alguien no le aplica la parte derivada de IL (lo
+    # habitual, nadie cobro baja medica ese anyo) es de esperar que venga NULL, no 0 -
+    # sumar directo perderia el valor real del campo 07 (NULL + numero = NULL en pandas).
+    df["_ingreso_bruto_total"] = (
+        df["07 PERC_INTEGRA_DIN_NO_DERIVADA_IL"].fillna(0) + df["08 PERC_INTEGRA_DIN_DERIVADA_IL"].fillna(0)
     )
+    df_sumado = (df.groupby("01 IPF")["_ingreso_bruto_total"].sum() / 100).reset_index()
+    nombre_col_ingresos_brutos = f"Ingresos_bruto_anual_{anio_datos}"
+    df_estudio_ingresosbrutos = df_sumado.rename(columns={"_ingreso_bruto_total": nombre_col_ingresos_brutos})
 
     cond = df["20 DISCAPACIDAD"] > 0
     df_estudio_discap_fiscal = df.loc[cond, ["01 IPF"]].drop_duplicates().copy()
