@@ -622,28 +622,33 @@ def extraer_grupo_d(con, parquet_folder):
         SELECT ipf AS "01 IPF", fecha_baja AS fecha_ultima_baja FROM ranked WHERE rn = 1
     """).fetchdf()
 
-    # Cobrando_del_SEPE_desde_esta_fecha (nombre 2026-08-20, antes "fecha_inicio_paro" -
-    # renombrada a peticion del usuario porque "paro" se leia como "estar desempleado" y
-    # la variable en realidad mide cuando empezo a COBRAR, no cuando se quedo sin
-    # trabajo): para quien esta cobrando del SEPE ahora mismo (episodio mas reciente con
-    # TRL de prestacion/subsidio), la fecha de alta del primer episodio de esa racha
-    # continua de cobro. Se replica el bucle del cuaderno (que examina hasta 5 episodios y va
+    # Fecha_inicio_ultima_racha_sin_empleo (nombre 2026-08-20; antes
+    # "Cobrando_del_SEPE_desde_esta_fecha", y antes de eso "fecha_inicio_paro"). Concepto
+    # aclarado por el usuario tras una falsa alarma (ver mas abajo): fecha de inicio de la
+    # ULTIMA racha continua de episodios con TRL de prestacion/subsidio, exista o no
+    # todavia esa racha a fecha de corte. Es decir: si la persona cobra del SEPE ahora
+    # mismo, es desde cuando empezo esa racha activa; si ya no cobra (su ultima
+    # prestacion/subsidio esta cerrada y no ha vuelto a trabajar desde entonces, categorias
+    # Baja_de_prestacion/Baja_de_subsidio en Situacion_actual_afiliacion), sigue siendo la
+    # fecha de inicio de esa ultima racha - no se pone a NULL solo porque el episodio ya
+    # haya terminado. Se replica el bucle del cuaderno (que examina hasta 5 episodios y va
     # quitando pares consecutivos que coinciden) con un AND acumulativo por ventana: la racha
     # se corta en el primer episodio (de los 5 mas recientes) que no tenga TRL de cobro.
-    # BUG REAL corregido 2026-08-20 (encontrado por el usuario, verificado con ejemplos reales
-    # - IPFs con su ultima prestacion cerrada en 1999, 2014, 2023...): la primera version de
-    # este fix solo miraba si el TRL coincidia, sin comprobar si el episodio mas reciente de
-    # la persona seguia ABIERTO (fecha_baja=2099) o ya se habia cerrado hace anyos/decadas -
-    # de las 172.644 personas con un valor, solo 40.606 (23,5%) cobraban de verdad ahora mismo,
-    # el resto (132.038) tenia su ultima prestacion/subsidio ya cerrada, algunas desde hace mas
-    # de 20 anyos. Ahora se exige ademas que el episodio MAS RECIENTE (rn=1, no solo el que
-    # empieza la racha) siga con fecha_baja=2099 - asi el nombre (en presente, "cobrando...
-    # desde esta fecha") coincide con lo que realmente mide. NULL para quien no esta cobrando
-    # ahora mismo (incluye a los 132.038 recolocados como NULL) - decision explicita del
-    # usuario de no rellenar con un texto tipo "No cobra del SEPE en la actualidad" en el
-    # propio dato (mezclaria fecha y texto en la misma columna, forzando pandas a "object" y
-    # rompiendo o degradando la escritura a Parquet) - ese texto, si se quiere, es cosa del
-    # frontend.
+    # NULL para quien no tiene ningun episodio de cobro entre los 5 mas recientes.
+    # Falsa alarma 2026-08-20 (commit 839d80a, revertido aqui): se penso que esto era un bug
+    # porque de las 172.644 personas con valor, solo 40.606 (23,5%) cobraban de verdad ahora
+    # mismo y el resto (132.038) tenia su ultima prestacion/subsidio ya cerrada, algunas desde
+    # hace mas de 20 anyos - se anadio una condicion "aun_activo" para devolver NULL en esos
+    # 132.038 casos. El usuario aclaro que ese comportamiento SI es el diseno original
+    # (necesario para calcular duracion_actual_sin_empleo en los casos
+    # Baja_de_prestacion/Baja_de_subsidio, ver grupo_h_final) y que el problema era solo que
+    # el nombre de la variable (en presente, "cobrando... desde esta fecha") no dejaba claro
+    # que tambien aplica a rachas ya cerradas - de ahi el renombrado a
+    # "Fecha_inicio_ultima_racha_sin_empleo", que si es neutro respecto a si la racha sigue
+    # abierta o no. Decision explicita del usuario de no rellenar los NULL con un texto tipo
+    # "No cobra del SEPE en la actualidad" en el propio dato (mezclaria fecha y texto en la
+    # misma columna, forzando pandas a "object" y rompiendo o degradando la escritura a
+    # Parquet) - ese texto, si se quiere, es cosa del frontend.
     trl_sql = ", ".join(str(t) for t in TRL_COBRO_SEPE)
     df_fechainicioparo = con.execute(f"""
         WITH ranked AS (
@@ -656,23 +661,19 @@ def extraer_grupo_d(con, parquet_folder):
                    ) AS rn
             FROM read_parquet('{afiliacion}')
         ), top5 AS (
-            SELECT *,
-                   bool_or(CASE WHEN rn = 1 THEN date_part('year', fecha_baja) = 2099 END) OVER (
-                       PARTITION BY ipf
-                   ) AS aun_activo
-            FROM ranked WHERE rn <= 5
+            SELECT * FROM ranked WHERE rn <= 5
         ), acumulado AS (
             SELECT *, bool_and(coincide) OVER (
                 PARTITION BY ipf ORDER BY rn ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             ) AS racha
             FROM top5
         ), elegido AS (
-            SELECT ipf, fecha_alta, aun_activo,
+            SELECT ipf, fecha_alta,
                    ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY rn DESC) AS rn2
             FROM acumulado WHERE racha
         )
-        SELECT ipf AS "01 IPF", fecha_alta AS "Cobrando_del_SEPE_desde_esta_fecha"
-        FROM elegido WHERE rn2 = 1 AND aun_activo
+        SELECT ipf AS "01 IPF", fecha_alta AS "Fecha_inicio_ultima_racha_sin_empleo"
+        FROM elegido WHERE rn2 = 1
     """).fetchdf()
 
     return [df_discap, df_situacion, df_ultimabaja, df_fechainicioparo]
@@ -954,7 +955,7 @@ NUEVO_ORDEN = [
     "Pension_todas_cobradas",
     "Pension_actual", "Cobra_pension_2024/5",
     "fecha_ultima_baja", "Situacion_actual_afiliacion", "Situacion_Paro_Ocupacion",
-    "Cobrando_del_SEPE_desde_esta_fecha", "duracion_paro_dias",
+    "Fecha_inicio_ultima_racha_sin_empleo", "duracion_actual_sin_empleo",
 ]
 
 
@@ -1072,31 +1073,44 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     # aqui tambien (bug real: se habia quedado con el nombre viejo, que ya no aparece
     # nunca en Situacion_actual_afiliacion, asi que ninguna de esas personas entraba en
     # usa_fecha_inicio_paro por esta via).
-    # "Baja_de_prestacion"/"Baja_de_subsidio" QUITADAS de esta lista (corregido 2026-08-20,
-    # efecto colateral del fix de Cobrando_del_SEPE_desde_esta_fecha en commit 839d80a): esas
-    # 2 categorias, por construccion, SOLO se dan cuando el episodio ya termino (nunca cuando
-    # sigue activo) - con el fix de esa variable (ahora solo tiene valor si sigue activo),
-    # Cobrando_del_SEPE_desde_esta_fecha nunca tiene valor para estas 2 categorias, dejando a
-    # 82.524 personas sin duracion_paro_dias por ninguna de las 2 vias. Ahora caen en la rama
-    # de fecha_ultima_baja (dias desde que se les acabo la prestacion/subsidio) - decision
-    # explicita del usuario. "Asimilado_otros" SI se queda (puede darse tanto con episodio
-    # activo como ya terminado, no es mutuamente excluyente con "aun activo" de la misma forma).
+    # duracion_actual_sin_empleo (nombre 2026-08-20; antes "duracion_paro_dias"): dias sin
+    # empleo hasta FECHA_REFERENCIA_45, con origen distinto segun la via por la que se llego
+    # a "Parado" (concepto aclarado por el usuario, ver tambien el comentario de
+    # Fecha_inicio_ultima_racha_sin_empleo mas arriba): si esta cobrando del SEPE ahora
+    # mismo, o de baja de esa prestacion/subsidio sin haber vuelto a trabajar desde entonces
+    # (Asimilado_otros/Asimilado_al_alta_subs52/Asimilado_al_alta_prest_subs/
+    # Baja_de_prestacion/Baja_de_subsidio), se cuenta desde que empezo esa ultima racha de
+    # cobro (Fecha_inicio_ultima_racha_sin_empleo); en cualquier otro caso (de baja de
+    # actividad sin pasar por el SEPE), se cuenta desde la fecha de la ultima baja de
+    # afiliacion (fecha_ultima_baja). Las 5 categorias de la primera rama comparten esto: en
+    # todas ellas Fecha_inicio_ultima_racha_sin_empleo (que no exige que la racha siga
+    # activa) tiene valor porque hubo episodios de cobro entre los 5 mas recientes.
     usa_cobrando_sepe = df["Situacion_actual_afiliacion"].isin(
-        ["Asimilado_otros", "Asimilado_al_alta_subs52", "Asimilado_al_alta_prest_subs"]
+        [
+            "Asimilado_otros",
+            "Asimilado_al_alta_subs52",
+            "Asimilado_al_alta_prest_subs",
+            "Baja_de_prestacion",
+            "Baja_de_subsidio",
+        ]
     )
-    dias_desde_inicio = (FECHA_REFERENCIA_45 - df["Cobrando_del_SEPE_desde_esta_fecha"]).dt.days
+    dias_desde_inicio = (
+        FECHA_REFERENCIA_45 - df["Fecha_inicio_ultima_racha_sin_empleo"]
+    ).dt.days
     dias_desde_ultima_baja = (FECHA_REFERENCIA_45 - df["fecha_ultima_baja"]).dt.days
 
     es_parado = df["Situacion_Paro_Ocupacion"] == "Parado"
-    duracion_paro_dias = pd.Series(np.nan, index=df.index)
-    mask_inicio = es_parado & usa_cobrando_sepe & df["Cobrando_del_SEPE_desde_esta_fecha"].notna()
-    duracion_paro_dias[mask_inicio] = dias_desde_inicio[mask_inicio]
+    duracion_actual_sin_empleo = pd.Series(np.nan, index=df.index)
+    mask_inicio = (
+        es_parado & usa_cobrando_sepe & df["Fecha_inicio_ultima_racha_sin_empleo"].notna()
+    )
+    duracion_actual_sin_empleo[mask_inicio] = dias_desde_inicio[mask_inicio]
     mask_ultima_baja = es_parado & ~usa_cobrando_sepe & df["fecha_ultima_baja"].notna()
-    duracion_paro_dias[mask_ultima_baja] = dias_desde_ultima_baja[mask_ultima_baja]
-    df["duracion_paro_dias"] = duracion_paro_dias
+    duracion_actual_sin_empleo[mask_ultima_baja] = dias_desde_ultima_baja[mask_ultima_baja]
+    df["duracion_actual_sin_empleo"] = duracion_actual_sin_empleo
 
     umbral_ld = 365
-    es_ld = es_parado & duracion_paro_dias.notna() & (duracion_paro_dias > umbral_ld)
+    es_ld = es_parado & duracion_actual_sin_empleo.notna() & (duracion_actual_sin_empleo > umbral_ld)
     df.loc[es_parado & es_ld, "Situacion_Paro_Ocupacion"] = "Parado_LD"
     df.loc[es_parado & ~es_ld, "Situacion_Paro_Ocupacion"] = "Parado_NoLD"
 
