@@ -55,7 +55,7 @@ TABLES = {
             "Discap_fiscal": "discap_fiscal",
             "Fecha_ini_Primer_Empleo": "fecha_ini_primer_empleo",
             "Edad_Ultimo_Empleo": "edad_ultimo_empleo",
-            "Anos_VL": "anos_vl",
+            "Anos_VL_excluye_desempleo_inicio_y_fin": "anos_vl_excluye_desempleo_inicio_y_fin",
             "Edad_Actual_Fecha_Corte": "edad_actual_fecha_corte",
             "Edad_Primer_Empleo_Signif": "edad_primer_empleo_signif",
             "num_altas_anual_promedio": "num_altas_anual_promedio",

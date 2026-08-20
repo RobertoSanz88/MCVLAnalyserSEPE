@@ -389,8 +389,8 @@ def extraer_grupo_b(con, parquet_folder):
     """).fetchdf()
 
     # Fecha_ini_Primer_Empleo sobrevive a la tabla final (ver NUEVO_ORDEN); Fecha_final_Ultimo_Empleo
-    # sigue siendo intermedia (se necesita en el Grupo H para Edad_Ultimo_Empleo/Anos_VL, pero no se
-    # expone como columna propia).
+    # sigue siendo intermedia (se necesita en el Grupo H para Edad_Ultimo_Empleo/
+    # Anos_VL_excluye_desempleo_inicio_y_fin, pero no se expone como columna propia).
     # Las dos excluyen episodios de TRL 700-799/400 (prestacion/subsidio/otras peculiaridades sin
     # alta laboral, ver DURACION_EMPLEO) - mismo criterio en ambas, decision explicita del usuario.
     # Fecha_ini_Primer_Empleo corregida 2026-08-20 (commit 84e1ace): sin el filtro, si el episodio
@@ -918,7 +918,7 @@ NUEVO_ORDEN = [
     "Edad_Actual_Fecha_Corte",
     "Edad_Primer_Empleo_Signif", "Duracion_1er_Empleo_Signif", "Grupo_cotiz_1er_Empleo_Signif",
     "Edad_Ultimo_Empleo", "Grupo_Ultimo_Empleo",
-    "t_contrato_mas_largo", "Fecha_ini_Primer_Empleo", "Anos_VL",
+    "t_contrato_mas_largo", "Fecha_ini_Primer_Empleo", "Anos_VL_excluye_desempleo_inicio_y_fin",
     "duracion_promedio_EMPLEO", "Cotizado_anual_promedio",
     "num_altas_anual_promedio", "num_bajas_anual_promedio",
     "T_total_EMPLEO", "T_total_DESEMPLEO",
@@ -1061,7 +1061,11 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     for col in df.columns:
         if pd.api.types.is_timedelta64_dtype(df[col]):
             df[col] = df[col].dt.days / DIAS_POR_ANIO
-    df = df.rename(columns={"DURACION_1er_Empleo_a_Ultimo_Empleo": "Anos_VL"})
+    # Renombrada 2026-08-20 (decision explicita del usuario): "Anos_VL" no dejaba claro que,
+    # tras los fixes de Fecha_ini_Primer_Empleo/Fecha_final_Ultimo_Empleo (commits 84e1ace,
+    # c7d9469), los extremos del periodo excluyen episodios de desempleo/prestacion - pero
+    # un hueco de desempleo EN MEDIO del periodo (entre dos empleos reales) si sigue contando.
+    df = df.rename(columns={"DURACION_1er_Empleo_a_Ultimo_Empleo": "Anos_VL_excluye_desempleo_inicio_y_fin"})
 
     # Diccionario de grupos de cotizacion
     for columna in ["Grupo_cotiz_ppal", "Grupo_cotiz_1er_Empleo_Signif", "Grupo_Ultimo_Empleo"]:
@@ -1072,13 +1076,16 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     df = df[df["02 FECHA_NACIMIENTO"].notna()].copy()
     print(f"Filas eliminadas por no tener fecha de nacimiento: {antes - df.shape[0]}")
 
-    # Filtrar outliers de Anos_VL (± 3 desviaciones estandar)
-    media = df["Anos_VL"].mean()
-    std = df["Anos_VL"].std()
+    # Filtrar outliers de Anos_VL_excluye_desempleo_inicio_y_fin (± 3 desviaciones estandar)
+    media = df["Anos_VL_excluye_desempleo_inicio_y_fin"].mean()
+    std = df["Anos_VL_excluye_desempleo_inicio_y_fin"].std()
     limite_inferior = media - 3 * std
     limite_superior = media + 3 * std
-    outliers = df[(df["Anos_VL"] < limite_inferior) | (df["Anos_VL"] > limite_superior)]
-    print(f"Outliers de Anos_VL: {len(outliers)} ({len(outliers) / len(df) * 100:.2f}%)")
+    outliers = df[
+        (df["Anos_VL_excluye_desempleo_inicio_y_fin"] < limite_inferior)
+        | (df["Anos_VL_excluye_desempleo_inicio_y_fin"] > limite_superior)
+    ]
+    print(f"Outliers de Anos_VL_excluye_desempleo_inicio_y_fin: {len(outliers)} ({len(outliers) / len(df) * 100:.2f}%)")
     df = df[~df.index.isin(outliers.index)].copy()
 
     # Sexo: 0/1/2 -> "NO CONSTA"/"Hombre"/"Mujer". El cuaderno no transforma esta columna (se
