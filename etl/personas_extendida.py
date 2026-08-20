@@ -529,8 +529,14 @@ def extraer_grupo_c(con, parquet_folder):
 # GRUPO D - Afiliacion extendida: situacion de afiliacion y paro
 # ---------------------------------------------------------------------------
 
-# TRL de prestacion/subsidio del SEPE (cobro actual)
-TRL_COBRO_SEPE = (751, 752, 753, 754, 755, 756, 400)
+# TRL de prestacion/subsidio del SEPE (cobro actual). NO incluye el 400 (corregido
+# 2026-08-20, por consistencia con Situacion_actual_afiliacion): la guia solo dice de
+# el "alguna peculiaridad por la que no se consideran alta laboral", sin confirmar que
+# sea cobro de SEPE - Situacion_actual_afiliacion ya lo trata aparte, en Asimilado_otros,
+# no junto a la prestacion/subsidio real (751-756). Afecta a 1.875 personas (verificado
+# con datos reales): 625 pierden fecha_inicio_paro (su unico TRL "de cobro" era el 400)
+# y 1.250 cambian de fecha (el 400 formaba parte de su racha sin ser el unico motivo).
+TRL_COBRO_SEPE = (751, 752, 753, 754, 755, 756)
 
 
 def extraer_grupo_d(con, parquet_folder):
