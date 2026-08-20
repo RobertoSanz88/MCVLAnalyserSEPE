@@ -964,7 +964,20 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     df["02 FECHA_NACIMIENTO_completa"] = df["02 FECHA_NACIMIENTO"].dt.year * 12 + df["02 FECHA_NACIMIENTO"].dt.month
 
     df["Edad_Ultimo_Empleo"] = df["Fecha_final_Ultimo_Empleo_completa"] - df["02 FECHA_NACIMIENTO_completa"]
-    df["DURACION_1er_Empleo_a_Ultimo_Empleo"] = df["Fecha_final_Ultimo_Empleo"] - df["Fecha_ini_Primer_Empleo"]
+    # +UN_DIA (corregido 2026-08-20, encontrado por el usuario): igual convencion que
+    # DURACION_EMPLEO (el dia de baja cuenta como "en alta", confirmado contra la guia -
+    # "el dia de la fecha de baja se considera como dia en alta"). Sin el +1, una resta simple
+    # daba 0 dias cuando el primer y el ultimo empleo real caian el mismo dia (990 personas con
+    # datos reales) en vez del minimo logico de 1 dia.
+    df["DURACION_1er_Empleo_a_Ultimo_Empleo"] = df["Fecha_final_Ultimo_Empleo"] - df["Fecha_ini_Primer_Empleo"] + UN_DIA
+    # Aun con el +1, puede quedar <= 0 si Fecha_final_Ultimo_Empleo es anterior a
+    # Fecha_ini_Primer_Empleo por mas de 1 dia - error de dato (la guia ya avisa de casos raros
+    # de fecha_alta posterior a fecha_baja) en vez de una duracion valida. Se pone a NaT (no un
+    # valor invalido) para que Anos_VL_excluye_desempleo_inicio_y_fin y las variables que
+    # dividen por esta duracion (num_altas_anual_promedio, num_bajas_anual_promedio,
+    # Cotizado_anual_promedio, %T_total_EMPLEO/DESEMPLEO) den NULL en vez de "inf" o un valor
+    # con el signo invertido.
+    df.loc[df["DURACION_1er_Empleo_a_Ultimo_Empleo"] <= CERO_DIAS, "DURACION_1er_Empleo_a_Ultimo_Empleo"] = pd.NaT
     df.drop(columns=["Fecha_ini_Primer_Empleo_completa", "Fecha_final_Ultimo_Empleo_completa"], inplace=True)
 
     # Edad_Primer_Empleo_Signif
