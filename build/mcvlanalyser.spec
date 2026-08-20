@@ -1,7 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+# Dos ejecutables en el mismo onedir (comparten _internal): "mcvlanalyser"
+# (la app real, FastAPI+uvicorn+DuckDB) y "splash" (ventana ligera con la
+# imagen de arranque, solo tkinter/urllib/config - nada de pandas/duckdb/
+# fastapi). Separados a proposito: mcvlanalyser.py lanza splash.exe como
+# proceso aparte ANTES de importar app.main (ver run.py) para que la imagen
+# aparezca mientras cargan las dependencias pesadas, no despues - si el
+# splash compartiera el mismo proceso/exe que la app, tendria que esperar a
+# las mismas importaciones lentas antes de poder mostrarse siquiera.
 
-a = Analysis(
+a_main = Analysis(
     ['..\\run.py'],
     pathex=[],
     binaries=[],
@@ -26,11 +34,11 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-pyz = PYZ(a.pure)
+pyz_main = PYZ(a_main.pure)
 
-exe = EXE(
-    pyz,
-    a.scripts,
+exe_main = EXE(
+    pyz_main,
+    a_main.scripts,
     [],
     exclude_binaries=True,
     name='mcvlanalyser',
@@ -45,10 +53,52 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
+# splash.py solo necesita su propia imagen (app/static/splash.png) - el resto
+# de app/static/app/templates ya los trae exe_main, y COLLECT los junta en el
+# mismo _internal (mismo destino relativo "app\\static", sin duplicar disco).
+a_splash = Analysis(
+    ['..\\splash.py'],
+    pathex=[],
+    binaries=[],
+    datas=[
+        ('..\\app\\static\\splash.png', 'app\\static'),
+    ],
+    hiddenimports=[],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=0,
+)
+pyz_splash = PYZ(a_splash.pure)
+
+exe_splash = EXE(
+    pyz_splash,
+    a_splash.scripts,
+    [],
+    exclude_binaries=True,
+    name='splash',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    console=False,  # ventana sin consola, igual que "pythonw splash.py" en dev
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
 coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
+    exe_main,
+    a_main.binaries,
+    a_main.datas,
+    exe_splash,
+    a_splash.binaries,
+    a_splash.datas,
     strip=False,
     upx=True,
     upx_exclude=[],
