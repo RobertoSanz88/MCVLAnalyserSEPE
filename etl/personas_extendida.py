@@ -827,6 +827,13 @@ GRUPOS_COTIZ_DICT = {
     9: "9 OFICIALES DE TERCERA Y ESPECIALISTAS",
     10: "10 MAYORES DE 18 AÑOS NO CUALIFICADOS",
     11: "11 TRABAJADORES MENORES DE 18 AÑOS",
+    # Faltaba (2026-08-20): la guia documenta hasta el 12 ("Trabajadores menores de
+    # 17 años") - sin esta entrada, .map(GRUPOS_COTIZ_DICT).fillna("NO CONSTA") en
+    # grupo_h_final convertia silenciosamente cualquier ganador real de codigo 12 en
+    # "NO CONSTA", en las 3 columnas que usan este diccionario (Grupo_cotiz_ppal,
+    # Grupo_cotiz_1er_Empleo_Signif, Grupo_Ultimo_Empleo). Mismo hueco ya corregido
+    # en app/routers/trayectorias.py (commit 34025f5) para la trayectoria categorica.
+    12: "12 TRABAJADORES MENORES DE 17 AÑOS",
 }
 
 # Columnas finales de tabla_personas_extendida, mismo orden que el cuaderno (nuevo_orden)
