@@ -536,11 +536,15 @@ TRL_COBRO_SEPE = (751, 752, 753, 754, 755, 756, 400)
 def extraer_grupo_d(con, parquet_folder):
     afiliacion = _ruta(parquet_folder, "tabla_afiliacion_extendida.parquet")
 
-    # Discap_afiliacion: discapacidad detectada en cualquier episodio de la persona
+    # Discap_afiliacion: discapacidad detectada en cualquier episodio de la persona.
+    # 130 (no 133 - typo corregido 2026-08-20: "133" no existe en la tabla de TIPO_CONTRATO
+    # de la guia, es el codigo real "INDEF. TIEMPO COMPLETO. DISCAPACITADOS", verificado
+    # que 0 filas reales tienen 133 y 9.994 filas/6.038 personas tienen 130 - de esas, 752
+    # personas no se detectaban como discapacitadas por ningun otro camino).
     df_discap = con.execute(f"""
         SELECT DISTINCT "01 IPF" AS "01 IPF", TRUE AS "Discap_afiliacion"
         FROM read_parquet('{afiliacion}')
-        WHERE "04 TIPO_CONTRATO" IN (133, 139, 230, 239, 330, 339, 430, 530)
+        WHERE "04 TIPO_CONTRATO" IN (130, 139, 230, 239, 330, 339, 430, 530)
            OR "09 MINUSV_ALTA_AFIL" > 0
     """).fetchdf()
 
