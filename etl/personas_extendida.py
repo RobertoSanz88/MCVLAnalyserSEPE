@@ -884,7 +884,11 @@ DIAS_POR_ANIO = 365.25
 
 PAISES_LATINOS = ["N03", "N06", "N07", "N08", "N09", "N13", "N22", "N26", "N27"]
 PAISES_AFRICANOS = ["N12", "N23"]
-PAISES_UE = ["N01", "N04", "N10", "N11", "N14", "N15", "N16", "N17", "N19", "N20"]
+# N16 = Reino Unido, ya no es miembro de la UE desde el Brexit (2020) - se queda agrupado
+# aqui de todas formas (decision explicita del usuario, 2026-08-20: la MCVL cubre tambien
+# muchos anyos anteriores al Brexit), pero el nombre de la lista y la etiqueta que ve el
+# analista (mas abajo, "paises_UE_UK") lo dejan explicito para no llevar a confusion.
+PAISES_EU_UK = ["N01", "N04", "N10", "N11", "N14", "N15", "N16", "N17", "N19", "N20"]
 PAISES_LEJANOS = ["N05", "N18", "N21", "N24", "N25", "N99"]
 ESPANA = ["N00"]
 
@@ -989,10 +993,10 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     # Nacionalidad_agrupado / Pais_nacim_agrupado
     condiciones = [
         df["04 NACIONALIDAD"].isin(PAISES_LATINOS), df["04 NACIONALIDAD"].isin(PAISES_AFRICANOS),
-        df["04 NACIONALIDAD"].isin(PAISES_UE), df["04 NACIONALIDAD"].isin(PAISES_LEJANOS),
+        df["04 NACIONALIDAD"].isin(PAISES_EU_UK), df["04 NACIONALIDAD"].isin(PAISES_LEJANOS),
         df["04 NACIONALIDAD"].isin(ESPANA),
     ]
-    elecciones = ["paises_latinos", "paises_africanos", "paises_UE", "paises_lejanos", "espana"]
+    elecciones = ["paises_latinos", "paises_africanos", "paises_UE_UK", "paises_lejanos", "espana"]
     # default=np.nan con choices de texto revienta en numpy reciente (StrDType vs float no
     # promocionan a un dtype comun); se usa un centinela de texto y se convierte despues.
     df["Nacionalidad_agrupado"] = np.select(condiciones, elecciones, default="_SIN_DATO_")
@@ -1000,7 +1004,7 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
 
     condiciones_pais_nacim = [
         df["09 PAIS_NACIMIENTO"].isin(PAISES_LATINOS), df["09 PAIS_NACIMIENTO"].isin(PAISES_AFRICANOS),
-        df["09 PAIS_NACIMIENTO"].isin(PAISES_UE), df["09 PAIS_NACIMIENTO"].isin(PAISES_LEJANOS),
+        df["09 PAIS_NACIMIENTO"].isin(PAISES_EU_UK), df["09 PAIS_NACIMIENTO"].isin(PAISES_LEJANOS),
         df["09 PAIS_NACIMIENTO"].isin(ESPANA),
     ]
     df["Pais_nacim_agrupado"] = np.select(condiciones_pais_nacim, elecciones, default="_SIN_DATO_")
