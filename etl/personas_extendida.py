@@ -390,10 +390,22 @@ def extraer_grupo_b(con, parquet_folder):
 
     # Fecha_ini_Primer_Empleo sobrevive a la tabla final (ver NUEVO_ORDEN); Fecha_final_Ultimo_Empleo
     # sigue siendo intermedia (se necesita en el Grupo H para Edad_Ultimo_Empleo/Anos_VL, pero no se
-    # expone como columna propia)
+    # expone como columna propia).
+    # Fecha_ini_Primer_Empleo excluye episodios de TRL 700-799/400 (prestacion/subsidio/otras
+    # peculiaridades sin alta laboral, ver DURACION_EMPLEO) - corregido 2026-08-20, decision
+    # explicita del usuario: sin este filtro, si el episodio MAS ANTIGUO de una persona era de
+    # ese tipo (10.027 personas, 0,76%, verificado con datos reales), "fecha de inicio del
+    # primer empleo" mostraba la fecha de un periodo que no es empleo real - mismo criterio ya
+    # aplicado en DURACION_EMPLEO y en el "1er empleo significativo". Fecha_final_Ultimo_Empleo
+    # NO se toca aqui (se revisa por separado al llegar a Edad_Ultimo_Empleo/Anos_VL, que son
+    # las variables que la consumen). NULL para quien nunca ha tenido un episodio de empleo real.
     df_fechas = con.execute(f"""
         SELECT "01 IPF" AS "01 IPF",
-               MIN("06 FECHA_ALTA_REAL_AFIL") AS "Fecha_ini_Primer_Empleo",
+               MIN("06 FECHA_ALTA_REAL_AFIL") FILTER (
+                   WHERE NOT (
+                       COALESCE("15 TRL" >= 700 AND "15 TRL" < 800, FALSE) OR COALESCE("15 TRL" = 400, FALSE)
+                   )
+               ) AS "Fecha_ini_Primer_Empleo",
                MAX("Baja_modificada") AS "Fecha_final_Ultimo_Empleo"
         FROM read_parquet('{afiliacion}') GROUP BY 1
     """).fetchdf()
