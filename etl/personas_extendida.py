@@ -1019,14 +1019,12 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     # cnae_3d_dict.csv trae codigo y descripcion en columnas separadas: hay que concatenarlos a
     # mano para que el resultado final sea "561 Restaurantes y puestos de comidas" (comprobado
     # contra el parquet de referencia: sin el codigo delante, difiere en pr�cticamente todas las
-    # filas).
+    # filas). No hace falta un caso especial para "000": extraer_grupo_c ya excluye el codigo 0
+    # de la competicion por Act_econ_ppal (verificado con datos reales: 0 filas con "000"),
+    # cualquier persona sin actividad economica valida llega aqui como NULL y cae en "NO CONSTA"
+    # igual que el resto de categoricas.
     codigo_cnae = df["Act_econ_ppal"].astype("Int64").astype(str).str.zfill(3)
-    df["Act_econ_ppal"] = np.where(
-        codigo_cnae == "000",
-        "SIN ACTIVIDAD ECONÓMICA (RELACIÓN NO LABORAL / SIN DATO)",
-        codigo_cnae + " " + codigo_cnae.map(cnae_3d_dict),
-    )
-    df["Act_econ_ppal"] = df["Act_econ_ppal"].fillna("NO CONSTA").astype("category")
+    df["Act_econ_ppal"] = (codigo_cnae + " " + codigo_cnae.map(cnae_3d_dict)).fillna("NO CONSTA").astype("category")
 
     # Reordenar y seleccionar las columnas finales
     columnas_presentes = [c for c in NUEVO_ORDEN if c in df.columns]
