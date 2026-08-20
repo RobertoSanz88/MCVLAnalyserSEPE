@@ -604,11 +604,18 @@ def extraer_grupo_d(con, parquet_folder):
         SELECT ipf AS "01 IPF", fecha_baja AS fecha_ultima_baja FROM ranked WHERE rn = 1
     """).fetchdf()
 
-    # fecha_inicio_paro: para quien esta cobrando del SEPE ahora mismo (episodio mas reciente
-    # con TRL de prestacion/subsidio), la fecha de alta del primer episodio de esa racha
+    # Cobrando_del_SEPE_desde_esta_fecha (nombre 2026-08-20, antes "fecha_inicio_paro" -
+    # renombrada a peticion del usuario porque "paro" se leia como "estar desempleado" y
+    # la variable en realidad mide cuando empezo a COBRAR, no cuando se quedo sin
+    # trabajo): para quien esta cobrando del SEPE ahora mismo (episodio mas reciente con
+    # TRL de prestacion/subsidio), la fecha de alta del primer episodio de esa racha
     # continua de cobro. Se replica el bucle del cuaderno (que examina hasta 5 episodios y va
     # quitando pares consecutivos que coinciden) con un AND acumulativo por ventana: la racha
     # se corta en el primer episodio (de los 5 mas recientes) que no tenga TRL de cobro.
+    # NULL para quien no esta cobrando ahora mismo - decision explicita del usuario de no
+    # rellenar con un texto tipo "No cobra del SEPE en la actualidad" en el propio dato
+    # (mezclaria fecha y texto en la misma columna, forzando pandas a "object" y rompiendo
+    # o degradando la escritura a Parquet) - ese texto, si se quiere, es cosa del frontend.
     trl_sql = ", ".join(str(t) for t in TRL_COBRO_SEPE)
     df_fechainicioparo = con.execute(f"""
         WITH ranked AS (
@@ -630,7 +637,7 @@ def extraer_grupo_d(con, parquet_folder):
             SELECT ipf, fecha_alta, ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY rn DESC) AS rn2
             FROM acumulado WHERE racha
         )
-        SELECT ipf AS "01 IPF", fecha_alta AS fecha_inicio_paro FROM elegido WHERE rn2 = 1
+        SELECT ipf AS "01 IPF", fecha_alta AS "Cobrando_del_SEPE_desde_esta_fecha" FROM elegido WHERE rn2 = 1
     """).fetchdf()
 
     return [df_discap, df_situacion, df_ultimabaja, df_fechainicioparo]
@@ -882,7 +889,7 @@ NUEVO_ORDEN = [
     "Pension_todas_cobradas",
     "Pension_actual", "Cobra_pension_2024/5",
     "fecha_ultima_baja", "Situacion_actual_afiliacion", "Situacion_Paro_Ocupacion",
-    "fecha_inicio_paro", "duracion_paro_dias",
+    "Cobrando_del_SEPE_desde_esta_fecha", "duracion_paro_dias",
 ]
 
 
@@ -970,18 +977,24 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
         default="Parado",
     )
 
-    # Reclasificacion de Parado en Parado_LD / Parado_NoLD (vectorizado igual)
-    usa_fecha_inicio_paro = df["Situacion_actual_afiliacion"].isin(
-        ["Asimilado_otros", "Asimilado_al_alta_prest_subs52", "Baja_de_prestacion", "Baja_de_subsidio"]
+    # Reclasificacion de Parado en Parado_LD / Parado_NoLD (vectorizado igual).
+    # "Asimilado_al_alta_prest_subs52" ya no existe como categoria (se separo en
+    # Asimilado_al_alta_subs52 / Asimilado_al_alta_prest_subs, commit 730d910) - corregido
+    # aqui tambien (bug real: se habia quedado con el nombre viejo, que ya no aparece
+    # nunca en Situacion_actual_afiliacion, asi que ninguna de esas personas entraba en
+    # usa_fecha_inicio_paro por esta via).
+    usa_cobrando_sepe = df["Situacion_actual_afiliacion"].isin(
+        ["Asimilado_otros", "Asimilado_al_alta_subs52", "Asimilado_al_alta_prest_subs",
+         "Baja_de_prestacion", "Baja_de_subsidio"]
     )
-    dias_desde_inicio = (FECHA_REFERENCIA_45 - df["fecha_inicio_paro"]).dt.days
+    dias_desde_inicio = (FECHA_REFERENCIA_45 - df["Cobrando_del_SEPE_desde_esta_fecha"]).dt.days
     dias_desde_ultima_baja = (FECHA_REFERENCIA_45 - df["fecha_ultima_baja"]).dt.days
 
     es_parado = df["Situacion_Paro_Ocupacion"] == "Parado"
     duracion_paro_dias = pd.Series(np.nan, index=df.index)
-    mask_inicio = es_parado & usa_fecha_inicio_paro & df["fecha_inicio_paro"].notna()
+    mask_inicio = es_parado & usa_cobrando_sepe & df["Cobrando_del_SEPE_desde_esta_fecha"].notna()
     duracion_paro_dias[mask_inicio] = dias_desde_inicio[mask_inicio]
-    mask_ultima_baja = es_parado & ~usa_fecha_inicio_paro & df["fecha_ultima_baja"].notna()
+    mask_ultima_baja = es_parado & ~usa_cobrando_sepe & df["fecha_ultima_baja"].notna()
     duracion_paro_dias[mask_ultima_baja] = dias_desde_ultima_baja[mask_ultima_baja]
     df["duracion_paro_dias"] = duracion_paro_dias
 

@@ -46,7 +46,7 @@ TABLES = {
             "Discap_afiliacion": "discap_afiliacion",
             "Situacion_actual_afiliacion": "situacion_actual_afiliacion",
             "fecha_ultima_baja": "fecha_ultima_baja",
-            "fecha_inicio_paro": "fecha_inicio_paro",
+            "Cobrando_del_SEPE_desde_esta_fecha": "cobrando_del_sepe_desde_esta_fecha",
             "Pension_actual": "pension_actual",
             "Cobra_pension_2024/5": "cobra_pension_2024_5",
             "Pension_todas_cobradas": "pension_todas_cobradas",
