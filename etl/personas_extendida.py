@@ -575,10 +575,14 @@ def extraer_grupo_d(con, parquet_folder):
         FROM ranked WHERE rn = 1
     """).fetchdf()
 
-    # fecha_ultima_baja + TRL del episodio mas reciente (por fecha de baja unicamente)
+    # fecha_ultima_baja: fecha de baja del episodio mas reciente (por fecha de baja
+    # unicamente - no hace falta desempate de fecha_alta, a diferencia de
+    # Grupo_Ultimo_Empleo/Situacion_actual_afiliacion: aqui solo se devuelve la propia
+    # fecha_baja, y dos episodios empatados en esa fecha dan el mismo valor sea cual sea
+    # el que "gane" el desempate)
     df_ultimabaja = con.execute(f"""
         WITH ranked AS (
-            SELECT "01 IPF" AS ipf, "07 FECHA_BAJA_REAL_AFIL" AS fecha_baja, "15 TRL" AS trl,
+            SELECT "01 IPF" AS ipf, "07 FECHA_BAJA_REAL_AFIL" AS fecha_baja,
                    ROW_NUMBER() OVER (PARTITION BY "01 IPF" ORDER BY "07 FECHA_BAJA_REAL_AFIL" DESC) AS rn
             FROM read_parquet('{afiliacion}')
         )
