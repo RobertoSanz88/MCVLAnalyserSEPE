@@ -8,3 +8,5 @@ __pycache__/
 *.pyc
 .claude/
 log_etl.txt
+.tmp/
+MCVLGuia20260707.pdf
