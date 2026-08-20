@@ -548,8 +548,16 @@ def extraer_grupo_d(con, parquet_folder):
            OR "09 MINUSV_ALTA_AFIL" > 0
     """).fetchdf()
 
-    # Situacion_actual_afiliacion: clasificacion en 9 situaciones a partir del episodio
-    # mas reciente (por fecha de baja, y de alta como desempate)
+    # Situacion_actual_afiliacion: clasificacion a partir del episodio mas reciente (por
+    # fecha de baja, y de alta como desempate). Para "aun activo" (fecha_baja=2099), el
+    # cobro de prestacion/subsidio se separa en 2 categorias (corregido 2026-08-20 a
+    # peticion del usuario: antes juntaba los 6 codigos bajo un nombre que sugeria
+    # "solo subsidio de mayores de 52/55" sin serlo) - "Asimilado_al_alta_subs52" es
+    # especificamente el subsidio >52/55 anyos o fijos discontinuos (TRL 753,754, ver
+    # tabla de TRL de la guia), "Asimilado_al_alta_prest_subs" el resto de
+    # prestacion/subsidio (751,752,755,756). Para episodios ya finalizados, la
+    # distincion previa Baja_de_prestacion (751,752) / Baja_de_subsidio (753-756) no
+    # se toca - no se pidio cambiarla.
     df_situacion = con.execute(f"""
         WITH ranked AS (
             SELECT "01 IPF" AS ipf, "07 FECHA_BAJA_REAL_AFIL" AS fecha_baja,
@@ -563,7 +571,8 @@ def extraer_grupo_d(con, parquet_folder):
         SELECT ipf AS "01 IPF",
             CASE
                 WHEN date_part('year', fecha_baja) = 2099 THEN
-                    CASE WHEN trl IN (751, 752, 753, 754, 755, 756) THEN 'Asimilado_al_alta_prest_subs52'
+                    CASE WHEN trl IN (753, 754) THEN 'Asimilado_al_alta_subs52'
+                         WHEN trl IN (751, 752, 755, 756) THEN 'Asimilado_al_alta_prest_subs'
                          WHEN trl IN (980, 400) THEN 'Asimilado_otros'
                          ELSE 'Alta_ocupado' END
                 WHEN causa = 58 THEN 'Baja_para_pension'
