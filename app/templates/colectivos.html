@@ -183,6 +183,11 @@
                             margin: 0 0 0.9rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
         .cabecera-panel h2 { margin: 0; padding: 0; border: none; }
         .individual-ipf-label { color: var(--muted); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+        /* "IPF aleatorio" junto al numero de IPF (dentro del propio h2, no en el
+           lado derecho de la cabecera como el resto de switches Datos/Graficos)
+           - a peticion del usuario, para no tener que buscarlo lejos del numero
+           que cambia. */
+        .boton-ipf-aleatorio { margin-left: 0.9rem; vertical-align: middle; }
 
         /* --- Trayectorias individuales: cabecera de persona + tabla de episodios --- */
         /* Cabecera (sexo/edad/nacionalidad): datos de la PERSONA, constantes para
@@ -215,7 +220,7 @@
                                       border: 1.5px solid var(--border); font-size: 0.72rem; white-space: nowrap;
                                       display: inline-flex; align-items: center; gap: 0.3rem; }
         .fila-subgrupo-individual:hover { background: var(--bg); }
-        .fila-subgrupo-individual.seleccionado { background: var(--bg2); border-color: var(--verde-dk); }
+        .fila-subgrupo-individual.seleccionado { background: var(--bg2); border-color: var(--verde-dk); border-width: 3px; }
         .fila-subgrupo-individual .numero-subgrupo { font-weight: 800; color: var(--text); }
         /* Tabla de episodios (Provincia/Regimen/Contrato/TRL) sincronizada en altura
            de fila con el grafico Gantt de al lado - ver dibujarGanttIndividual():
@@ -571,8 +576,9 @@
             <div id="contenido-individuales" class="contenido-vista" style="display:none">
                 <div id="panel-individual" class="panel" style="flex:1; display:flex; flex-direction:column;">
                     <div class="cabecera-panel">
-                        <h2>Trayectoria individual <span id="individual-ipf-label" class="individual-ipf-label"></span></h2>
-                        <button type="button" id="boton-ipf-aleatorio" onclick="cargarIpfAleatorio()">IPF aleatorio</button>
+                        <h2>Trayectoria individual <span id="individual-ipf-label" class="individual-ipf-label"></span>
+                            <button type="button" id="boton-ipf-aleatorio" class="boton-ipf-aleatorio" onclick="cargarIpfAleatorio()">IPF aleatorio</button>
+                        </h2>
                     </div>
                     <div class="fila-switch-individual">
                         <span class="switch-filtro-label">Aplicar filtro de colectivos</span>
