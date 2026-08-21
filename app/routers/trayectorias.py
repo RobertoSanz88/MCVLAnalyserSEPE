@@ -8,9 +8,10 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from etl import reg_cotizacion_agrupado, tipo_contrato_claves_sucesoras
 from etl.personas_extendida import FECHA_CORTE
@@ -679,15 +680,51 @@ def _persona_resumen(con, ipf: int) -> dict:
     return {"sexo": sexo, "edad": edad, "nacionalidad": nacionalidad}
 
 
-@router.get("/trayectorias/individual/aleatorio")
-def trayectoria_individual_aleatoria(request: Request):
+class TrayectoriaAleatoriaRequest(BaseModel):
+    """Body opcional del switch "Aplicar filtro de colectivo" en la pestana
+    "Trayectorias individuales": sin `colectivo`, IPF al azar de toda
+    Personas (switch en No, comportamiento de siempre). Con `colectivo` (los
+    mismos filtro1-4 que ya define el panel compartido con Analisis/
+    Trayectorias de colectivo), `subgrupo` elige de cual de los 1-4
+    subgrupos del cruce sacar el aleatorio - una persona puede pertenecer a
+    varios subgrupos NO son excluyentes entre si salvo que sean cada eje su
+    propio complementario, asi que hace falta saber a cual."""
+
+    colectivo: SubgruposRequest | None = None
+    subgrupo: str | None = None
+
+
+@router.post("/trayectorias/individual/aleatorio")
+def trayectoria_individual_aleatoria(request: Request, body: TrayectoriaAleatoriaRequest = TrayectoriaAleatoriaRequest()):
     """IPF al azar (de Personas, no de Afiliacion - para no favorecer a quien
     tiene mas episodios) + sus episodios, para el boton "IPF aleatorio" de la
     pestana "Trayectorias individuales" en colectivos.html. USING SAMPLE (no
     ORDER BY random() LIMIT 1) para no forzar un sort de 1,36M filas solo
     para escoger 1."""
     con = request.app.state.con.cursor()
-    ipf = con.execute("SELECT ipf FROM personas USING SAMPLE 1").fetchone()[0]
+    if body.colectivo is None:
+        ipf = con.execute("SELECT ipf FROM personas USING SAMPLE 1").fetchone()[0]
+    else:
+        if body.subgrupo not in ORDEN_SUBGRUPOS:
+            raise HTTPException(400, "subgrupo invalido")
+        condiciones = calcular_condiciones_subgrupos(
+            con, body.colectivo.filtro1, body.colectivo.filtro2, body.colectivo.filtro3, body.colectivo.filtro4
+        )
+        c = condiciones[body.subgrupo]
+        # Subconsulta imprescindible (bug real de DuckDB verificado con datos
+        # sinteticos): "SELECT ... WHERE cond USING SAMPLE n" (n filas, no
+        # porcentaje) aplica el muestreo ANTES del WHERE, no despues -
+        # devuelve NULL en cuanto el filtro es algo selectivo, aunque haya
+        # miles de filas que lo cumplan. Envolviendo el WHERE en una
+        # subconsulta y aplicando USING SAMPLE a esa subconsulta ya resuelta,
+        # el muestreo si actua sobre las filas ya filtradas.
+        fila = con.execute(
+            f"SELECT ipf FROM (SELECT ipf FROM personas WHERE {c['where']}) USING SAMPLE 1",
+            c["params"],
+        ).fetchone()
+        if fila is None:
+            raise HTTPException(404, "Este subgrupo no tiene ninguna persona")
+        ipf = fila[0]
     return {
         "ipf": ipf,
         "persona": _persona_resumen(con, ipf),
