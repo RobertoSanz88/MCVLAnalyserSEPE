@@ -203,8 +203,14 @@
         .switch-filtro-label { font-size: 0.82rem; font-weight: 600; color: var(--text); }
         /* "Chips" clicables del selector de subgrupo, en fila (no en columna
            como la leyenda de recuentos de las otras 2 pestanas) para caber al
-           lado del switch - una sola seleccionada a la vez, resaltada. */
-        .selector-subgrupo-individual { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+           lado del switch - una sola seleccionada a la vez, resaltada. Margen
+           izquierdo extra (ademas del gap de .fila-switch-individual) para que
+           no queden pegados a los botones No/Si. El nombre del subgrupo
+           seleccionado (etiqueta completa) va a continuacion de los chips,
+           dentro del mismo contenedor - ver renderizarSelectorSubgrupoIndividual. */
+        .selector-subgrupo-individual { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;
+                                          margin-left: 0.6rem; }
+        .individual-subgrupo-nombre { font-size: 0.78rem; color: var(--muted); margin-left: 0.3rem; }
         .fila-subgrupo-individual { cursor: pointer; padding: 0.2rem 0.5rem; border-radius: 6px;
                                       border: 1.5px solid var(--border); font-size: 0.72rem; white-space: nowrap;
                                       display: inline-flex; align-items: center; gap: 0.3rem; }
@@ -1914,6 +1920,7 @@ async function exportarExcel() {
 // pestana, pero su estado ya configurado sigue vivo en esas variables).
 let filtroColectivoIndividual = false;
 let subgrupoSeleccionadoIndividual = ORDEN_SUBGRUPOS[0];
+let ultimosSubgruposIndividual = null; // ultimo /colectivos/recuentos recibido, para actualizar el nombre al cambiar de chip
 
 async function cambiarFiltroColectivoIndividual(activo) {
     filtroColectivoIndividual = activo;
@@ -1940,14 +1947,22 @@ async function cambiarFiltroColectivoIndividual(activo) {
     renderizarSelectorSubgrupoIndividual(await resp.json());
 }
 
+// Chips compactos (solo numero + color, sin la etiqueta completa como texto)
+// para que quepan de verdad junto al switch en la misma fila - el nombre
+// completo del subgrupo SELECCIONADO se muestra aparte, a continuacion de
+// los chips (unico texto largo, se actualiza al elegir otro subgrupo); el
+// resto solo se ve al pasar el raton (title).
 function renderizarSelectorSubgrupoIndividual(subgrupos) {
-    document.getElementById('individual-selector-subgrupo').innerHTML = ORDEN_SUBGRUPOS.map(nombre => `
+    ultimosSubgruposIndividual = subgrupos;
+    const chips = ORDEN_SUBGRUPOS.map(nombre => `
         <div class="fila-subgrupo-individual${nombre === subgrupoSeleccionadoIndividual ? ' seleccionado' : ''}"
-             onclick="seleccionarSubgrupoIndividual('${nombre}')">
+             onclick="seleccionarSubgrupoIndividual('${nombre}')"
+             title="${subgrupos[nombre].etiqueta} (${fmtEntero(subgrupos[nombre].recuento)})">
             <span class="numero-subgrupo">${NUMERO_SUBGRUPO[nombre]}</span>
             <span class="leyenda-swatch" style="background:${COLOR_SUBGRUPO[nombre]}"></span>
-            ${subgrupos[nombre].etiqueta} (${fmtEntero(subgrupos[nombre].recuento)})
         </div>`).join('');
+    document.getElementById('individual-selector-subgrupo').innerHTML = chips +
+        `<span class="individual-subgrupo-nombre" id="individual-subgrupo-nombre">${subgrupos[subgrupoSeleccionadoIndividual].etiqueta}</span>`;
 }
 
 function seleccionarSubgrupoIndividual(nombre) {
@@ -1955,6 +1970,9 @@ function seleccionarSubgrupoIndividual(nombre) {
     document.querySelectorAll('.fila-subgrupo-individual').forEach(el => {
         el.classList.toggle('seleccionado', el.getAttribute('onclick').includes(`'${nombre}'`));
     });
+    if (ultimosSubgruposIndividual) {
+        document.getElementById('individual-subgrupo-nombre').textContent = ultimosSubgruposIndividual[nombre].etiqueta;
+    }
 }
 
 async function cargarIpfAleatorio() {
