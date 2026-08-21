@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from etl import reg_cotizacion_agrupado, tipo_contrato_claves_sucesoras
+from etl.personas_extendida import FECHA_CORTE
 from app.routers.colectivos import ORDEN_SUBGRUPOS, SubgruposRequest, calcular_condiciones_subgrupos
 
 router = APIRouter()
@@ -597,18 +598,43 @@ def _trayectoria_categorica_afiliacion(con, condiciones: dict, info: dict) -> di
     return resultado
 
 
-@router.get("/trayectorias/{ipf}", response_class=HTMLResponse)
-def trayectoria(request: Request, ipf: int):
-    con = request.app.state.con.cursor()
+# Fecha de corte de esta MCVL (misma constante que etl/personas_extendida.py,
+# no una copia - ver comentario equivalente sobre reg_cotizacion_agrupado mas
+# arriba). "07 FECHA_BAJA_REAL_AFIL" = 2099 es el placeholder de "episodio
+# todavia activo en la fecha de extraccion", no una fecha real - _episodios_afiliacion
+# lo convierte a None (episodio abierto) y el frontend dibuja la barra hasta
+# FECHA_CORTE, nunca hasta la fecha real de hoy (el dato esta congelado a
+# fecha de corte, no se actualiza solo por pasar el tiempo).
+FECHA_CORTE_ISO = FECHA_CORTE.date().isoformat()
+
+
+# Regimen/tipo de contrato agrupados con la MISMA logica que ya usa la
+# trayectoria categorica de colectivo (VARIABLES_CATEGORICAS mas arriba) y el
+# propio etl/personas_extendida.py - reutilizados aqui para la columna de
+# cada episodio en "Trayectorias individuales", en vez de mostrar el codigo
+# crudo (147 codigos de TIPO_CONTRATO, poco legibles de un vistazo).
+_REGIMEN_CUBETA_SQL = reg_cotizacion_agrupado.sql_cubeta_agrupado("reg_cotizacion")
+_TIPO_CONTRATO_CUBETA_SQL = tipo_contrato_claves_sucesoras.sql_cubeta_agrupado("tipo_contrato", "coef_t_parcial")
+
+
+def _episodios_afiliacion(con, ipf: int) -> list[dict]:
+    """Episodios de afiliacion de un IPF, ordenados por fecha de alta - usado
+    tanto por la pagina propia /trayectorias/{ipf} como por el endpoint JSON
+    de la pestana "Trayectorias individuales" de colectivos.html. Provincia y
+    TRL se dejan con su codigo crudo (a peticion del usuario, y mismo criterio
+    que ya usa la trayectoria categorica de colectivo con estas 2 variables -
+    "no hay diccionario pedido para decodificarlos todavia")."""
     episodios = con.execute(
-        """
+        f"""
         SELECT
             fecha_alta_real_afil,
             fecha_baja_real_afil,
             ccc_ppal,
-            tipo_contrato,
-            reg_cotizacion,
-            gru_cotizacion
+            trl,
+            provincia_domic_cc_ppal,
+            gru_cotizacion,
+            ({_REGIMEN_CUBETA_SQL}) AS regimen_cubeta,
+            ({_TIPO_CONTRATO_CUBETA_SQL}) AS tipo_contrato_cubeta
         FROM afiliacion
         WHERE ipf = ?
         ORDER BY fecha_alta_real_afil
@@ -616,30 +642,70 @@ def trayectoria(request: Request, ipf: int):
         [ipf],
     ).fetchall()
 
-    filas = [
+    return [
         {
             "empresa": ccc_ppal or "(sin CCC)",
             "inicio": fecha_alta_real_afil.isoformat() if fecha_alta_real_afil else None,
-            "fin": fecha_baja_real_afil.isoformat() if fecha_baja_real_afil else None,
-            "tipo_contrato": tipo_contrato,
-            "regimen": reg_cotizacion,
+            "fin": fecha_baja_real_afil.isoformat()
+            if fecha_baja_real_afil and fecha_baja_real_afil.year != 2099
+            else None,
+            "trl": trl,
+            "provincia": provincia_domic_cc_ppal,
             "grupo_cotizacion": gru_cotizacion,
+            "regimen": reg_cotizacion_agrupado.decodificar_agrupado(regimen_cubeta),
+            "tipo_contrato": tipo_contrato_claves_sucesoras.decodificar_agrupado(tipo_contrato_cubeta),
         }
         for (
             fecha_alta_real_afil,
             fecha_baja_real_afil,
             ccc_ppal,
-            tipo_contrato,
-            reg_cotizacion,
+            trl,
+            provincia_domic_cc_ppal,
             gru_cotizacion,
+            regimen_cubeta,
+            tipo_contrato_cubeta,
         ) in episodios
     ]
 
+
+def _persona_resumen(con, ipf: int) -> dict:
+    """Sexo/edad/nacionalidad de la cabecera de "Trayectorias individuales" -
+    a diferencia de los episodios, son datos de la PERSONA (constantes, no
+    cambian entre episodios), asi que se muestran una sola vez."""
+    sexo, edad, nacionalidad = con.execute(
+        "SELECT sexo, edad_actual_fecha_corte, nacionalidad_agrupado FROM personas WHERE ipf = ?",
+        [ipf],
+    ).fetchone()
+    return {"sexo": sexo, "edad": edad, "nacionalidad": nacionalidad}
+
+
+@router.get("/trayectorias/individual/aleatorio")
+def trayectoria_individual_aleatoria(request: Request):
+    """IPF al azar (de Personas, no de Afiliacion - para no favorecer a quien
+    tiene mas episodios) + sus episodios, para el boton "IPF aleatorio" de la
+    pestana "Trayectorias individuales" en colectivos.html. USING SAMPLE (no
+    ORDER BY random() LIMIT 1) para no forzar un sort de 1,36M filas solo
+    para escoger 1."""
+    con = request.app.state.con.cursor()
+    ipf = con.execute("SELECT ipf FROM personas USING SAMPLE 1").fetchone()[0]
+    return {
+        "ipf": ipf,
+        "persona": _persona_resumen(con, ipf),
+        "episodios": _episodios_afiliacion(con, ipf),
+        "fecha_corte": FECHA_CORTE_ISO,
+    }
+
+
+@router.get("/trayectorias/{ipf}", response_class=HTMLResponse)
+def trayectoria(request: Request, ipf: int):
+    con = request.app.state.con.cursor()
     return templates.TemplateResponse(
         request,
         "trayectoria.html",
         {
             "ipf": ipf,
-            "episodios_json": json.dumps(filas, ensure_ascii=False),
+            "persona_json": json.dumps(_persona_resumen(con, ipf), ensure_ascii=False),
+            "episodios_json": json.dumps(_episodios_afiliacion(con, ipf), ensure_ascii=False),
+            "fecha_corte": FECHA_CORTE_ISO,
         },
     )

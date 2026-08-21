@@ -182,6 +182,27 @@
         .cabecera-panel { display: flex; justify-content: space-between; align-items: center;
                             margin: 0 0 0.9rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
         .cabecera-panel h2 { margin: 0; padding: 0; border: none; }
+        .individual-ipf-label { color: var(--muted); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+
+        /* --- Trayectorias individuales: cabecera de persona + tabla de episodios --- */
+        /* Cabecera (sexo/edad/nacionalidad): datos de la PERSONA, constantes para
+           todos sus episodios, por eso van una sola vez aqui y no por fila. */
+        .individual-persona { display: flex; gap: 1.2rem; font-size: 0.85rem; color: var(--text);
+                                margin: 0 0 0.8rem; }
+        .individual-persona b { color: var(--verde-dk); font-size: 1rem; }
+        /* Tabla de episodios (Provincia/Regimen/Contrato/TRL) sincronizada en altura
+           de fila con el grafico Gantt de al lado - ver dibujarGanttIndividual():
+           altura de fila y de cabecera identicas a las usadas en el layout de
+           Plotly, para que cada fila de texto quede pegada a su barra. Un unico
+           scroll compartido (el de #panel-individual) mantiene ambos alineados en
+           vez de 2 scrolls independientes que se desincronizarian. */
+        #individual-timeline { display: flex; overflow: visible; }
+        #individual-tabla-episodios { flex: none; font-family: var(--mono); font-size: 0.7rem; }
+        .fila-episodio { display: grid; grid-template-columns: 2rem 3.2rem 8.5rem 8.5rem 2.8rem;
+                           align-items: center; column-gap: 0.4rem; border-bottom: 1px solid var(--border); }
+        .fila-episodio.cabecera-episodios { font-family: var(--font); font-weight: 700; color: var(--muted);
+                                              font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; }
+        .fila-episodio span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .switch-vista { display: flex; border: 1.5px solid var(--border); border-radius: 7px; overflow: hidden; }
         .switch-vista button { border: none; border-radius: 0; padding: 0.3rem 0.75rem; font-size: 0.72rem;
                                  background: var(--bg); color: var(--muted); }
@@ -379,6 +400,7 @@
         <div id="sidebar">
             <div class="pestana activa" id="pestana-analisis" onclick="cambiarVista('analisis')">Análisis de colectivos</div>
             <div class="pestana" id="pestana-trayectorias" onclick="cambiarVista('trayectorias')">Trayectorias de colectivos</div>
+            <div class="pestana" id="pestana-individuales" onclick="cambiarVista('individuales')">Trayectorias individuales</div>
             <div class="pestana deshabilitada">Cluster
                 <span class="nota-futuro">(próximamente)</span>
             </div>
@@ -518,6 +540,21 @@
                     <div id="grafico-trayectoria"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular, para ver las trayectorias del colectivo.</p></div>
                 </div>
             </div>
+
+            <div id="contenido-individuales" class="contenido-vista" style="display:none">
+                <div id="panel-individual" class="panel" style="flex:1; display:flex; flex-direction:column;">
+                    <div class="cabecera-panel">
+                        <h2>Trayectoria individual <span id="individual-ipf-label" class="individual-ipf-label"></span></h2>
+                        <button type="button" id="boton-ipf-aleatorio" onclick="cargarIpfAleatorio()">IPF aleatorio</button>
+                    </div>
+                    <div id="individual-persona" class="individual-persona"></div>
+                    <p class="aviso-vacio" id="individual-aviso">Pulsa "IPF aleatorio" para ver la trayectoria de una persona al azar.</p>
+                    <div id="individual-timeline">
+                        <div id="individual-tabla-episodios"></div>
+                        <div id="gantt-individual" style="flex:1; min-height:0;"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -609,10 +646,15 @@ let filtros = { 1: null, 2: null, 3: null, 4: null }; // Filtro tal cual lo espe
 // Eje B = Filtro 2 (+ Filtro 4 si se desactiva su contracolectivo automatico).
 let contracolectivo = { 1: true, 2: true };
 
-// Que pestana de #sidebar esta activa ahora mismo: 'analisis' o 'trayectorias'.
-// panel-filtros (la definicion del colectivo) es comun a las dos, solo cambia
-// que hay a su derecha (#contenido-analisis vs #contenido-trayectorias).
+// Que pestana de #sidebar esta activa ahora mismo: 'analisis', 'trayectorias'
+// o 'individuales'. panel-filtros (la definicion del colectivo) es comun a
+// las 2 primeras, solo cambia que hay a su derecha (#contenido-analisis vs
+// #contenido-trayectorias); "individuales" no define un colectivo (es una
+// persona sola, sin filtros), asi que oculta panel-filtros y los botones
+// Calcular/Exportar (que tampoco aplican ahi).
 let vistaActiva = 'analisis';
+let ipfActualIndividual = null; // null = todavia no se ha cargado ningun IPF en esta pestana
+let fechaCorteIndividual = null; // fecha de corte de esta MCVL, viene del backend en cada carga
 
 function cambiarVista(vista) {
     if (vista === vistaActiva) return;
@@ -620,8 +662,12 @@ function cambiarVista(vista) {
 
     document.getElementById('pestana-analisis').classList.toggle('activa', vista === 'analisis');
     document.getElementById('pestana-trayectorias').classList.toggle('activa', vista === 'trayectorias');
+    document.getElementById('pestana-individuales').classList.toggle('activa', vista === 'individuales');
     document.getElementById('contenido-analisis').style.display = vista === 'analisis' ? 'flex' : 'none';
     document.getElementById('contenido-trayectorias').style.display = vista === 'trayectorias' ? 'flex' : 'none';
+    document.getElementById('contenido-individuales').style.display = vista === 'individuales' ? 'flex' : 'none';
+    document.getElementById('panel-filtros').style.display = vista === 'individuales' ? 'none' : 'block';
+    document.getElementById('bloque-acciones-sidebar').style.display = vista === 'individuales' ? 'none' : 'block';
 
     // Trayectorias es navegable desde el principio (el usuario decide en que
     // pestana define el colectivo, da igual cual - panel-filtros es comun a
@@ -629,6 +675,10 @@ function cambiarVista(vista) {
     // colectivo (recuentos) se ve al momento pero el grafico se queda como
     // estaba (o con el aviso inicial) hasta que se pulse Calcular - ver
     // alPulsarCalcular().
+
+    // Trayectorias individuales: primera vez que se entra, carga un IPF al
+    // azar sola (no hace falta pulsar el boton) - ver cargarIpfAleatorio().
+    if (vista === 'individuales' && ipfActualIndividual === null) cargarIpfAleatorio();
 }
 
 // Misma condicion que ya usaba Calcular: cruce de ejes completo -> ya hay una
@@ -1815,6 +1865,112 @@ async function exportarExcel() {
     a.download = 'colectivos.xlsx';
     a.click();
     URL.revokeObjectURL(url);
+}
+
+// --- Pestana "Trayectorias individuales" ---
+// Mismo dibujo de Gantt que app/templates/trayectoria.html (pagina propia
+// /trayectorias/{ipf}), reutilizado aqui para que se vea integrado como
+// pestana en vez de abrir una pagina aparte - ver [[feedback_ui_pestanas_integradas]].
+async function cargarIpfAleatorio() {
+    document.getElementById('boton-ipf-aleatorio').disabled = true;
+    document.getElementById('individual-aviso').textContent = 'Cargando...';
+    document.getElementById('individual-aviso').style.display = 'block';
+    document.getElementById('individual-persona').innerHTML = '';
+    document.getElementById('individual-tabla-episodios').innerHTML = '';
+    document.getElementById('gantt-individual').innerHTML = '';
+    try {
+        const resp = await fetch('/trayectorias/individual/aleatorio');
+        if (!resp.ok) { mostrarAviso('Error al cargar IPF aleatorio: ' + (await resp.text()), 'error'); return; }
+        const datos = await resp.json();
+        ipfActualIndividual = datos.ipf;
+        fechaCorteIndividual = datos.fecha_corte;
+        document.getElementById('individual-ipf-label').textContent = 'IPF ' + datos.ipf;
+        renderizarPersonaIndividual(datos.persona);
+        if (!datos.episodios.length) {
+            document.getElementById('individual-aviso').textContent = 'Esta persona no tiene episodios de afiliación.';
+            return;
+        }
+        document.getElementById('individual-aviso').style.display = 'none';
+        dibujarGanttIndividual(datos.episodios);
+    } finally {
+        document.getElementById('boton-ipf-aleatorio').disabled = false;
+    }
+}
+
+// Simbolos de sexo (mismo criterio binario Hombre/Mujer que ya usa el resto
+// de la app - ver [[project_sexo_binario_no_consta]]); cualquier otro valor
+// (NO CONSTA) se deja tal cual, no hay simbolo neutro establecido para eso.
+const SIMBOLOS_SEXO = { 'Hombre': '♂', 'Mujer': '♀' };
+
+function renderizarPersonaIndividual(persona) {
+    const simbolo = SIMBOLOS_SEXO[persona.sexo] ?? persona.sexo;
+    const edad = persona.edad != null ? Math.round(persona.edad) + ' años' : 'no disponible';
+    document.getElementById('individual-persona').innerHTML =
+        `<span>Sexo: <b>${simbolo}</b></span><span>Edad: ${edad}</span><span>Nacionalidad: ${persona.nacionalidad ?? 'no disponible'}</span>`;
+}
+
+// Alturas de fila compartidas por la tabla de episodios (HTML) y el grafico
+// Gantt (Plotly) de al lado, para que cada fila de texto quede pegada a su
+// barra - ver comentario de #individual-timeline en el <style>.
+const ALTO_FILA_EPISODIO = 26;
+const ALTO_CABECERA_EPISODIOS = 24;
+const MARGEN_INFERIOR_GANTT = 40; // espacio para las fechas del eje X
+
+function construirTablaEpisodios(episodios) {
+    const filas = episodios.map((ep, i) => `
+        <div class="fila-episodio" style="height:${ALTO_FILA_EPISODIO}px" title="CCC ${ep.empresa}">
+            <span>${i + 1}</span><span>${ep.provincia ?? '—'}</span><span>${ep.regimen}</span>
+            <span>${ep.tipo_contrato}</span><span>${ep.trl ?? '—'}</span>
+        </div>`).join('');
+    document.getElementById('individual-tabla-episodios').innerHTML = `
+        <div class="fila-episodio cabecera-episodios" style="height:${ALTO_CABECERA_EPISODIOS}px">
+            <span>Nº</span><span>Prov.</span><span>Régimen</span><span>Contrato</span><span>TRL</span>
+        </div>${filas}`;
+}
+
+function dibujarGanttIndividual(episodios) {
+    construirTablaEpisodios(episodios);
+
+    const traces = episodios.map((ep, i) => {
+        const fila = String(i + 1);
+        return {
+            x: [ep.inicio, ep.fin || fechaCorteIndividual],
+            y: [fila, fila],
+            mode: "lines+markers",
+            line: { width: 20, color: "#00815A" },
+            marker: { size: 14, color: "#00815A" },
+            name: fila,
+            text: "CCC: " + ep.empresa +
+                  "<br>Provincia: " + (ep.provincia ?? "?") +
+                  "<br>Régimen: " + ep.regimen +
+                  "<br>Contrato: " + ep.tipo_contrato +
+                  "<br>TRL: " + (ep.trl ?? "?") +
+                  "<br>Grupo cotización: " + (ep.grupo_cotizacion ?? "?"),
+            hoverinfo: "text+x",
+        };
+    });
+
+    // Sin titulo dentro de la figura (ya lo da la cabecera de fuera) y sin
+    // etiquetas en el eje Y (la tabla de al lado ya muestra el numero de
+    // episodio): asi el margen superior de Plotly puede fijarse exactamente
+    // a ALTO_CABECERA_EPISODIOS y el area de dibujo mide exactamente
+    // episodios.length * ALTO_FILA_EPISODIO - la altura total pasada aqui
+    // reproduce ese calculo para que Plotly reparta esa area por igual entre
+    // categorias (cada una = ALTO_FILA_EPISODIO), alineada fila a fila con
+    // la tabla HTML.
+    Plotly.newPlot("gantt-individual", traces, {
+        xaxis: { type: "date" },
+        yaxis: {
+            type: "category", autorange: "reversed", showticklabels: false,
+            range: [-0.5, episodios.length - 0.5],
+        },
+        margin: { l: 10, r: 20, t: ALTO_CABECERA_EPISODIOS, b: MARGEN_INFERIOR_GANTT },
+        height: ALTO_CABECERA_EPISODIOS + episodios.length * ALTO_FILA_EPISODIO + MARGEN_INFERIOR_GANTT,
+        showlegend: false,
+        font: { family: "Nunito Sans, Calibri, sans-serif", color: "#1A2E26" },
+        paper_bgcolor: "#FFFFFF",
+        plot_bgcolor: "#FFFFFF",
+    }, { displayModeBar: false, responsive: true });
 }
 
 cargarColumnas();

@@ -35,7 +35,7 @@ _RUTA_CSV = Path(__file__).resolve().parent / "metadata" / "tipo_contrato_claves
 
 ETIQUETAS_AGRUPADO = {
     0: "No consta",
-    1: "indefinido_t_completo",
+    1: "Indefinido_t_completo",
     2: "Indefinido_t_parcial",
     3: "Indefinido_fijo_discontinuo",
     4: "Temporal_t_completo",

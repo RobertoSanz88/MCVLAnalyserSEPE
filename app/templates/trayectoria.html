@@ -46,6 +46,21 @@
         .card h2 { font-size: 0.95rem; font-weight: 800; color: var(--text); margin: 0 0 0.75rem;
                     padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
         .card h2 span { color: var(--muted); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+
+        /* Cabecera de persona (sexo/edad/nacionalidad): dato constante para todos
+           los episodios, se muestra una sola vez, no por fila. */
+        .persona { display: flex; gap: 1.2rem; font-size: 0.85rem; color: var(--text); margin: 0 0 0.8rem; }
+        .persona b { color: var(--verde-dk); font-size: 1rem; }
+
+        /* Tabla de episodios sincronizada en altura de fila con el Gantt de al
+           lado - ver comentario equivalente en colectivos.html. */
+        #timeline { flex: 1; display: flex; overflow: auto; }
+        #tabla-episodios { flex: none; font-family: var(--mono); font-size: 0.7rem; }
+        .fila-episodio { display: grid; grid-template-columns: 2rem 3.2rem 8.5rem 8.5rem 2.8rem;
+                           align-items: center; column-gap: 0.4rem; border-bottom: 1px solid var(--border); }
+        .fila-episodio.cabecera-episodios { font-family: var(--font); font-weight: 700; color: var(--muted);
+                                              font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; }
+        .fila-episodio span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         #gantt { flex: 1; min-height: 0; }
     </style>
 </head>
@@ -65,40 +80,80 @@
     <main>
         <div class="card">
             <h2>Trayectoria laboral &mdash; <span>IPF {{ ipf }}</span></h2>
-            <div id="gantt"></div>
+            <div class="persona" id="persona"></div>
+            <div id="timeline">
+                <div id="tabla-episodios"></div>
+                <div id="gantt"></div>
+            </div>
         </div>
     </main>
 
     <script>
+        const persona = {{ persona_json | safe }};
         const episodios = {{ episodios_json | safe }};
-        const hoy = new Date().toISOString().slice(0, 10);
+        // Fecha de corte de esta MCVL (no la fecha real de hoy): el dato esta
+        // congelado a esa fecha, un episodio "todavia activo" (ep.fin nulo,
+        // placeholder 2099 ya resuelto en el backend) se dibuja hasta ahi.
+        const fechaCorte = "{{ fecha_corte }}";
+
+        const SIMBOLOS_SEXO = { 'Hombre': '♂', 'Mujer': '♀' };
+        const simbolo = SIMBOLOS_SEXO[persona.sexo] ?? persona.sexo;
+        const edad = persona.edad != null ? Math.round(persona.edad) + ' años' : 'no disponible';
+        document.getElementById('persona').innerHTML =
+            `<span>Sexo: <b>${simbolo}</b></span><span>Edad: ${edad}</span><span>Nacionalidad: ${persona.nacionalidad ?? 'no disponible'}</span>`;
+
+        // Alturas de fila compartidas por la tabla de episodios (HTML) y el
+        // grafico Gantt (Plotly) de al lado, para que cada fila de texto quede
+        // pegada a su barra.
+        const ALTO_FILA_EPISODIO = 26;
+        const ALTO_CABECERA_EPISODIOS = 24;
+        const MARGEN_INFERIOR_GANTT = 40; // espacio para las fechas del eje X
+
+        const filasHtml = episodios.map((ep, i) => `
+            <div class="fila-episodio" style="height:${ALTO_FILA_EPISODIO}px" title="CCC ${ep.empresa}">
+                <span>${i + 1}</span><span>${ep.provincia ?? '—'}</span><span>${ep.regimen}</span>
+                <span>${ep.tipo_contrato}</span><span>${ep.trl ?? '—'}</span>
+            </div>`).join('');
+        document.getElementById('tabla-episodios').innerHTML = `
+            <div class="fila-episodio cabecera-episodios" style="height:${ALTO_CABECERA_EPISODIOS}px">
+                <span>Nº</span><span>Prov.</span><span>Régimen</span><span>Contrato</span><span>TRL</span>
+            </div>${filasHtml}`;
 
         const traces = episodios.map((ep, i) => {
-            const fila = (i + 1) + ". " + ep.empresa;
+            const fila = String(i + 1);
             return {
-                x: [ep.inicio, ep.fin || hoy],
+                x: [ep.inicio, ep.fin || fechaCorte],
                 y: [fila, fila],
                 mode: "lines+markers",
                 line: { width: 20, color: "#00815A" },
                 marker: { size: 14, color: "#00815A" },
                 name: fila,
-                text: "Contrato: " + (ep.tipo_contrato ?? "?") +
-                      "<br>Regimen: " + (ep.regimen ?? "?") +
-                      "<br>Grupo cotizacion: " + (ep.grupo_cotizacion ?? "?"),
+                text: "CCC: " + ep.empresa +
+                      "<br>Provincia: " + (ep.provincia ?? "?") +
+                      "<br>Régimen: " + ep.regimen +
+                      "<br>Contrato: " + ep.tipo_contrato +
+                      "<br>TRL: " + (ep.trl ?? "?") +
+                      "<br>Grupo cotización: " + (ep.grupo_cotizacion ?? "?"),
                 hoverinfo: "text+x",
             };
         });
 
+        // Sin titulo dentro de la figura y sin etiquetas en el eje Y (la tabla
+        // de al lado ya muestra el numero de episodio) - ver comentario
+        // equivalente en colectivos.html sobre el calculo de alturas.
         Plotly.newPlot("gantt", traces, {
-            title: "Episodios de afiliacion",
             xaxis: { type: "date" },
-            yaxis: { type: "category", autorange: "reversed" },
-            margin: { l: 180 },
+            yaxis: {
+                type: "category", autorange: "reversed", showticklabels: false,
+                range: [-0.5, episodios.length - 0.5],
+            },
+            margin: { l: 10, r: 20, t: ALTO_CABECERA_EPISODIOS, b: MARGEN_INFERIOR_GANTT },
+            height: ALTO_CABECERA_EPISODIOS + episodios.length * ALTO_FILA_EPISODIO + MARGEN_INFERIOR_GANTT,
             showlegend: false,
             font: { family: "Nunito Sans, Calibri, sans-serif", color: "#1A2E26" },
             paper_bgcolor: "#FFFFFF",
             plot_bgcolor: "#FFFFFF",
-        }, { responsive: true });
+        }, { displayModeBar: false, responsive: true });
     </script>
 </body>
 </html>
