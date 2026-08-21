@@ -190,21 +190,27 @@
         .individual-persona { display: flex; gap: 1.2rem; font-size: 0.85rem; color: var(--text);
                                 margin: 0 0 0.8rem; }
         .individual-persona b { color: var(--verde-dk); font-size: 1rem; }
-        /* Switch "Aplicar filtro de colectivo": en No (por defecto), IPF aleatorio
-           de toda Personas, igual que hasta ahora. En Si, restringido al subgrupo
-           elegido en el selector de abajo (mismos filtro1-4 que Analisis/
-           Trayectorias de colectivo - panel-filtros esta oculto en esta pestana,
-           pero su estado ya configurado se reutiliza igual). */
-        .switch-filtro-individual { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem;
-                                      font-weight: 600; color: var(--text); margin: 0 0 0.7rem; cursor: pointer; }
-        /* Filas clicables del selector de subgrupo, mismo aspecto que la leyenda
-           de recuentos de las otras 2 pestanas (.lista-recuentos) pero
-           seleccionables - una sola a la vez, resaltada. */
-        .selector-subgrupo-individual { margin-bottom: 0.8rem; }
-        .fila-subgrupo-individual { cursor: pointer; padding: 0.2rem 0.4rem; border-radius: 5px;
-                                      border: 1.5px solid transparent; }
+        /* Switch "Aplicar filtro de colectivos" (No/Si, mismo componente
+           .switch-vista que Datos/Graficos - ver mas abajo): en No (por
+           defecto), IPF aleatorio de toda Personas, igual que hasta ahora. En
+           Si, restringido al subgrupo elegido en el selector de al lado
+           (mismos filtro1-4 que Analisis/Trayectorias de colectivo -
+           panel-filtros esta oculto en esta pestana, pero su estado ya
+           configurado se reutiliza igual). Selector A LA DERECHA del switch,
+           no debajo, para no gastar una fila entera solo en esto. */
+        .fila-switch-individual { display: flex; align-items: center; gap: 0.8rem; margin: 0 0 0.8rem;
+                                    flex-wrap: wrap; }
+        .switch-filtro-label { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+        /* "Chips" clicables del selector de subgrupo, en fila (no en columna
+           como la leyenda de recuentos de las otras 2 pestanas) para caber al
+           lado del switch - una sola seleccionada a la vez, resaltada. */
+        .selector-subgrupo-individual { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+        .fila-subgrupo-individual { cursor: pointer; padding: 0.2rem 0.5rem; border-radius: 6px;
+                                      border: 1.5px solid var(--border); font-size: 0.72rem; white-space: nowrap;
+                                      display: inline-flex; align-items: center; gap: 0.3rem; }
         .fila-subgrupo-individual:hover { background: var(--bg); }
         .fila-subgrupo-individual.seleccionado { background: var(--bg2); border-color: var(--verde-dk); }
+        .fila-subgrupo-individual .numero-subgrupo { font-weight: 800; color: var(--text); }
         /* Tabla de episodios (Provincia/Regimen/Contrato/TRL) sincronizada en altura
            de fila con el grafico Gantt de al lado - ver dibujarGanttIndividual():
            altura de fila y de cabecera identicas a las usadas en el layout de
@@ -562,11 +568,14 @@
                         <h2>Trayectoria individual <span id="individual-ipf-label" class="individual-ipf-label"></span></h2>
                         <button type="button" id="boton-ipf-aleatorio" onclick="cargarIpfAleatorio()">IPF aleatorio</button>
                     </div>
-                    <label class="switch-filtro-individual">
-                        <input type="checkbox" id="switch-filtro-individual" onchange="toggleFiltroColectivoIndividual()">
-                        Aplicar filtro de colectivo
-                    </label>
-                    <div id="individual-selector-subgrupo" style="display:none"></div>
+                    <div class="fila-switch-individual">
+                        <span class="switch-filtro-label">Aplicar filtro de colectivos</span>
+                        <div class="switch-vista" id="switch-filtro-individual">
+                            <button type="button" class="activa" onclick="cambiarFiltroColectivoIndividual(false)">No</button>
+                            <button type="button" onclick="cambiarFiltroColectivoIndividual(true)">Sí</button>
+                        </div>
+                        <div id="individual-selector-subgrupo" class="selector-subgrupo-individual" style="display:none"></div>
+                    </div>
                     <div id="individual-persona" class="individual-persona"></div>
                     <p class="aviso-vacio" id="individual-aviso">Pulsa "IPF aleatorio" para ver la trayectoria de una persona al azar.</p>
                     <div id="individual-timeline">
@@ -703,7 +712,7 @@ function cambiarVista(vista) {
         // Los filtros pueden haber cambiado en otra pestana desde la ultima
         // vez que se entro aqui con el switch activado - se refresca el
         // selector/boton por si acaso (filtrosListos() puede haber cambiado).
-        if (filtroColectivoIndividual) toggleFiltroColectivoIndividual();
+        if (filtroColectivoIndividual) cambiarFiltroColectivoIndividual(true);
     }
 }
 
@@ -1897,20 +1906,24 @@ async function exportarExcel() {
 // Mismo dibujo de Gantt que app/templates/trayectoria.html (pagina propia
 // /trayectorias/{ipf}), reutilizado aqui para que se vea integrado como
 // pestana en vez de abrir una pagina aparte - ver [[feedback_ui_pestanas_integradas]].
-// Switch "Aplicar filtro de colectivo": en No (por defecto) IPF aleatorio de
-// toda Personas; en Si, restringido al subgrupo elegido en el selector -
-// reutiliza filtros/contracolectivo/cuerpoPeticion() ya definidos mas arriba
-// para Analisis/Trayectorias de colectivo (panel-filtros esta oculto en esta
+// Switch "Aplicar filtro de colectivos" (No/Si, mismo componente .switch-vista
+// que Datos/Graficos): en No (por defecto) IPF aleatorio de toda Personas; en
+// Si, restringido al subgrupo elegido en el selector de al lado - reutiliza
+// filtros/contracolectivo/cuerpoPeticion() ya definidos mas arriba para
+// Analisis/Trayectorias de colectivo (panel-filtros esta oculto en esta
 // pestana, pero su estado ya configurado sigue vivo en esas variables).
 let filtroColectivoIndividual = false;
 let subgrupoSeleccionadoIndividual = ORDEN_SUBGRUPOS[0];
 
-async function toggleFiltroColectivoIndividual() {
-    filtroColectivoIndividual = document.getElementById('switch-filtro-individual').checked;
+async function cambiarFiltroColectivoIndividual(activo) {
+    filtroColectivoIndividual = activo;
+    document.querySelectorAll('#switch-filtro-individual button').forEach((btn, i) => {
+        btn.classList.toggle('activa', (i === 1) === activo);
+    });
     const cont = document.getElementById('individual-selector-subgrupo');
     const boton = document.getElementById('boton-ipf-aleatorio');
-    if (!filtroColectivoIndividual) { cont.style.display = 'none'; boton.disabled = false; return; }
-    cont.style.display = 'block';
+    if (!activo) { cont.style.display = 'none'; boton.disabled = false; return; }
+    cont.style.display = 'flex';
     if (!filtrosListos()) {
         cont.innerHTML = '<p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en "Análisis de colectivos" o "Trayectorias de colectivos" primero.</p>';
         boton.disabled = true;
@@ -1928,16 +1941,13 @@ async function toggleFiltroColectivoIndividual() {
 }
 
 function renderizarSelectorSubgrupoIndividual(subgrupos) {
-    document.getElementById('individual-selector-subgrupo').innerHTML = `
-        <div class="recuentos-colectivo selector-subgrupo-individual">
-            <div class="lista-recuentos">${ORDEN_SUBGRUPOS.map(nombre => `
-                <div class="fila-subgrupo-individual${nombre === subgrupoSeleccionadoIndividual ? ' seleccionado' : ''}"
-                     onclick="seleccionarSubgrupoIndividual('${nombre}')">
-                    <span class="numero-subgrupo">${NUMERO_SUBGRUPO[nombre]}</span>
-                    <span class="leyenda-swatch" style="background:${COLOR_SUBGRUPO[nombre]}"></span>
-                    ${subgrupos[nombre].etiqueta} (${fmtEntero(subgrupos[nombre].recuento)})
-                </div>`).join('')}</div>
-        </div>`;
+    document.getElementById('individual-selector-subgrupo').innerHTML = ORDEN_SUBGRUPOS.map(nombre => `
+        <div class="fila-subgrupo-individual${nombre === subgrupoSeleccionadoIndividual ? ' seleccionado' : ''}"
+             onclick="seleccionarSubgrupoIndividual('${nombre}')">
+            <span class="numero-subgrupo">${NUMERO_SUBGRUPO[nombre]}</span>
+            <span class="leyenda-swatch" style="background:${COLOR_SUBGRUPO[nombre]}"></span>
+            ${subgrupos[nombre].etiqueta} (${fmtEntero(subgrupos[nombre].recuento)})
+        </div>`).join('');
 }
 
 function seleccionarSubgrupoIndividual(nombre) {
