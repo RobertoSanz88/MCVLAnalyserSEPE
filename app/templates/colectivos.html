@@ -228,7 +228,17 @@
            Plotly, para que cada fila de texto quede pegada a su barra. Un unico
            scroll compartido (el de #panel-individual) mantiene ambos alineados en
            vez de 2 scrolls independientes que se desincronizarian. */
-        #individual-timeline { display: flex; overflow: visible; }
+        /* align-items: flex-start (no el "stretch" por defecto de flexbox):
+           sin esto, el navegador estira #gantt-individual para llenar la altura
+           visible del panel en vez de dejarle su altura real (calculada en JS
+           para que N filas midan N*ALTO_FILA_EPISODIO) - Plotly, con
+           {responsive:true}, se adapta a ese tamanyo "estirado" (mas pequenyo
+           que el real) y encoge sus barras, con lo que se desalinean cada vez
+           mas segun se baja en la lista (el efecto que describio el usuario:
+           "parece que falta la primera y la ultima linea"). Bug real
+           verificado con datos: para 30 episodios, el div acababa con 689.6px
+           en vez de los 844px calculados. */
+        #individual-timeline { display: flex; overflow: visible; align-items: flex-start; }
         #individual-tabla-episodios { flex: none; font-family: var(--mono); font-size: 0.7rem; }
         .fila-episodio { display: grid; grid-template-columns: 2rem 3.2rem 8.5rem 8.5rem 2.8rem;
                            align-items: center; column-gap: 0.4rem; border-bottom: 1px solid var(--border); }
@@ -2075,14 +2085,33 @@ function dibujarGanttIndividual(episodios) {
     // reproduce ese calculo para que Plotly reparta esa area por igual entre
     // categorias (cada una = ALTO_FILA_EPISODIO), alineada fila a fila con
     // la tabla HTML.
+    //
+    // Altura FIJADA EXPLICITAMENTE en el div antes de dibujar (bug real
+    // encontrado con datos: sin esto, el navegador estira #gantt-individual
+    // por flexbox a la altura visible del panel - normalmente mas pequenya
+    // que la calculada - y {responsive:true} hace que Plotly encoja sus
+    // barras para encajar en ese hueco mas pequenyo, desalineando la tabla
+    // y el grafico cada vez mas segun se baja en la lista). Con la altura ya
+    // fijada como estilo explicito, "align-items: flex-start" en
+    // #individual-timeline (ver <style>) respeta esa altura en vez de
+    // sobreescribirla.
+    //
+    // "autorange: false" + range en orden DESCENDENTE (en vez de
+    // "autorange: reversed" + range ascendente) - otro bug real de Plotly
+    // encontrado con datos: con "autorange: reversed", Plotly IGNORA el
+    // range explicito y calcula el suyo propio (con relleno extra en los
+    // extremos), rompiendo la correspondencia fila-a-fila igual que el
+    // problema de la altura.
+    const alturaGantt = ALTO_CABECERA_EPISODIOS + episodios.length * ALTO_FILA_EPISODIO + MARGEN_INFERIOR_GANTT;
+    document.getElementById("gantt-individual").style.height = alturaGantt + "px";
     Plotly.newPlot("gantt-individual", traces, {
         xaxis: { type: "date" },
         yaxis: {
-            type: "category", autorange: "reversed", showticklabels: false,
-            range: [-0.5, episodios.length - 0.5],
+            type: "category", autorange: false, showticklabels: false,
+            range: [episodios.length - 0.5, -0.5],
         },
         margin: { l: 10, r: 20, t: ALTO_CABECERA_EPISODIOS, b: MARGEN_INFERIOR_GANTT },
-        height: ALTO_CABECERA_EPISODIOS + episodios.length * ALTO_FILA_EPISODIO + MARGEN_INFERIOR_GANTT,
+        height: alturaGantt,
         showlegend: false,
         font: { family: "Nunito Sans, Calibri, sans-serif", color: "#1A2E26" },
         paper_bgcolor: "#FFFFFF",

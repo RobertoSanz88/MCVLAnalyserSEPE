@@ -53,8 +53,14 @@
         .persona b { color: var(--verde-dk); font-size: 1rem; }
 
         /* Tabla de episodios sincronizada en altura de fila con el Gantt de al
-           lado - ver comentario equivalente en colectivos.html. */
-        #timeline { flex: 1; display: flex; overflow: auto; }
+           lado - ver comentario equivalente en colectivos.html. align-items:
+           flex-start es imprescindible: sin el, el "stretch" por defecto de
+           flexbox fuerza a #gantt a la altura VISIBLE de #timeline (bug real
+           encontrado con datos), en vez de dejarle su altura real calculada -
+           Plotly, con {responsive:true}, se adapta a ese hueco mas pequenyo y
+           encoge las barras, desalineandolas de la tabla cada vez mas segun
+           se baja en la lista. */
+        #timeline { flex: 1; display: flex; overflow: auto; align-items: flex-start; }
         #tabla-episodios { flex: none; font-family: var(--mono); font-size: 0.7rem; }
         .fila-episodio { display: grid; grid-template-columns: 2rem 3.2rem 8.5rem 8.5rem 2.8rem;
                            align-items: center; column-gap: 0.4rem; border-bottom: 1px solid var(--border); }
@@ -140,15 +146,21 @@
 
         // Sin titulo dentro de la figura y sin etiquetas en el eje Y (la tabla
         // de al lado ya muestra el numero de episodio) - ver comentario
-        // equivalente en colectivos.html sobre el calculo de alturas.
+        // equivalente en colectivos.html sobre el calculo de alturas. Altura
+        // fijada explicitamente en el div (no solo en layout.height) y
+        // "autorange:false" con range descendente en vez de "reversed" -
+        // 2 bugs reales de Plotly encontrados con datos, ver comentario
+        // extenso en dibujarGanttIndividual (colectivos.html).
+        const alturaGantt = ALTO_CABECERA_EPISODIOS + episodios.length * ALTO_FILA_EPISODIO + MARGEN_INFERIOR_GANTT;
+        document.getElementById("gantt").style.height = alturaGantt + "px";
         Plotly.newPlot("gantt", traces, {
             xaxis: { type: "date" },
             yaxis: {
-                type: "category", autorange: "reversed", showticklabels: false,
-                range: [-0.5, episodios.length - 0.5],
+                type: "category", autorange: false, showticklabels: false,
+                range: [episodios.length - 0.5, -0.5],
             },
             margin: { l: 10, r: 20, t: ALTO_CABECERA_EPISODIOS, b: MARGEN_INFERIOR_GANTT },
-            height: ALTO_CABECERA_EPISODIOS + episodios.length * ALTO_FILA_EPISODIO + MARGEN_INFERIOR_GANTT,
+            height: alturaGantt,
             showlegend: false,
             font: { family: "Nunito Sans, Calibri, sans-serif", color: "#1A2E26" },
             paper_bgcolor: "#FFFFFF",
