@@ -13,8 +13,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from config import FECHA_CORTE as FECHA_CORTE_ISO
 from etl import reg_cotizacion_agrupado, tipo_contrato_claves_sucesoras
-from etl.personas_extendida import FECHA_CORTE
 from app.routers.colectivos import ORDEN_SUBGRUPOS, SubgruposRequest, calcular_condiciones_subgrupos
 
 router = APIRouter()
@@ -600,13 +600,14 @@ def _trayectoria_categorica_afiliacion(con, condiciones: dict, info: dict) -> di
 
 
 # Fecha de corte de esta MCVL (misma constante que etl/personas_extendida.py,
-# no una copia - ver comentario equivalente sobre reg_cotizacion_agrupado mas
-# arriba). "07 FECHA_BAJA_REAL_AFIL" = 2099 es el placeholder de "episodio
-# todavia activo en la fecha de extraccion", no una fecha real - _episodios_afiliacion
-# lo convierte a None (episodio abierto) y el frontend dibuja la barra hasta
-# FECHA_CORTE, nunca hasta la fecha real de hoy (el dato esta congelado a
-# fecha de corte, no se actualiza solo por pasar el tiempo).
-FECHA_CORTE_ISO = FECHA_CORTE.date().isoformat()
+# ambas leidas de config.py - ver comentario equivalente sobre
+# reg_cotizacion_agrupado mas arriba). "07 FECHA_BAJA_REAL_AFIL" = 2099 es el
+# placeholder de "episodio todavia activo en la fecha de extraccion", no una
+# fecha real - _episodios_afiliacion lo convierte a None (episodio abierto) y
+# el frontend dibuja la barra hasta FECHA_CORTE, nunca hasta la fecha real de
+# hoy (el dato esta congelado a fecha de corte, no se actualiza solo por
+# pasar el tiempo). Ya viene en formato ISO desde config.py, no hace falta
+# convertir.
 
 
 # Regimen/tipo de contrato agrupados con la MISMA logica que ya usa la

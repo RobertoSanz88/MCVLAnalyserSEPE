@@ -31,6 +31,18 @@ def _pedir_carpeta_parquet() -> Path:
     return Path(carpeta)
 
 
+# Fecha de corte de la MCVL procesada (edicion 2024): fecha de extraccion de
+# los datos crudos, usada por el ETL para cerrar episodios de afiliacion
+# todavia abiertos (placeholder 2099 en FECHA_BAJA_REAL_AFIL), calcular
+# edades/duraciones "a fecha de hoy" sobre datos congelados, etc. Hasta
+# 2026-08-24 existian dos constantes distintas para esto (FECHA_CORTE
+# 2025-06-01 en etl/personas_extendida.py y FECHA_REFERENCIA_45 2025-04-30,
+# usada solo para duracion_actual_sin_empleo) - decision explicita del
+# usuario: unificarlas en una sola, aqui, para que etl/ y app/ lean siempre
+# el mismo valor. Cambiar esto exige regenerar personas_extendida.parquet
+# (afecta a columnas ya calculadas por el ETL, no solo a la app).
+FECHA_CORTE = "2025-06-01"
+
 PUERTO_POR_DEFECTO = 8000
 
 

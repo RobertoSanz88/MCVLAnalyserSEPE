@@ -15,14 +15,16 @@ import re
 import numpy as np
 import pandas as pd
 
+from config import FECHA_CORTE as _FECHA_CORTE_ISO
 from etl import reg_cotizacion_agrupado
 from etl.tipo_contrato_claves_sucesoras import decodificar_agrupado, sql_bin_corregido, sql_corregido
 
 UN_DIA = pd.Timedelta(days=1)
 CERO_DIAS = pd.Timedelta(days=0)
 
-# Sustituye el placeholder 2099 (episodio de afiliacion todavia activo) de FECHA_BAJA_REAL_AFIL
-FECHA_CORTE = pd.to_datetime("2025-06-01")
+# Sustituye el placeholder 2099 (episodio de afiliacion todavia activo) de FECHA_BAJA_REAL_AFIL.
+# Valor real en config.py (raiz del proyecto), no aqui - unica fuente para etl/ y app/.
+FECHA_CORTE = pd.to_datetime(_FECHA_CORTE_ISO)
 
 
 def _ruta(parquet_folder, nombre_parquet):
@@ -897,7 +899,6 @@ def fusionar_grupo_g(parquet_folder, con):
 # GRUPO H - Combinaciones sobre Personas extendida (sin cargar ninguna tabla grande)
 # ---------------------------------------------------------------------------
 
-FECHA_REFERENCIA_45 = pd.Timestamp("2025-04-30")
 DIAS_POR_ANIO = 365.25
 
 PAISES_LATINOS = ["N03", "N06", "N07", "N08", "N09", "N13", "N22", "N26", "N27"]
@@ -968,7 +969,7 @@ def _tiene_jubilacion(x):
     return False
 
 
-def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
+def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_dict_path):
     """Ultimo paso: calculos derivados (edades, tasas anuales, agrupaciones, filtros de
     calidad) y seleccion final de columnas. Todo en pandas: para cuando se llega aqui, la
     tabla ya esta reducida a una fila por persona (~1,36M filas), cabe de sobra en memoria."""
@@ -1074,8 +1075,10 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     # nunca en Situacion_actual_afiliacion, asi que ninguna de esas personas entraba en
     # usa_fecha_inicio_paro por esta via).
     # duracion_actual_sin_empleo (nombre 2026-08-20; antes "duracion_paro_dias"): dias sin
-    # empleo hasta FECHA_REFERENCIA_45, con origen distinto segun la via por la que se llego
-    # a "Parado" (concepto aclarado por el usuario, ver tambien el comentario de
+    # empleo hasta FECHA_CORTE (antes de 2026-08-24 usaba una fecha de referencia distinta,
+    # FECHA_REFERENCIA_45 = 2025-04-30, un mes anterior - unificada en FECHA_CORTE por
+    # decision explicita del usuario, ver config.py), con origen distinto segun la via por
+    # la que se llego a "Parado" (concepto aclarado por el usuario, ver tambien el comentario de
     # Fecha_inicio_ultima_racha_sin_empleo mas arriba): si esta cobrando del SEPE ahora
     # mismo, o de baja de esa prestacion/subsidio sin haber vuelto a trabajar desde entonces
     # (Asimilado_otros/Asimilado_al_alta_subs52/Asimilado_al_alta_prest_subs/
@@ -1095,9 +1098,9 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
         ]
     )
     dias_desde_inicio = (
-        FECHA_REFERENCIA_45 - df["Fecha_inicio_ultima_racha_sin_empleo"]
+        FECHA_CORTE - df["Fecha_inicio_ultima_racha_sin_empleo"]
     ).dt.days
-    dias_desde_ultima_baja = (FECHA_REFERENCIA_45 - df["fecha_ultima_baja"]).dt.days
+    dias_desde_ultima_baja = (FECHA_CORTE - df["fecha_ultima_baja"]).dt.days
 
     es_parado = df["Situacion_Paro_Ocupacion"] == "Parado"
     duracion_actual_sin_empleo = pd.Series(np.nan, index=df.index)
@@ -1179,6 +1182,25 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path):
     # igual que el resto de categoricas.
     codigo_cnae = df["Act_econ_ppal"].astype("Int64").astype(str).str.zfill(3)
     df["Act_econ_ppal"] = (codigo_cnae + " " + codigo_cnae.map(cnae_3d_dict)).fillna("NO CONSTA").astype("category")
+
+    # Nacionalidad / Pais de nacimiento: mismo tratamiento que Prov_trabajo_ppal/Act_econ_ppal,
+    # decodificando el codigo crudo ("N01") a "codigo nombre" ("N01 Alemania") con la tabla
+    # oficial de la guia MCVL (1.004 NACIONALIDAD, identica para 1.009 PAIS_NACIMIENTO segun la
+    # propia guia - etl/metadata/paises_dict.csv). Tiene que ir DESPUES de calcular
+    # Nacionalidad_agrupado/Pais_nacim_agrupado (mas arriba), que clasifican por el codigo crudo
+    # via PAISES_LATINOS/AFRICANOS/EU_UK/LEJANOS/ESPANA - decodificar antes rompería ese isin().
+    paises_df = pd.read_csv(paises_dict_path, sep=";", encoding="utf-8", dtype={"codigo": str})
+    paises_dict = dict(zip(paises_df["codigo"], paises_df["nombre"]))
+    df["04 NACIONALIDAD"] = (
+        (df["04 NACIONALIDAD"] + " " + df["04 NACIONALIDAD"].map(paises_dict))
+        .fillna("NO CONSTA")
+        .astype("category")
+    )
+    df["09 PAIS_NACIMIENTO"] = (
+        (df["09 PAIS_NACIMIENTO"] + " " + df["09 PAIS_NACIMIENTO"].map(paises_dict))
+        .fillna("NO CONSTA")
+        .astype("category")
+    )
 
     # Reordenar y seleccionar las columnas finales
     columnas_presentes = [c for c in NUEVO_ORDEN if c in df.columns]
