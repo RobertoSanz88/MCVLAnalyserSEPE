@@ -4,6 +4,7 @@ colectivo ya definido en /colectivos). La vista de colectivo vive como
 pestana dentro de colectivos.html (no como pagina propia), asi que este
 modulo solo expone el endpoint de datos, no una ruta HTML."""
 
+import csv
 import json
 from pathlib import Path
 from typing import Literal
@@ -619,13 +620,43 @@ _REGIMEN_CUBETA_SQL = reg_cotizacion_agrupado.sql_cubeta_agrupado("reg_cotizacio
 _TIPO_CONTRATO_CUBETA_SQL = tipo_contrato_claves_sucesoras.sql_cubeta_agrupado("tipo_contrato", "coef_t_parcial")
 
 
+# Nombre de provincia para la columna "Prov." de "Trayectorias individuales" -
+# a diferencia de TRL/CNAE (que se siguen mostrando con su codigo crudo, a
+# peticion explicita del usuario), aqui si se pidio el nombre. Mismo fichero
+# de referencia que ya usa el ETL para Prov_trabajo_ppal
+# (etl/personas_extendida.py, grupo_h_final) pero decodificado aqui, no en el
+# Parquet: es solo para esta columna de pantalla, no hace falta regenerar
+# datos por un retoque de visualizacion. El nombre en el CSV ya trae el
+# codigo delante ("01 ÁLAVA"); se quita aqui porque el codigo de provincia no
+# es lo que se pidio mostrar (ver columna nueva de actividad economica, que
+# es justo lo contrario: codigo sin nombre).
+_PROVINCIAS_DICT_PATH = Path(__file__).resolve().parent.parent.parent / "etl" / "metadata" / "provincias_dict.csv"
+
+
+def _cargar_provincias_dict() -> dict[int, str]:
+    with open(_PROVINCIAS_DICT_PATH, encoding="utf-8") as f:
+        filas = csv.DictReader(f, delimiter=";")
+        return {int(fila["codigo"]): fila["nombre"].split(" ", 1)[1] for fila in filas}
+
+
+_PROVINCIAS_DICT = _cargar_provincias_dict()
+
+
+def _decodificar_provincia(codigo) -> str | None:
+    if codigo is None:
+        return None
+    return _PROVINCIAS_DICT.get(int(codigo), "NO CONSTA")
+
+
 def _episodios_afiliacion(con, ipf: int) -> list[dict]:
     """Episodios de afiliacion de un IPF, ordenados por fecha de alta - usado
     tanto por la pagina propia /trayectorias/{ipf} como por el endpoint JSON
-    de la pestana "Trayectorias individuales" de colectivos.html. Provincia y
-    TRL se dejan con su codigo crudo (a peticion del usuario, y mismo criterio
-    que ya usa la trayectoria categorica de colectivo con estas 2 variables -
-    "no hay diccionario pedido para decodificarlos todavia")."""
+    de la pestana "Trayectorias individuales" de colectivos.html. TRL y
+    actividad economica (CNAE2009_CC) se dejan con su codigo crudo (a
+    peticion del usuario, mismo criterio que ya usa la trayectoria categorica
+    de colectivo con estas variables - "no hay diccionario pedido para
+    decodificarlos todavia"); provincia si se decodifica a nombre
+    (_decodificar_provincia)."""
     episodios = con.execute(
         f"""
         SELECT
@@ -634,6 +665,7 @@ def _episodios_afiliacion(con, ipf: int) -> list[dict]:
             ccc_ppal,
             trl,
             provincia_domic_cc_ppal,
+            cnae2009_cc,
             gru_cotizacion,
             ({_REGIMEN_CUBETA_SQL}) AS regimen_cubeta,
             ({_TIPO_CONTRATO_CUBETA_SQL}) AS tipo_contrato_cubeta
@@ -652,7 +684,8 @@ def _episodios_afiliacion(con, ipf: int) -> list[dict]:
             if fecha_baja_real_afil and fecha_baja_real_afil.year != 2099
             else None,
             "trl": trl,
-            "provincia": provincia_domic_cc_ppal,
+            "provincia": _decodificar_provincia(provincia_domic_cc_ppal),
+            "actividad_economica": cnae2009_cc,
             "grupo_cotizacion": gru_cotizacion,
             "regimen": reg_cotizacion_agrupado.decodificar_agrupado(regimen_cubeta),
             "tipo_contrato": tipo_contrato_claves_sucesoras.decodificar_agrupado(tipo_contrato_cubeta),
@@ -663,6 +696,7 @@ def _episodios_afiliacion(con, ipf: int) -> list[dict]:
             ccc_ppal,
             trl,
             provincia_domic_cc_ppal,
+            cnae2009_cc,
             gru_cotizacion,
             regimen_cubeta,
             tipo_contrato_cubeta,

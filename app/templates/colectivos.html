@@ -240,11 +240,12 @@
            en vez de los 844px calculados. */
         #individual-timeline { display: flex; overflow: visible; align-items: flex-start; }
         #individual-tabla-episodios { flex: none; font-family: var(--mono); font-size: 0.7rem; }
-        .fila-episodio { display: grid; grid-template-columns: 2rem 3.2rem 8.5rem 8.5rem 2.8rem;
+        .fila-episodio { display: grid; grid-template-columns: 2rem 4.6rem 8.5rem 8.5rem 2.8rem 3rem;
                            align-items: center; column-gap: 0.4rem; border-bottom: 1px solid var(--border); }
         .fila-episodio.cabecera-episodios { font-family: var(--font); font-weight: 700; color: var(--muted);
                                               font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; }
         .fila-episodio span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fila-episodio span.col-provincia { font-size: 0.6rem; }
         .switch-vista { display: flex; border: 1.5px solid var(--border); border-radius: 7px; overflow: hidden; }
         .switch-vista button { border: none; border-radius: 0; padding: 0.3rem 0.75rem; font-size: 0.72rem;
                                  background: var(--bg); color: var(--muted); }
@@ -2042,12 +2043,12 @@ const MARGEN_INFERIOR_GANTT = 40; // espacio para las fechas del eje X
 function construirTablaEpisodios(episodios) {
     const filas = episodios.map((ep, i) => `
         <div class="fila-episodio" style="height:${ALTO_FILA_EPISODIO}px" title="CCC ${ep.empresa}">
-            <span>${i + 1}</span><span>${ep.provincia ?? '—'}</span><span>${ep.regimen}</span>
-            <span>${ep.tipo_contrato}</span><span>${ep.trl ?? '—'}</span>
+            <span>${i + 1}</span><span class="col-provincia">${ep.provincia ?? '—'}</span><span>${ep.regimen}</span>
+            <span>${ep.tipo_contrato}</span><span>${ep.trl ?? '—'}</span><span>${ep.actividad_economica ?? '—'}</span>
         </div>`).join('');
     document.getElementById('individual-tabla-episodios').innerHTML = `
         <div class="fila-episodio cabecera-episodios" style="height:${ALTO_CABECERA_EPISODIOS}px">
-            <span>Nº</span><span>Prov.</span><span>Régimen</span><span>Contrato</span><span>TRL</span>
+            <span>Nº</span><span>Prov.</span><span>Régimen</span><span>Contrato</span><span>TRL</span><span>CNAE</span>
         </div>${filas}`;
 }
 
@@ -2068,6 +2069,7 @@ function dibujarGanttIndividual(episodios) {
                   "<br>Régimen: " + ep.regimen +
                   "<br>Contrato: " + ep.tipo_contrato +
                   "<br>TRL: " + (ep.trl ?? "?") +
+                  "<br>CNAE: " + (ep.actividad_economica ?? "?") +
                   "<br>Grupo cotización: " + (ep.grupo_cotizacion ?? "?"),
             hoverinfo: "text+x",
         };
