@@ -47,17 +47,48 @@ PUERTO_POR_DEFECTO = 8000
 
 
 def get_puerto() -> int:
-    """Puerto donde arranca el servidor. 8000 salvo que el usuario tenga
-    "puerto" en config.json - pensado para el caso (visto en el PC
-    corporativo) de que el 8000 ya este ocupado de forma permanente por otro
-    servicio de la empresa (wgssSigCaptX_Service.exe, firma digital) y no se
-    pueda liberar. Sin wizard propio: se edita config.json a mano si hace
-    falta, es un caso raro que no justifica una pantalla nueva."""
+    """Puerto PREFERIDO donde arrancar el servidor. 8000 salvo que el usuario
+    tenga "puerto" en config.json (override manual, para quien quiera fijar
+    uno concreto a proposito - p.ej. una regla de firewall). No es el puerto
+    FINAL: si esta ocupado, puerto_libre() busca uno libre a partir de este -
+    ver ese docstring para el porque (antes esto exigia editar config.json a
+    mano, ahora solo hace falta como override opcional)."""
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data.get("puerto", PUERTO_POR_DEFECTO)
     return PUERTO_POR_DEFECTO
+
+
+def puerto_libre(preferido: int, intentos: int = 20) -> int:
+    """Primer puerto libre en 127.0.0.1 a partir de 'preferido' (prueba
+    preferido, preferido+1, preferido+2...). Pensado para el caso (visto en
+    el PC corporativo del usuario) de que el puerto preferido este ocupado de
+    forma PERMANENTE por otro servicio de la empresa (wgssSigCaptX_Service.exe,
+    firma digital) - antes habia que editar "puerto" en config.json a mano
+    para arrancar ahi, algo que no se le puede pedir a cada companyero del
+    equipo que use el .exe (ellos no tocan config.json, solo el wizard de la
+    carpeta de Parquet). Con esto la app se busca sola un puerto libre y
+    arranca sin intervencion, en cualquier maquina.
+
+    Bind-test real con un socket propio (no solo "intentarlo y capturar el
+    error" en uvicorn.run, que ya es tarde: para entonces splash.exe ya se
+    lanzo apuntando al puerto preferido). Pequeña ventana de carrera entre
+    esta prueba y el bind real de uvicorn (el socket se cierra aqui antes de
+    devolver el puerto) - inevitable con este enfoque, pero irrelevante en la
+    practica: es una app local de un unico usuario, no un servidor compartido
+    donde algo mas pueda robar el puerto en ese instante."""
+    import socket
+
+    for offset in range(intentos):
+        puerto = preferido + offset
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", puerto))
+                return puerto
+            except OSError:
+                continue
+    return preferido
 
 
 def get_parquet_dir() -> Path:

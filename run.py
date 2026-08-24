@@ -9,7 +9,7 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-from config import get_puerto
+from config import get_puerto, puerto_libre
 
 MAX_INTENTOS = 200  # ~60s
 INTERVALO_S = 0.3
@@ -38,6 +38,19 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
     puerto = get_puerto()
     if getattr(sys, "frozen", False):
+        # puerto_libre: el puerto PREFERIDO (8000 salvo override en
+        # config.json) puede estar ocupado de forma permanente por otro
+        # programa (visto en el PC corporativo del usuario, un servicio de
+        # firma digital) - antes esto exigia editar config.json a mano, algo
+        # que no se le puede pedir a cada companyero que solo usa el .exe. Se
+        # resuelve aqui, ANTES de lanzar splash.exe, para pasarle el puerto
+        # real por argv (ver splash.py) - si splash siguiera sondeando el
+        # puerto preferido original y uvicorn arranca en otro, splash nunca
+        # veria el servidor listo y se cerraria solo a los 60s sin que la
+        # app llegase a abrirse (fallo real, visto en pruebas: el .exe se
+        # quedaba con la ventana de consola sin hacer nada aparente).
+        puerto = puerto_libre(puerto)
+
         # Lanzar splash.exe AQUI, antes de "from app.main import app" (mas
         # abajo) - esa importacion arrastra pandas/duckdb/fastapi y tarda
         # varios segundos (mas con antivirus corporativo escaneando cada
@@ -50,7 +63,7 @@ if __name__ == "__main__":
         # arranca casi al instante y hace su propio sondeo de /health hasta
         # cerrarse solo, sin que este proceso tenga que esperarlo.
         ruta_splash = Path(sys.executable).parent / "splash.exe"
-        subprocess.Popen([str(ruta_splash)])
+        subprocess.Popen([str(ruta_splash), str(puerto)])
         threading.Thread(target=_abrir_navegador_cuando_arranque, args=(puerto,), daemon=True).start()
 
     import uvicorn

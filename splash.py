@@ -9,6 +9,7 @@ apenas se llega a ver).
 """
 
 import ctypes
+import sys
 import time
 import tkinter as tk
 import urllib.request
@@ -17,7 +18,12 @@ from pathlib import Path
 
 from config import get_puerto
 
-URL_SALUD = f"http://127.0.0.1:{get_puerto()}/health"
+# run.py (.exe empaquetado) pasa el puerto REAL por argv - puede no coincidir
+# con get_puerto() si ese puerto preferido estaba ocupado y run.py tuvo que
+# buscar uno libre con puerto_libre() (ver ese modulo). Sin argv (splash.py
+# lanzado suelto en dev por iniciar.bat), se cae a get_puerto() como antes.
+_PUERTO = int(sys.argv[1]) if len(sys.argv) > 1 else get_puerto()
+URL_SALUD = f"http://127.0.0.1:{_PUERTO}/health"
 IMAGEN = Path(__file__).parent / "app" / "static" / "splash.png"
 COLOR_CLAVE = "#010203"  # fuera de la paleta real del icono: se vuelve transparente
 INTERVALO_MS = 300
