@@ -50,7 +50,7 @@ def _borrar_optimizada(parquet_folder, nombre_tabla):
         print(f"Borrado {os.path.basename(ruta)} (ya incluido entero en la extendida)")
 
 
-def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv, cnae_csv):
+def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv, cnae_csv, paises_csv):
     ram_gb = ram_total_gb()
     hilos = threads_optimos(ram_gb)
     print(f"RAM detectada: {ram_gb:.1f} GB -> hilos DuckDB={hilos}"
@@ -80,7 +80,7 @@ def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv,
     elif accion == "todas":
         for sub in TODAS_LAS_TABLAS:
             print(f"\n{'#' * 80}\n# {sub.upper()}\n{'#' * 80}")
-            ejecutar(sub, year, raw_root, parquet_folder, borrar_txt, provincias_csv, cnae_csv)
+            ejecutar(sub, year, raw_root, parquet_folder, borrar_txt, provincias_csv, cnae_csv, paises_csv)
 
     elif accion == "personas_extendida":
         ruta_personas_optimizada = os.path.join(parquet_folder, "tabla_personas_optimizada.parquet")
@@ -117,7 +117,7 @@ def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv,
         fusionar_grupo_g(parquet_folder, con)
 
         print("Grupo H (calculos finales, filtros, seleccion de columnas)...")
-        df_final = grupo_h_final(parquet_folder, provincias_csv, cnae_csv)
+        df_final = grupo_h_final(parquet_folder, provincias_csv, cnae_csv, paises_csv)
         print(f"tabla_personas_extendida.parquet lista: {df_final.shape}")
 
     else:
@@ -133,11 +133,13 @@ if __name__ == "__main__":
     parser.add_argument("--borrar-txt", action="store_true")
     parser.add_argument("--provincias-csv", default=None)
     parser.add_argument("--cnae-csv", default=None)
+    parser.add_argument("--paises-csv", default=None)
     args = parser.parse_args()
 
     _metadata_dir = os.path.join(_RAIZ_PROYECTO, "etl", "metadata")
     provincias_csv = args.provincias_csv or os.path.join(_metadata_dir, "provincias_dict.csv")
     cnae_csv = args.cnae_csv or os.path.join(_metadata_dir, "cnae_3d_dict.csv")
+    paises_csv = args.paises_csv or os.path.join(_metadata_dir, "paises_dict.csv")
 
-    ejecutar(args.accion, args.year, args.raw, args.parquet, args.borrar_txt, provincias_csv, cnae_csv)
+    ejecutar(args.accion, args.year, args.raw, args.parquet, args.borrar_txt, provincias_csv, cnae_csv, paises_csv)
     print("\nHECHO", flush=True)
