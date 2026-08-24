@@ -102,11 +102,11 @@
         // placeholder 2099 ya resuelto en el backend) se dibuja hasta ahi.
         const fechaCorte = "{{ fecha_corte }}";
 
-        const SIMBOLOS_SEXO = { 'Hombre': '♂', 'Mujer': '♀' };
-        const simbolo = SIMBOLOS_SEXO[persona.sexo] ?? persona.sexo;
+        // persona.sexo ya llega como texto ("Hombre"/"Mujer"/"NO CONSTA") desde el backend -
+        // se muestra tal cual, sin simbolo (♂/♀ no se veian bien).
         const edad = persona.edad != null ? Math.round(persona.edad) + ' años' : 'no disponible';
         document.getElementById('persona').innerHTML =
-            `<span>Sexo: <b>${simbolo}</b></span><span>Edad: ${edad}</span><span>Nacionalidad: ${persona.nacionalidad ?? 'no disponible'}</span>`;
+            `<span>Sexo: <b>${persona.sexo}</b></span><span>Edad: ${edad}</span><span>Nacionalidad: ${persona.nacionalidad ?? 'no disponible'}</span>`;
 
         // Alturas de fila compartidas por la tabla de episodios (HTML) y el
         // grafico Gantt (Plotly) de al lado, para que cada fila de texto quede

@@ -2024,16 +2024,12 @@ async function cargarIpfAleatorio() {
     }
 }
 
-// Simbolos de sexo (mismo criterio binario Hombre/Mujer que ya usa el resto
-// de la app - ver [[project_sexo_binario_no_consta]]); cualquier otro valor
-// (NO CONSTA) se deja tal cual, no hay simbolo neutro establecido para eso.
-const SIMBOLOS_SEXO = { 'Hombre': '♂', 'Mujer': '♀' };
-
 function renderizarPersonaIndividual(persona) {
-    const simbolo = SIMBOLOS_SEXO[persona.sexo] ?? persona.sexo;
+    // persona.sexo ya llega como texto ("Hombre"/"Mujer"/"NO CONSTA") desde el backend -
+    // se muestra tal cual, sin simbolo (♂/♀ no se veian bien). Ver [[project_sexo_binario_no_consta]].
     const edad = persona.edad != null ? Math.round(persona.edad) + ' años' : 'no disponible';
     document.getElementById('individual-persona').innerHTML =
-        `<span>Sexo: <b>${simbolo}</b></span><span>Edad: ${edad}</span><span>Nacionalidad: ${persona.nacionalidad ?? 'no disponible'}</span>`;
+        `<span>Sexo: <b>${persona.sexo}</b></span><span>Edad: ${edad}</span><span>Nacionalidad: ${persona.nacionalidad ?? 'no disponible'}</span>`;
 }
 
 // Alturas de fila compartidas por la tabla de episodios (HTML) y el grafico
