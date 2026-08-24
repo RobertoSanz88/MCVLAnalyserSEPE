@@ -675,7 +675,7 @@ def _persona_resumen(con, ipf: int) -> dict:
     a diferencia de los episodios, son datos de la PERSONA (constantes, no
     cambian entre episodios), asi que se muestran una sola vez."""
     sexo, edad, nacionalidad = con.execute(
-        "SELECT sexo, edad_actual_fecha_corte, nacionalidad_agrupado FROM personas WHERE ipf = ?",
+        "SELECT sexo, edad_actual_fecha_corte, nacionalidad FROM personas WHERE ipf = ?",
         [ipf],
     ).fetchone()
     return {"sexo": sexo, "edad": edad, "nacionalidad": nacionalidad}
