@@ -444,17 +444,27 @@ def subgrupos(request: Request, body: SubgruposRequest):
 
 def _construir_excel(resultados: dict) -> bytes:
     """Vuelca los mismos datos de _calcular_subgrupos a un .xlsx: una hoja
-    'Numericas' (columna x 4 subgrupos x media/mediana/desviacion) y una hoja
-    'Categoricas' con una tabla apilada por columna categorica (subgrupo con
-    Conteo/Porcentaje por cada uno), igual que el formato ya usado a mano por
-    el Observatorio - hueco en blanco si una categoria no aparece en algun
+    'Colectivos' (nombre + recuento de cada uno de los 4 subgrupos, para saber
+    de que numeros hablan las 2 hojas siguientes sin volver a la app), una
+    hoja 'Numericas' (columna x 4 subgrupos x media/mediana/desviacion) y una
+    hoja 'Categoricas' con una tabla apilada por columna categorica (subgrupo
+    con Conteo/Porcentaje por cada uno), igual que el formato ya usado a mano
+    por el Observatorio - hueco en blanco si una categoria no aparece en algun
     subgrupo, fila en blanco entre columnas."""
     negrita = Font(bold=True)
     wb = Workbook()
 
+    # --- Hoja Colectivos ---
+    ws_col = wb.active
+    ws_col.title = "Colectivos"
+    ws_col.cell(row=1, column=1, value="Subcolectivo").font = negrita
+    ws_col.cell(row=1, column=2, value="Personas").font = negrita
+    for i, nombre in enumerate(ORDEN_SUBGRUPOS):
+        ws_col.cell(row=i + 2, column=1, value=resultados[nombre]["etiqueta"])
+        ws_col.cell(row=i + 2, column=2, value=resultados[nombre]["recuento"])
+
     # --- Hoja Numericas ---
-    ws_num = wb.active
-    ws_num.title = "Numericas"
+    ws_num = wb.create_sheet("Numericas")
     ws_num.cell(row=1, column=1, value="Columna").font = negrita
 
     columnas_numericas = [d["columna"] for d in resultados[ORDEN_SUBGRUPOS[0]]["numericas"]]
