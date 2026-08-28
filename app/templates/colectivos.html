@@ -719,6 +719,12 @@ function cambiarVista(vista) {
     document.getElementById('contenido-individuales').style.display = vista === 'individuales' ? 'flex' : 'none';
     document.getElementById('panel-filtros').style.display = vista === 'individuales' ? 'none' : 'block';
     document.getElementById('bloque-acciones-sidebar').style.display = vista === 'individuales' ? 'none' : 'block';
+    // "Exportar Excel" solo exporta hoy los datos de "Analisis de colectivos"
+    // (/colectivos/exportar) - fuera de esa pestana se oculta en vez de
+    // descargar por error los datos equivocados. Cada pestana tendra su
+    // propia exportacion en pasos siguientes (ver conversacion 2026-08-28);
+    // "Calcular" no se toca aqui, sigue disponible en las 2 primeras.
+    document.getElementById('boton-exportar').style.display = vista === 'analisis' ? 'block' : 'none';
 
     // Trayectorias es navegable desde el principio (el usuario decide en que
     // pestana define el colectivo, da igual cual - panel-filtros es comun a
