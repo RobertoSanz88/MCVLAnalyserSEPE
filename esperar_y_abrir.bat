@@ -5,8 +5,9 @@ REM python arranca en primer plano: abrir el navegador a ciegas nada mas
 REM lanzar python fallaba en PCs donde las importaciones (pandas, duckdb...)
 REM tardan varios segundos (tipico con antivirus/EDR corporativo escaneando
 REM cada import), porque el navegador no reintenta solo una conexion rechazada.
-REM PUERTO llega heredado de iniciar.bat (resuelto ahi via config.get_puerto,
-REM normalmente 8000) - si por lo que sea no llega, 8000 como red de seguridad.
+REM PUERTO llega heredado de iniciar.bat (resuelto ahi via config.puerto_libre,
+REM el primero libre a partir del preferido, no solo el preferido) - si por lo
+REM que sea no llega, 8000 como red de seguridad.
 setlocal enabledelayedexpansion
 if not defined PUERTO set PUERTO=8000
 set intentos=0

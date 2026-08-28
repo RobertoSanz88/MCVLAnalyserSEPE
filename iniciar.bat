@@ -30,11 +30,17 @@ pause
 exit /b 1
 
 :arrancar
-REM Puerto real (normalmente 8000, salvo que config.json diga otro - ver
-REM config.get_puerto): se resuelve aqui y se pasa por variable de entorno a
-REM esperar_y_abrir.bat, que es .bat puro y no puede leer config.json solo.
+REM Puerto REAL en el que va a arrancar run.py (no solo el preferido): si el
+REM preferido (normalmente 8000, salvo que config.json diga otro) esta
+REM ocupado de forma permanente por otro programa (visto en el PC
+REM corporativo del usuario), puerto_libre busca el primero libre a partir de
+REM ahi - mismo criterio que aplica run.py (ver comentario alli, 2026-08-28).
+REM Se resuelve aqui y se pasa por variable de entorno a esperar_y_abrir.bat
+REM (que es .bat puro y no puede leer config.json solo) y por argumento a
+REM splash.py (que si no recibe argv cae el solo a get_puerto(), el
+REM preferido - ver splash.py).
 set PUERTO=
-for /f %%P in ('python -c "from config import get_puerto; print(get_puerto())" 2^>nul') do set PUERTO=%%P
+for /f %%P in ('python -c "from config import get_puerto, puerto_libre; print(puerto_libre(get_puerto()))" 2^>nul') do set PUERTO=%%P
 if not defined PUERTO set PUERTO=8000
 
 echo.
@@ -48,7 +54,7 @@ REM se abra una consola negra detras de la ventana; si el interprete no la
 REM trae (venv creado sin ella), cae a python normal.
 where pythonw >nul 2>nul
 if errorlevel 1 (set PYTHON_SPLASH=python) else (set PYTHON_SPLASH=pythonw)
-start "" %PYTHON_SPLASH% "%~dp0splash.py"
+start "" %PYTHON_SPLASH% "%~dp0splash.py" %PUERTO%
 REM /min: solo espera al servidor y abre el navegador, no hace falta que el
 REM usuario la vea ni la cierre a mano - antes aparecia como una ventana de
 REM consola suelta sin utilidad visible una vez arrancada la app.

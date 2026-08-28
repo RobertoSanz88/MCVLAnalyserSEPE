@@ -36,21 +36,18 @@ def _abrir_navegador_cuando_arranque(puerto: int) -> None:
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    puerto = get_puerto()
+    # puerto_libre: el puerto PREFERIDO (8000 salvo override en config.json)
+    # puede estar ocupado de forma permanente por otro programa (visto en el
+    # PC corporativo del usuario, un servicio de firma digital) - antes esto
+    # exigia editar config.json a mano. Se aplica SIEMPRE (dev y .exe
+    # empaquetado, no solo el .exe como antes 2026-08-28): en modo dev,
+    # iniciar.bat resuelve este mismo valor por su cuenta (con la misma
+    # funcion) para pasarselo a splash.py/esperar_y_abrir.bat - ver ese
+    # fichero. La pequenya ventana de carrera entre esa resolucion y esta (dos
+    # llamadas independientes a puerto_libre) es la misma que ya asumia
+    # puerto_libre() en el .exe, irrelevante en la practica (ver su docstring).
+    puerto = puerto_libre(get_puerto())
     if getattr(sys, "frozen", False):
-        # puerto_libre: el puerto PREFERIDO (8000 salvo override en
-        # config.json) puede estar ocupado de forma permanente por otro
-        # programa (visto en el PC corporativo del usuario, un servicio de
-        # firma digital) - antes esto exigia editar config.json a mano, algo
-        # que no se le puede pedir a cada companyero que solo usa el .exe. Se
-        # resuelve aqui, ANTES de lanzar splash.exe, para pasarle el puerto
-        # real por argv (ver splash.py) - si splash siguiera sondeando el
-        # puerto preferido original y uvicorn arranca en otro, splash nunca
-        # veria el servidor listo y se cerraria solo a los 60s sin que la
-        # app llegase a abrirse (fallo real, visto en pruebas: el .exe se
-        # quedaba con la ventana de consola sin hacer nada aparente).
-        puerto = puerto_libre(puerto)
-
         # Lanzar splash.exe AQUI, antes de "from app.main import app" (mas
         # abajo) - esa importacion arrastra pandas/duckdb/fastapi y tarda
         # varios segundos (mas con antivirus corporativo escaneando cada
