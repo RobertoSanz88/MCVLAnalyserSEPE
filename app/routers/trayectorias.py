@@ -5,13 +5,16 @@ pestana dentro de colectivos.html (no como pagina propia), asi que este
 modulo solo expone el endpoint de datos, no una ruta HTML."""
 
 import csv
+import io
 import json
 from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from openpyxl import Workbook
+from openpyxl.styles import Font
 from pydantic import BaseModel
 
 from config import FECHA_CORTE as FECHA_CORTE_ISO
@@ -441,6 +444,97 @@ def trayectorias_colectivo_categorica(request: Request, body: TrayectoriaCategor
     if info["tabla"] == "afiliacion":
         return _trayectoria_categorica_afiliacion(con, condiciones, info)
     return _trayectoria_categorica_periodica(con, condiciones, info)
+
+
+# Exportacion a Excel de "Trayectorias de colectivos" (paso 2 del boton
+# Exportar, tras el de "Analisis de colectivos" - ver conversacion
+# 2026-08-28). A diferencia de ese, aqui NO se recalcula nada: el frontend ya
+# tiene en JS el resultado de la tabla/variable activa (ultimoResultadoTrayectorias,
+# de uno de los 4 endpoints de arriba) y lo manda tal cual - repetir la
+# consulta solo para exportar seria caro de mas (una variable categorica de
+# Afiliacion tarda 40-110s, ver project_roadmap_colectivos_graficos punto 9).
+# Este endpoint solo reordena ese JSON ya calculado en un .xlsx.
+class TrayectoriaExportRequest(BaseModel):
+    tabla_etiqueta: str
+    variable_etiqueta: str
+    variable_tipo: Literal["numerica", "categorica"]
+    unidad: str | None = None
+    resultado: dict
+
+
+_ETIQUETA_EJE = {"anos_vl": "Años de vida laboral", "edad": "Edad"}
+
+
+def _construir_excel_trayectorias(payload: TrayectoriaExportRequest) -> bytes:
+    """Hoja 'Colectivos' (igual que en _construir_excel de colectivos.py) +
+    una hoja por eje (Años de vida laboral / Edad), en formato largo (una fila
+    por punto - o por punto+categoria en categoricas, ver conversacion
+    2026-08-28): mas facil de manejar en Excel que un formato ancho cuando la
+    variable tiene muchas categorias (Provincia, ~53) sin cambiar de forma
+    segun la variable."""
+    negrita = Font(bold=True)
+    wb = Workbook()
+    resultado = payload.resultado
+
+    ws_col = wb.active
+    ws_col.title = "Colectivos"
+    ws_col.cell(row=1, column=1, value="Subcolectivo").font = negrita
+    ws_col.cell(row=1, column=2, value="Personas").font = negrita
+    for i, nombre in enumerate(ORDEN_SUBGRUPOS):
+        ws_col.cell(row=i + 2, column=1, value=resultado[nombre]["etiqueta"])
+        ws_col.cell(row=i + 2, column=2, value=resultado[nombre]["recuento"])
+
+    if payload.variable_tipo == "numerica":
+        unidad_txt = f" ({payload.unidad})" if payload.unidad else ""
+        for eje, etiqueta_eje in _ETIQUETA_EJE.items():
+            ws = wb.create_sheet(etiqueta_eje)
+            for col, titulo in enumerate(
+                ["Subcolectivo", etiqueta_eje, f"Media{unidad_txt}", f"Mediana{unidad_txt}", "N"], start=1
+            ):
+                ws.cell(row=1, column=col, value=titulo).font = negrita
+            fila = 2
+            for nombre in ORDEN_SUBGRUPOS:
+                etiqueta_sub = resultado[nombre]["etiqueta"]
+                for punto in resultado[nombre]["series"][eje]:
+                    ws.cell(row=fila, column=1, value=etiqueta_sub)
+                    ws.cell(row=fila, column=2, value=punto["x"])
+                    ws.cell(row=fila, column=3, value=punto["media"])
+                    ws.cell(row=fila, column=4, value=punto["mediana"])
+                    ws.cell(row=fila, column=5, value=punto["n"])
+                    fila += 1
+    else:
+        for eje, etiqueta_eje in _ETIQUETA_EJE.items():
+            ws = wb.create_sheet(etiqueta_eje)
+            for col, titulo in enumerate(
+                ["Subcolectivo", etiqueta_eje, "N total", "Categoría", "N categoría", "%"], start=1
+            ):
+                ws.cell(row=1, column=col, value=titulo).font = negrita
+            fila = 2
+            for nombre in ORDEN_SUBGRUPOS:
+                etiqueta_sub = resultado[nombre]["etiqueta"]
+                for punto in resultado[nombre]["series"][eje]:
+                    for categoria, v in punto["valores"].items():
+                        ws.cell(row=fila, column=1, value=etiqueta_sub)
+                        ws.cell(row=fila, column=2, value=punto["x"])
+                        ws.cell(row=fila, column=3, value=punto["n"])
+                        ws.cell(row=fila, column=4, value=categoria)
+                        ws.cell(row=fila, column=5, value=v["n"])
+                        ws.cell(row=fila, column=6, value=v["pct"])
+                        fila += 1
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+@router.post("/trayectorias/colectivo/exportar")
+def exportar_trayectorias(payload: TrayectoriaExportRequest):
+    contenido = _construir_excel_trayectorias(payload)
+    return StreamingResponse(
+        io.BytesIO(contenido),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=trayectorias.xlsx"},
+    )
 
 
 def _trayectoria_categorica_periodica(con, condiciones: dict, info: dict) -> dict:

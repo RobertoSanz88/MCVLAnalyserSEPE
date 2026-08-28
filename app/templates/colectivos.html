@@ -719,12 +719,11 @@ function cambiarVista(vista) {
     document.getElementById('contenido-individuales').style.display = vista === 'individuales' ? 'flex' : 'none';
     document.getElementById('panel-filtros').style.display = vista === 'individuales' ? 'none' : 'block';
     document.getElementById('bloque-acciones-sidebar').style.display = vista === 'individuales' ? 'none' : 'block';
-    // "Exportar Excel" solo exporta hoy los datos de "Analisis de colectivos"
-    // (/colectivos/exportar) - fuera de esa pestana se oculta en vez de
-    // descargar por error los datos equivocados. Cada pestana tendra su
-    // propia exportacion en pasos siguientes (ver conversacion 2026-08-28);
-    // "Calcular" no se toca aqui, sigue disponible en las 2 primeras.
-    document.getElementById('boton-exportar').style.display = vista === 'analisis' ? 'block' : 'none';
+    // "Exportar Excel" tiene una exportacion propia por pestana (Analisis:
+    // paso 1; Trayectorias: paso 2, ver conversacion 2026-08-28) - se oculta
+    // solo en Individuales, que no tiene ninguna. "Calcular" no se toca aqui.
+    document.getElementById('boton-exportar').style.display = vista === 'individuales' ? 'none' : 'block';
+    actualizarBotonExportar();
 
     // Trayectorias es navegable desde el principio (el usuario decide en que
     // pestana define el colectivo, da igual cual - panel-filtros es comun a
@@ -788,7 +787,7 @@ function actualizarEstadoFiltros() {
     const listo = filtrosListos();
 
     document.getElementById('boton-calcular').disabled = !listo;
-    document.getElementById('boton-exportar').disabled = !listo;
+    actualizarBotonExportar();
 
     actualizarRecuentosEnVivo(listo);
 }
@@ -1045,6 +1044,9 @@ function umbralFiabilidad(recuento) {
 // expone por separado. TIPO_CONTRATO de Afiliacion corrige claves sucesoras
 // antes de agrupar (147 codigos crudos, muchos deprecados) - ver
 // VARIABLES_CATEGORICAS en trayectorias.py para el detalle completo.
+// Etiqueta bonita de cada tabla - usada tanto en el aviso "calculando..."
+// como en la exportacion a Excel (hoja "Colectivos" y nombre de fichero).
+const NOMBRE_TABLA_TRAYECTORIAS = { bases: 'Bases de cotización', pensiones: 'Pensiones', afiliacion: 'Afiliación' };
 const VARIABLES_POR_TABLA = {
     bases: [
         { valor: 'unica', etiqueta: 'Base de cotización anual', tipo: 'numerica', unidad: '€', endpoint: '/trayectorias/colectivo/bases' },
@@ -1507,8 +1509,7 @@ async function sincronizarTrayectorias() {
     const clave = tablaTrayectorias + ':' + info.valor + ':' + JSON.stringify(cuerpo);
     if (clave === ultimoCuerpoTrayectorias) return; // mismo colectivo+tabla+variable, el grafico ya esta al dia
 
-    const NOMBRE_TABLA = { bases: 'Bases de cotización', pensiones: 'Pensiones', afiliacion: 'Afiliación' };
-    const nombreTabla = NOMBRE_TABLA[tablaTrayectorias];
+    const nombreTabla = NOMBRE_TABLA_TRAYECTORIAS[tablaTrayectorias];
     div.innerHTML = `<p class="aviso-vacio">Calculando trayectorias del colectivo… puede tardar un rato (recorre toda la tabla de ${nombreTabla}).</p>`;
 
     const miToken = ++tokenTrayectorias;
@@ -1528,6 +1529,7 @@ async function sincronizarTrayectorias() {
     ultimoResultadoTrayectorias = datos;
     renderizarRecuentosEnTodos(ultimoResultadoTrayectorias);
     redibujarTrayectoria();
+    actualizarBotonExportar(); // ya hay datos de trayectoria que exportar
 }
 
 // Punto de millar puesto a mano (cada 3 cifras desde la derecha) en vez de con
@@ -2035,7 +2037,35 @@ function dibujarMapaCalor(div, subgrupos, mapas, vistos) {
     }, { displayModeBar: false, responsive: true });
 }
 
+// Habilitado del boton compartido: cada pestana tiene su propio criterio de
+// "ya hay algo que exportar" - Analisis solo necesita los filtros listos (la
+// exportacion recalcula ella misma, es barata: TODAS las columnas en una
+// pasada); Trayectorias necesita ademas que ya se haya pulsado Calcular para
+// la tabla/variable actual (ultimoResultadoTrayectorias), porque cada
+// variable es una consulta cara aparte - no tiene sentido recalcularla solo
+// para exportar. Individuales no tiene boton (se oculta en cambiarVista).
+function actualizarBotonExportar() {
+    const boton = document.getElementById('boton-exportar');
+    boton.disabled = vistaActiva === 'trayectorias' ? !ultimoResultadoTrayectorias : !filtrosListos();
+}
+
+function descargarBlob(blob, nombreFichero) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreFichero;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Dispatcher del unico boton "Exportar Excel" compartido - cada pestana con
+// exportacion propia (ver actualizarBotonExportar) tiene su implementacion.
 async function exportarExcel() {
+    if (vistaActiva === 'trayectorias') return exportarExcelTrayectorias();
+    return exportarExcelAnalisis();
+}
+
+async function exportarExcelAnalisis() {
     if (!filtros[1] || !filtros[2]) return;
     const resp = await fetch('/colectivos/exportar', {
         method: 'POST',
@@ -2043,13 +2073,33 @@ async function exportarExcel() {
         body: JSON.stringify(cuerpoPeticion()),
     });
     if (!resp.ok) { mostrarAviso('Error al exportar: ' + (await resp.text()), 'error'); return; }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'colectivos.xlsx';
-    a.click();
-    URL.revokeObjectURL(url);
+    descargarBlob(await resp.blob(), 'colectivos.xlsx');
+}
+
+// Exporta exactamente lo que ya esta calculado en ultimoResultadoTrayectorias
+// (la tabla/variable que se ve ahora mismo en el grafico, aunque el usuario
+// haya cambiado de variable sin volver a pulsar Calcular - mismo criterio
+// "WYSIWYG" que ya usa el propio grafico, ver sincronizarTrayectorias) - NO
+// se vuelve a pedir al backend, es el mismo JSON que ya se recibio (evita
+// repetir una consulta que puede tardar 40-110s en Afiliacion). El backend
+// solo reordena ese JSON en un .xlsx, ver /trayectorias/colectivo/exportar.
+async function exportarExcelTrayectorias() {
+    if (!ultimoResultadoTrayectorias) return;
+    const info = variableActivaInfo();
+    const cuerpo = {
+        tabla_etiqueta: NOMBRE_TABLA_TRAYECTORIAS[tablaTrayectorias],
+        variable_etiqueta: info.etiqueta,
+        variable_tipo: info.tipo,
+        unidad: info.unidad ?? null,
+        resultado: ultimoResultadoTrayectorias,
+    };
+    const resp = await fetch('/trayectorias/colectivo/exportar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+    });
+    if (!resp.ok) { mostrarAviso('Error al exportar: ' + (await resp.text()), 'error'); return; }
+    descargarBlob(await resp.blob(), 'trayectorias.xlsx');
 }
 
 // --- Pestana "Trayectorias individuales" ---
