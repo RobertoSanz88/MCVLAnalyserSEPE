@@ -574,7 +574,7 @@
                             <button type="button" data-valor="mediana" onclick="cambiarEstadisticoTrayectorias('mediana')">Mediana</button>
                         </div>
                         <div class="switch-vista" id="switch-vista-categorica" style="display:none">
-                            <button type="button" class="activa" data-valor="rejilla" onclick="cambiarVistaCategoricaTrayectoria('rejilla')">Rejilla 2×2</button>
+                            <button type="button" class="activa" data-valor="rejilla" onclick="cambiarVistaCategoricaTrayectoria('rejilla')">Subcolectivos</button>
                             <button type="button" data-valor="categorias" onclick="cambiarVistaCategoricaTrayectoria('categorias')">Categorías</button>
                         </div>
                     </div>
@@ -1317,11 +1317,22 @@ function dibujarGraficoCategoricoTrayectoria() {
                 hovertemplate: `Otros valores<br>%{x}: %{y:.1f}%<extra></extra>`,
             });
         }
+        // N de referencia (personas distintas del subcolectivo en ese punto,
+        // el mismo denominador de todos los % apilados de este panel) en el
+        // eje secundario - mismo patron que la trayectoria numerica.
+        traces.push({
+            type: 'scatter', mode: 'lines', name: 'N', showlegend: false,
+            x: serie.map(p => p.x), y: serie.map(p => p.n),
+            yaxis: 'y2', opacity: 0.4,
+            line: { color: COLOR_SUBGRUPO[nombre], width: 1, dash: 'dot' },
+            hovertemplate: `N: %{y}<extra></extra>`,
+        });
 
         Plotly.newPlot(sub.querySelector('.mini-grafico-cat'), traces, {
-            margin: { l: 42, r: 10, t: 8, b: 38 },
+            margin: { l: 42, r: 40, t: 8, b: 38 },
             xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años de vida laboral' : 'Edad' },
             yaxis: { title: '%', rangemode: 'tozero' },
+            yaxis2: { title: 'N', overlaying: 'y', side: 'right', rangemode: 'tozero', showgrid: false },
             showlegend: false,
             font: { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26', size: 10 },
             paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
@@ -1362,25 +1373,37 @@ function dibujarGraficoPorCategorias() {
         panel.innerHTML = `<div class="subpanel-titulo">${categoria}</div><div class="mini-grafico-cat"></div>`;
         grid.appendChild(panel);
 
-        const traces = ORDEN_SUBGRUPOS.map(nombre => {
+        const traces = [];
+        for (const nombre of ORDEN_SUBGRUPOS) {
             const r = ultimoResultadoTrayectorias[nombre];
             const umbral = umbralFiabilidad(r.recuento);
-            const x = [], y = [];
+            const x = [], y = [], n = [];
             for (const p of r.series[ejeXTrayectorias]) {
-                if (p.n >= umbral && p.valores[categoria]) { x.push(p.x); y.push(p.valores[categoria].pct); }
+                if (p.n >= umbral && p.valores[categoria]) { x.push(p.x); y.push(p.valores[categoria].pct); n.push(p.n); }
             }
-            return {
+            traces.push({
                 type: 'scatter', mode: 'lines', name: r.etiqueta,
                 x, y,
                 line: { color: COLOR_SUBGRUPO[nombre], width: 2 },
                 hovertemplate: `${r.etiqueta}<br>%{x}: %{y:.1f}%<extra></extra>`,
-            };
-        });
+            });
+            // N de referencia (personas distintas del subcolectivo en ese
+            // punto, el denominador del % de esta linea) en el eje
+            // secundario - mismo patron que en la vista "Subcolectivos".
+            traces.push({
+                type: 'scatter', mode: 'lines', name: 'N ' + r.etiqueta, showlegend: false,
+                x, y: n,
+                yaxis: 'y2', opacity: 0.4,
+                line: { color: COLOR_SUBGRUPO[nombre], width: 1, dash: 'dot' },
+                hovertemplate: `N: %{y}<extra></extra>`,
+            });
+        }
 
         Plotly.newPlot(panel.querySelector('.mini-grafico-cat'), traces, {
-            margin: { l: 40, r: 10, t: 8, b: 35 },
+            margin: { l: 40, r: 40, t: 8, b: 35 },
             xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años de vida laboral' : 'Edad' },
             yaxis: { title: '%', rangemode: 'tozero' },
+            yaxis2: { title: 'N', overlaying: 'y', side: 'right', rangemode: 'tozero', showgrid: false },
             showlegend: false,
             font: { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26', size: 10 },
             paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
