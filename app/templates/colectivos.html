@@ -578,11 +578,7 @@
                             <button type="button" data-valor="categorias" onclick="cambiarVistaCategoricaTrayectoria('categorias')">Categorías</button>
                         </div>
                     </div>
-                    <p class="nota-trayectoria-categorica" id="nota-trayectoria-categorica" style="display:none">
-                        Una misma persona puede tener más de una categoría a la vez (p. ej. varios tipos de pensión el mismo año,
-                        o dos contratos concurrentes con distinto régimen): los porcentajes de cada punto pueden sumar más de 100%,
-                        no es una distribución exclusiva.
-                    </p>
+                    <p class="nota-trayectoria-categorica" id="nota-trayectoria-categorica" style="display:none"></p>
                     <div id="grafico-trayectoria"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular, para ver las trayectorias del colectivo.</p></div>
                 </div>
             </div>
@@ -1123,17 +1119,66 @@ function cambiarVariableTrayectoria(valor) {
     // (ver alPulsarCalcular) - el grafico se queda como estaba hasta entonces.
 }
 
+// Nota explicativa bajo los controles, distinta segun la TABLA (el
+// denominador de cada punto es distinto: en Pensiones son quienes cobran
+// alguna pension ese punto; en Afiliacion son quienes tienen un episodio de
+// afiliacion vigente ese anyo - ver _CTE_ANIOS_VIGENTES en trayectorias.py)
+// y segun la vista categorica activa: en Subcolectivos el punto flaco es que
+// los % apilados de un mismo panel pueden sumar mas de 100% (categorias no
+// exclusivas, incluye el ~1,7% de episodios concurrentes de Afiliacion - ver
+// project_roadmap_colectivos_graficos punto 9); en Categorias (apilada por
+// subcolectivo desde 2026-08-28, ver conversacion) el punto flaco es leer
+// cada area con SU PROPIO total en vez de con el total compartido de las 4 -
+// las 4 SI suman 100% ahora, comparables directamente entre si. Cada entrada
+// es una funcion de la etiqueta de la variable activa (variableActivaInfo().
+// etiqueta - "Tipo de pension", "Tipo de contrato", "TRL"...), para no
+// repetir el texto por variable de Afiliacion; en Pensiones solo hay una
+// variable categorica asi que el resultado es siempre el mismo texto. Bases
+// de cotizacion no tiene variable categorica hoy (solo "Base de cotizacion
+// anual", numerica), asi que no le hace falta entrada aqui - esta nota nunca
+// se muestra para esa tabla.
+const NOTA_CATEGORICA = {
+    pensiones: {
+        rejilla: etiqueta => 'Interpretación: en cada gráfico de Subcolectivo, cada punto es el % de personas que ' +
+            'pertenecen a ese subcolectivo y además cobran pensión (no de todo el subcolectivo) que la cobran por ese ' +
+            'tipo de pensión. Al estar apiladas, las categorías de un mismo punto pueden sumar más del 100% — una ' +
+            'misma persona puede cobrar más de un tipo de pensión a la vez.',
+        categorias: etiqueta => `Interpretación: en cada gráfico de ${etiqueta}, cada área apilada es el % de TODA la ` +
+            'gente que cobra esa pensión en ese punto (sumando los 4 subcolectivos) que pertenece a cada uno — las 4 ' +
+            'áreas suman 100%, así que sí son comparables directamente entre sí (a diferencia de la vista ' +
+            'Subcolectivos, donde cada una tiene su propio total).',
+    },
+    afiliacion: {
+        rejilla: etiqueta => 'Interpretación: en cada gráfico de Subcolectivo, cada punto es el % de personas que ' +
+            'pertenecen a ese subcolectivo y además tienen un episodio de afiliación vigente ese año (no de todo el ' +
+            `subcolectivo) que tiene ese ${etiqueta}. Al estar apiladas, las categorías de un mismo punto pueden sumar ` +
+            'más del 100% — una misma persona puede tener episodios concurrentes con valores distintos (p. ej. dos ' +
+            'contratos con distinto régimen).',
+        categorias: etiqueta => `Interpretación: en cada gráfico de ${etiqueta}, cada área apilada es el % de TODA la ` +
+            `gente con un episodio de afiliación vigente ese año y ese ${etiqueta} (sumando los 4 subcolectivos) que ` +
+            'pertenece a cada uno — las 4 áreas suman 100%, así que sí son comparables directamente entre sí (a ' +
+            'diferencia de la vista Subcolectivos, donde cada una tiene su propio total).',
+    },
+};
+
+function actualizarNotaCategorica() {
+    const notas = NOTA_CATEGORICA[tablaTrayectorias];
+    const texto = notas ? notas[vistaCategoricaTrayectoria](variableActivaInfo().etiqueta) : '';
+    document.getElementById('nota-trayectoria-categorica').textContent = texto;
+}
+
 // Media/Mediana y el switch Rejilla/Categorias son mutuamente excluyentes -
 // el primero solo tiene sentido con una variable numerica (dos estadisticos
 // entre los que elegir), el segundo solo con una categorica (dos formas de
-// ver la misma composicion por categorias); la nota de "puede sumar mas de
-// 100%" tambien es exclusiva de las categoricas. Se muestran/ocultan segun
-// el tipo de la variable activa.
+// ver la misma composicion por categorias); la nota explicativa tambien es
+// exclusiva de las categoricas. Se muestran/ocultan segun el tipo de la
+// variable activa.
 function actualizarControlesSegunVariable() {
     const esCategorica = variableActivaInfo().tipo === 'categorica';
     document.getElementById('switch-estadistico-trayectorias').style.display = esCategorica ? 'none' : 'flex';
     document.getElementById('switch-vista-categorica').style.display = esCategorica ? 'flex' : 'none';
     document.getElementById('nota-trayectoria-categorica').style.display = esCategorica ? 'block' : 'none';
+    actualizarNotaCategorica();
     // Sincroniza los botones con vistaCategoricaTrayectoria (siempre
     // 'rejilla' en este punto, ver cambiarTablaTrayectorias/
     // cambiarVariableTrayectoria) - si no, tras cambiar de variable el boton
@@ -1148,6 +1193,7 @@ function cambiarVistaCategoricaTrayectoria(valor) {
     vistaCategoricaTrayectoria = valor;
     document.querySelectorAll('#switch-vista-categorica button')
         .forEach(b => b.classList.toggle('activa', b.dataset.valor === valor));
+    actualizarNotaCategorica();
     redibujarTrayectoria();
 }
 
@@ -1342,17 +1388,22 @@ function dibujarGraficoCategoricoTrayectoria() {
 }
 
 // Trayectoria categorica, vista "Categorias": 1 panel por categoria (union
-// de las vistas en cualquiera de los 4 subgrupos), con las 4 lineas de
-// subcolectivo (color por identidad de subcolectivo, COLOR_SUBGRUPO - igual
-// que en Bases/Pensiones numerico) superpuestas dentro. A diferencia de la
-// rejilla 2x2 no hay limite de paleta que aplicar aqui (1 panel por
-// categoria, no una serie mas apilada en el mismo grafico), asi que se
-// muestran TODAS las categorias que devuelva el backend tal cual (ya
-// limitadas ahi si toca - ver top_n en VARIABLES_CATEGORICAS, p.ej.
-// CNAE2009_CC); con provincia (~53, sin limite a proposito) el panel entero
-// scrollea en vertical (ya es .panel, overflow-y:auto), no hace falta nada
-// especial aqui. La leyenda subcolectivo->color ya vive en el rectangulo de
-// recuentos de arriba, por eso showlegend:false en cada mini-grafico.
+// de las vistas en cualquiera de los 4 subgrupos), con los 4 subcolectivos
+// como AREAS APILADAS que suman 100% (cambio 2026-08-28, ver conversacion:
+// antes eran 4 lineas sueltas, cada una el % DENTRO de su propio
+// subcolectivo - no comparables entre si porque cada una tenia su propio
+// denominador). Ahora cada area es "que % de TODA la gente con esta
+// categoria en este punto (sumando los 4 subcolectivos) pertenece a este
+// subcolectivo" - mismo denominador compartido, por eso se pueden apilar y
+// comparar de un vistazo. A diferencia de la rejilla 2x2 no hay limite de
+// paleta que aplicar aqui (1 panel por categoria, 4 subcolectivos fijos, no
+// N categorias variables), asi que se muestran TODAS las categorias que
+// devuelva el backend tal cual (ya limitadas ahi si toca - ver top_n en
+// VARIABLES_CATEGORICAS, p.ej. CNAE2009_CC); con provincia (~53, sin limite
+// a proposito) el panel entero scrollea en vertical (ya es .panel,
+// overflow-y:auto), no hace falta nada especial aqui. La leyenda
+// subcolectivo->color ya vive en el rectangulo de recuentos de arriba, por
+// eso showlegend:false en cada mini-grafico.
 function dibujarGraficoPorCategorias() {
     if (!ultimoResultadoTrayectorias) return;
     const cont = document.getElementById('grafico-trayectoria');
@@ -1367,37 +1418,59 @@ function dibujarGraficoPorCategorias() {
         }
     }
 
+    // Umbral de esta vista: no es el N de un subcolectivo (aqui se reparte
+    // el total entre los 4), es el N COMBINADO de los 4 en ese punto. "N >
+    // 1%" se interpreta sobre el recuento total del colectivo (suma de los
+    // 4 subcolectivos), no sobre uno solo - ver conversacion 2026-08-28.
+    const recuentoTotalColectivo = ORDEN_SUBGRUPOS.reduce((s, nombre) => s + ultimoResultadoTrayectorias[nombre].recuento, 0);
+    const umbralTotal = umbralFiabilidad(recuentoTotalColectivo);
+
     for (const categoria of categorias) {
         const panel = document.createElement('div');
         panel.className = 'subpanel-trayectoria-cat';
         panel.innerHTML = `<div class="subpanel-titulo">${categoria}</div><div class="mini-grafico-cat"></div>`;
         grid.appendChild(panel);
 
-        const traces = [];
+        // n por (x, subcolectivo) para esta categoria - un subcolectivo sin
+        // esta categoria en un punto aporta 0, no se omite (sigue sumando al
+        // total de los otros 3).
+        const nPorX = {};
         for (const nombre of ORDEN_SUBGRUPOS) {
-            const r = ultimoResultadoTrayectorias[nombre];
-            const umbral = umbralFiabilidad(r.recuento);
-            const x = [], y = [], n = [];
-            for (const p of r.series[ejeXTrayectorias]) {
-                if (p.n >= umbral && p.valores[categoria]) { x.push(p.x); y.push(p.valores[categoria].pct); n.push(p.n); }
+            for (const p of ultimoResultadoTrayectorias[nombre].series[ejeXTrayectorias]) {
+                (nPorX[p.x] ??= {})[nombre] = p.valores[categoria]?.n ?? 0;
             }
-            traces.push({
-                type: 'scatter', mode: 'lines', name: r.etiqueta,
-                x, y,
-                line: { color: COLOR_SUBGRUPO[nombre], width: 2 },
-                hovertemplate: `${r.etiqueta}<br>%{x}: %{y:.1f}%<extra></extra>`,
-            });
-            // N de referencia (personas distintas del subcolectivo en ese
-            // punto, el denominador del % de esta linea) en el eje
-            // secundario - mismo patron que en la vista "Subcolectivos".
-            traces.push({
-                type: 'scatter', mode: 'lines', name: 'N ' + r.etiqueta, showlegend: false,
-                x, y: n,
-                yaxis: 'y2', opacity: 0.4,
-                line: { color: COLOR_SUBGRUPO[nombre], width: 1, dash: 'dot' },
-                hovertemplate: `N: %{y}<extra></extra>`,
-            });
         }
+
+        // Puntos por debajo del umbral se descartan ENTEROS (las 4 areas de
+        // ese x a la vez) - no tiene sentido enseñar un reparto fiable de un
+        // total que no lo es.
+        const xFiable = [], totalPorX = {};
+        for (const x of Object.keys(nPorX).map(Number).sort((a, b) => a - b)) {
+            const total = ORDEN_SUBGRUPOS.reduce((s, nombre) => s + (nPorX[x][nombre] ?? 0), 0);
+            if (total < umbralTotal) continue;
+            xFiable.push(x);
+            totalPorX[x] = total;
+        }
+
+        const traces = ORDEN_SUBGRUPOS.map(nombre => ({
+            type: 'scatter', mode: 'lines', name: ultimoResultadoTrayectorias[nombre].etiqueta, stackgroup: 'uno',
+            x: xFiable,
+            y: xFiable.map(x => 100 * (nPorX[x][nombre] ?? 0) / totalPorX[x]),
+            line: { color: COLOR_SUBGRUPO[nombre], width: 0.5 },
+            fillcolor: COLOR_SUBGRUPO[nombre],
+            hovertemplate: `${ultimoResultadoTrayectorias[nombre].etiqueta}<br>%{x}: %{y:.1f}%<extra></extra>`,
+        }));
+        // N de referencia: total combinado de los 4 subcolectivos en ese
+        // punto (el denominador compartido de las 4 areas) - una sola linea,
+        // no una por subcolectivo, porque ya no hay "un" N por subcolectivo
+        // que enseñar aqui.
+        traces.push({
+            type: 'scatter', mode: 'lines', name: 'N', showlegend: false,
+            x: xFiable, y: xFiable.map(x => totalPorX[x]),
+            yaxis: 'y2', opacity: 0.4,
+            line: { color: COLOR_OTROS, width: 1, dash: 'dot' },
+            hovertemplate: `N: %{y}<extra></extra>`,
+        });
 
         Plotly.newPlot(panel.querySelector('.mini-grafico-cat'), traces, {
             margin: { l: 40, r: 40, t: 8, b: 35 },
