@@ -565,6 +565,10 @@
                                 <option value="edad">Edad</option>
                             </select>
                         </label>
+                        <div class="switch-vista" id="switch-criterio-fiabilidad">
+                            <button type="button" class="activa" data-valor="n30" onclick="cambiarCriterioFiabilidad('n30')">N > 30</button>
+                            <button type="button" data-valor="pct1" onclick="cambiarCriterioFiabilidad('pct1')">N > 1%</button>
+                        </div>
                         <div class="switch-vista" id="switch-estadistico-trayectorias">
                             <button type="button" class="activa" data-valor="media" onclick="cambiarEstadisticoTrayectorias('media')">Media</button>
                             <button type="button" data-valor="mediana" onclick="cambiarEstadisticoTrayectorias('mediana')">Mediana</button>
@@ -1003,13 +1007,25 @@ async function alPulsarCalcular() {
 
 // --- Pestana "Trayectorias de colectivos" (Bases de cotizacion / Pensiones) ---
 
-// Por debajo de esto, un punto (numerico o categorico) es poco fiable - se
-// corta la linea/area ahi en vez de seguir dibujando (mas simple que atenuar,
-// y evita una linea con tramos de fiabilidad distinta dificiles de leer). En
-// la trayectoria numerica el propio N se ve como referencia en el eje
-// secundario; en la categorica, N es el denominador de cada punto (personas
-// distintas del colectivo ahi, sin distinguir categoria).
+// Por debajo del umbral de fiabilidad, un punto (numerico o categorico) se
+// considera poco fiable - se corta la linea/area ahi en vez de seguir
+// dibujando (mas simple que atenuar, y evita una linea con tramos de
+// fiabilidad distinta dificiles de leer). En la trayectoria numerica el
+// propio N se ve como referencia en el eje secundario; en la categorica, N es
+// el denominador de cada punto (personas distintas del colectivo ahi, sin
+// distinguir categoria).
+//
+// Dos criterios seleccionables (switch-criterio-fiabilidad): "n30" (N > 30
+// fijo, el original) o "pct1" (N > 1% del recuento TOTAL de ese subcolectivo,
+// no del punto - un subcolectivo pequeño exige menos personas por punto que
+// uno grande). umbralFiabilidad() calcula el umbral segun el criterio activo
+// y el recuento del subcolectivo de cada r.
 const N_MINIMO = 30;
+let criterioFiabilidad = 'n30'; // 'n30' | 'pct1'
+
+function umbralFiabilidad(recuento) {
+    return criterioFiabilidad === 'pct1' ? Math.ceil(recuento * 0.01) : N_MINIMO;
+}
 
 // Registro de variables por tabla, para la franja "Variables"
 // (#lista-variables-trayectorias). tipo:'numerica' -> linea (una por
@@ -1160,6 +1176,13 @@ function cambiarEstadisticoTrayectorias(valor) {
     redibujarTrayectoria();
 }
 
+function cambiarCriterioFiabilidad(valor) {
+    criterioFiabilidad = valor;
+    document.querySelectorAll('#switch-criterio-fiabilidad button')
+        .forEach(b => b.classList.toggle('activa', b.dataset.valor === valor));
+    redibujarTrayectoria();
+}
+
 function tituloEjeYTrayectorias() {
     const info = variableActivaInfo();
     return `${info.etiqueta} (${info.unidad})`;
@@ -1188,9 +1211,10 @@ function dibujarGraficoTrayectorias() {
         if (!serie.length) continue;
         const etiqueta = r.etiqueta;
 
+        const umbral = umbralFiabilidad(r.recuento);
         const xFiable = [], yFiable = [];
         for (const p of serie) {
-            if (p.n >= N_MINIMO) { xFiable.push(p.x); yFiable.push(p[estadisticoTrayectorias]); }
+            if (p.n >= umbral) { xFiable.push(p.x); yFiable.push(p[estadisticoTrayectorias]); }
         }
         traces.push({
             type: 'scatter', mode: 'lines+markers', name: etiqueta,
@@ -1199,9 +1223,9 @@ function dibujarGraficoTrayectorias() {
             marker: { color: COLOR_SUBGRUPO[nombre], size: 5 },
             hovertemplate: `${etiqueta}<br>%{x}: %{y:,.0f} €<extra></extra>`,
         });
-        // N de referencia (TODOS los puntos, incluidos los < N_MINIMO ya
-        // excluidos de la linea principal) en el eje secundario - deja ver
-        // donde y por que se corta la linea de arriba.
+        // N de referencia (TODOS los puntos, incluidos los que quedan por
+        // debajo del umbral y se excluyen de la linea principal) en el eje
+        // secundario - deja ver donde y por que se corta la linea de arriba.
         traces.push({
             type: 'scatter', mode: 'lines', name: 'N ' + etiqueta, showlegend: false,
             x: serie.map(p => p.x), y: serie.map(p => p.n),
@@ -1261,9 +1285,10 @@ function dibujarGraficoCategoricoTrayectoria() {
     const rejilla = document.getElementById('rejilla-trayectoria-cat');
     for (const nombre of ORDEN_SUBGRUPOS) {
         const r = ultimoResultadoTrayectorias[nombre];
-        // Mismo corte por fiabilidad que la trayectoria numerica: por debajo
-        // de N_MINIMO personas distintas en ese punto, no se dibuja.
-        const serie = r.series[ejeXTrayectorias].filter(p => p.n >= N_MINIMO);
+        // Mismo corte por fiabilidad que la trayectoria numerica (ver
+        // umbralFiabilidad): por debajo del umbral, ese punto no se dibuja.
+        const umbral = umbralFiabilidad(r.recuento);
+        const serie = r.series[ejeXTrayectorias].filter(p => p.n >= umbral);
 
         const sub = document.createElement('div');
         sub.className = 'subpanel-trayectoria-cat';
@@ -1339,9 +1364,10 @@ function dibujarGraficoPorCategorias() {
 
         const traces = ORDEN_SUBGRUPOS.map(nombre => {
             const r = ultimoResultadoTrayectorias[nombre];
+            const umbral = umbralFiabilidad(r.recuento);
             const x = [], y = [];
             for (const p of r.series[ejeXTrayectorias]) {
-                if (p.n >= N_MINIMO && p.valores[categoria]) { x.push(p.x); y.push(p.valores[categoria].pct); }
+                if (p.n >= umbral && p.valores[categoria]) { x.push(p.x); y.push(p.valores[categoria].pct); }
             }
             return {
                 type: 'scatter', mode: 'lines', name: r.etiqueta,
