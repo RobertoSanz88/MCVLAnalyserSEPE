@@ -543,11 +543,11 @@ def extraer_grupo_b(con, parquet_folder):
     # desempate fallaban 28.123 personas, con el solo quedan 2.717 (empates exactos en ambas
     # fechas alta Y baja, un caso genuinamente ambiguo que no se puede desempatar sin conocer el
     # orden exacto del fichero original).
-    # causa_ult_baja / tipo_contr_ult_baja / cnae_ult_baja (2026-09-08, decision explicita del
+    # causa_ult_baja / tipo_contr_ult_baja / act_econ_ult_baja (2026-09-08, decision explicita del
     # usuario, confirmada por AskUserQuestion): "08 CAUSA_BAJA_AFIL" / "04 TIPO_CONTRATO" /
     # "12 CNAE2009_CC" de ese MISMO episodio (misma ranking que Grupo_Ultimo_Empleo, para
     # garantizar que las 4 columnas se refieren siempre al mismo episodio).
-    # causa_ult_baja / cnae_ult_baja: codigos crudos, sin decodificar ni agrupar, igual criterio
+    # causa_ult_baja / act_econ_ult_baja: codigos crudos, sin decodificar ni agrupar, igual criterio
     # que Causa_Baja_Trab_Ppal.
     # tipo_contr_ult_baja: corregido tras deteccion de error en la interfaz (2026-09-08) - salia
     # como codigo crudo de TIPO_CONTRATO en vez de con la misma agrupacion que
@@ -569,7 +569,7 @@ def extraer_grupo_b(con, parquet_folder):
         )
         SELECT ipf AS "01 IPF", val AS "Grupo_Ultimo_Empleo",
                causa_baja AS "causa_ult_baja", tipo_contr_cubeta AS "_tipo_contr_ult_baja_cubeta",
-               cnae AS "cnae_ult_baja"
+               cnae AS "act_econ_ult_baja"
         FROM ranked WHERE rn = 1
     """).fetchdf()
     df_ultimogrupo["tipo_contr_ult_baja"] = df_ultimogrupo["_tipo_contr_ult_baja_cubeta"].map(decodificar_agrupado)
@@ -1188,7 +1188,7 @@ NUEVO_ORDEN = [
     "Edad_Actual_Fecha_Corte",
     "Edad_Primer_Empleo_Signif", "Duracion_1er_Empleo_Signif", "Grupo_cotiz_1er_Empleo_Signif",
     "Edad_Ultimo_Empleo", "Grupo_Ultimo_Empleo",
-    "causa_ult_baja", "tipo_contr_ult_baja", "cnae_ult_baja",
+    "causa_ult_baja", "tipo_contr_ult_baja", "act_econ_ult_baja",
     "t_contrato_mas_largo", "Causa_Baja_Trab_Ppal", "Fecha_ini_Primer_Empleo", "Tiempo_total_desde_inicio_VL",
     "duracion_promedio_EMPLEO", "Cotizado_anual_promedio",
     "num_altas_anual_promedio", "num_bajas_anual_promedio",

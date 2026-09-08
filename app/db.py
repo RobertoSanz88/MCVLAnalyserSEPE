@@ -37,7 +37,7 @@ TABLES = {
             "Grupo_Ultimo_Empleo": "grupo_ultimo_empleo",
             "causa_ult_baja": "causa_ult_baja",
             "tipo_contr_ult_baja": "tipo_contr_ult_baja",
-            "cnae_ult_baja": "cnae_ult_baja",
+            "act_econ_ult_baja": "act_econ_ult_baja",
             "Duracion_1er_Empleo_Signif": "duracion_1er_empleo_signif",
             "Grupo_cotiz_1er_Empleo_Signif": "grupo_cotiz_1er_empleo_signif",
             "duracion_promedio_EMPLEO": "duracion_promedio_empleo",
