@@ -426,16 +426,22 @@ def extraer_grupo_a(con, parquet_folder):
         FROM ranked WHERE rn = 1
     """).fetchdf()
 
-    # t_contrato_mas_largo: episodio individual mas largo de cada persona
+    # t_contrato_mas_largo: episodio individual mas largo de cada persona.
+    # Causa_Baja_Trab_Ppal (2026-09-08, decision explicita del usuario, confirmada por
+    # AskUserQuestion): "08 CAUSA_BAJA_AFIL" de ESE MISMO episodio (el de empleo mas largo) -
+    # codigo crudo, sin decodificar ni agrupar (no hay tabla de claves para este campo en el
+    # proyecto, a diferencia de TIPO_CONTRATO). Misma ranking que t_contrato_mas_largo, para
+    # garantizar que las dos columnas se refieren siempre al mismo episodio.
     df_maslargo = con.execute(f"""
         WITH validos AS (
-            SELECT "01 IPF" AS ipf, "DURACION_EMPLEO" AS dur
+            SELECT "01 IPF" AS ipf, "DURACION_EMPLEO" AS dur, "08 CAUSA_BAJA_AFIL" AS causa_baja
             FROM read_parquet('{afiliacion}') WHERE "DURACION_EMPLEO" IS NOT NULL
         ), ranked AS (
-            SELECT ipf, dur, ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY dur DESC) AS rn
+            SELECT ipf, dur, causa_baja, ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY dur DESC) AS rn
             FROM validos
         )
-        SELECT ipf AS "01 IPF", dur AS "t_contrato_mas_largo" FROM ranked WHERE rn = 1
+        SELECT ipf AS "01 IPF", dur AS "t_contrato_mas_largo", causa_baja AS "Causa_Baja_Trab_Ppal"
+        FROM ranked WHERE rn = 1
     """).fetchdf()
 
     # Tipo_Contrato_ppal_Agrupado / T_tot_tipo_contrato_ppal.
@@ -534,16 +540,25 @@ def extraer_grupo_b(con, parquet_folder):
     # desempate fallaban 28.123 personas, con el solo quedan 2.717 (empates exactos en ambas
     # fechas alta Y baja, un caso genuinamente ambiguo que no se puede desempatar sin conocer el
     # orden exacto del fichero original).
+    # causa_ult_baja / tipo_contr_ult_baja / cnae_ult_baja (2026-09-08, decision explicita del
+    # usuario, confirmada por AskUserQuestion): "08 CAUSA_BAJA_AFIL" / "04 TIPO_CONTRATO" /
+    # "12 CNAE2009_CC" de ese MISMO episodio (misma ranking que Grupo_Ultimo_Empleo, para
+    # garantizar que las 4 columnas se refieren siempre al mismo episodio) - codigos crudos, sin
+    # decodificar ni agrupar, igual criterio que Causa_Baja_Trab_Ppal.
     df_ultimogrupo = con.execute(f"""
         WITH filtrado AS (
             SELECT "01 IPF" AS ipf, "03 GRU_COTIZACION" AS val, "07 FECHA_BAJA_REAL_AFIL" AS fecha_baja,
-                   "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta
+                   "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta, "08 CAUSA_BAJA_AFIL" AS causa_baja,
+                   "04 TIPO_CONTRATO" AS tipo_contrato, "12 CNAE2009_CC" AS cnae
             FROM read_parquet('{afiliacion}') WHERE "07 FECHA_BAJA_REAL_AFIL" IS NOT NULL
         ), ranked AS (
-            SELECT ipf, val, ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY fecha_baja DESC, fecha_alta DESC) AS rn
+            SELECT ipf, val, causa_baja, tipo_contrato, cnae,
+                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY fecha_baja DESC, fecha_alta DESC) AS rn
             FROM filtrado
         )
-        SELECT ipf AS "01 IPF", val AS "Grupo_Ultimo_Empleo" FROM ranked WHERE rn = 1
+        SELECT ipf AS "01 IPF", val AS "Grupo_Ultimo_Empleo",
+               causa_baja AS "causa_ult_baja", tipo_contrato AS "tipo_contr_ult_baja", cnae AS "cnae_ult_baja"
+        FROM ranked WHERE rn = 1
     """).fetchdf()
 
     # Fecha_ini_Primer_Empleo sobrevive a la tabla final (ver NUEVO_ORDEN); Fecha_final_Ultimo_Empleo
@@ -856,7 +871,29 @@ def extraer_grupo_d(con, parquet_folder):
         FROM elegido WHERE rn2 = 1
     """).fetchdf()
 
-    return [df_discap, df_situacion, df_ultimabaja, df_fechainicioparo]
+    # causa_baja_mas_comun / causas_baja_distintas (2026-09-08, decision explicita del usuario,
+    # confirmada por AskUserQuestion): moda y conteo de codigos distintos de "08 CAUSA_BAJA_AFIL"
+    # entre TODOS los episodios de la persona. Desempate de la moda por num de episodios DESC,
+    # codigo ASC (mismo patron "total DESC, val ASC" ya usado en el resto del fichero para
+    # desempates deterministas). causa_baja_mas_comun sin decodificar, igual criterio que
+    # Causa_Baja_Trab_Ppal/causa_ult_baja.
+    df_causabaja = con.execute(f"""
+        WITH conteo AS (
+            SELECT "01 IPF" AS ipf, "08 CAUSA_BAJA_AFIL" AS causa, COUNT(*) AS n
+            FROM read_parquet('{afiliacion}') GROUP BY 1, 2
+        ), ranked AS (
+            SELECT ipf, causa, n,
+                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY n DESC, causa ASC) AS rn
+            FROM conteo
+        ), distintas AS (
+            SELECT ipf, COUNT(*) AS causas_baja_distintas FROM conteo GROUP BY 1
+        )
+        SELECT r.ipf AS "01 IPF", r.causa AS "causa_baja_mas_comun", d.causas_baja_distintas
+        FROM ranked r JOIN distintas d ON r.ipf = d.ipf
+        WHERE r.rn = 1
+    """).fetchdf()
+
+    return [df_discap, df_situacion, df_ultimabaja, df_fechainicioparo, df_causabaja]
 
 
 def fusionar_grupo_d(parquet_folder, con):
@@ -1017,11 +1054,13 @@ def extraer_grupo_f(parquet_folder, anio_datos):
     df_estudio_discap_fiscal = df.loc[cond, ["01 IPF"]].drop_duplicates().copy()
     df_estudio_discap_fiscal["Discap_fiscal"] = True
 
-    # Prov_fiscal_actual (2026-09-08, decision explicita del usuario): valor tal cual de
-    # "04 PROVINCIA" en Datos fiscales - un unico ejercicio por edicion de la MCVL (esta tabla no
-    # tiene columna de anyo, a diferencia de Pensiones), pero SI puede haber varias filas por
-    # persona (varios pagadores/percepciones en el mismo anyo, ver conteo de filas vs personas
-    # de esta sesion): 51.014 personas (4,2%) tienen mas de un valor distinto de 04 PROVINCIA.
+    # Prov_fiscal_actual (2026-09-08, decision explicita del usuario): codigo de
+    # "04 PROVINCIA" en Datos fiscales (decodificado a nombre despues, en Grupo H, junto con
+    # 05 PROV_NACIMIENTO/06 PROV_1a_AFILIACION - ver comentario alli) - un unico ejercicio por
+    # edicion de la MCVL (esta tabla no tiene columna de anyo, a diferencia de Pensiones), pero
+    # SI puede haber varias filas por persona (varios pagadores/percepciones en el mismo anyo,
+    # ver conteo de filas vs personas de esta sesion): 51.014 personas (4,2%) tienen mas de un
+    # valor distinto de 04 PROVINCIA.
     # Desempate confirmado por el usuario via AskUserQuestion: provincia del pagador con MAYOR
     # ingreso bruto (mismo _ingreso_bruto_total ya calculado arriba para Ingresos_bruto_anual),
     # con la propia provincia como desempate final para determinismo en empates exactos de
@@ -1135,7 +1174,8 @@ NUEVO_ORDEN = [
     "Edad_Actual_Fecha_Corte",
     "Edad_Primer_Empleo_Signif", "Duracion_1er_Empleo_Signif", "Grupo_cotiz_1er_Empleo_Signif",
     "Edad_Ultimo_Empleo", "Grupo_Ultimo_Empleo",
-    "t_contrato_mas_largo", "Fecha_ini_Primer_Empleo", "Tiempo_total_desde_inicio_VL",
+    "causa_ult_baja", "tipo_contr_ult_baja", "cnae_ult_baja",
+    "t_contrato_mas_largo", "Causa_Baja_Trab_Ppal", "Fecha_ini_Primer_Empleo", "Tiempo_total_desde_inicio_VL",
     "duracion_promedio_EMPLEO", "Cotizado_anual_promedio",
     "num_altas_anual_promedio", "num_bajas_anual_promedio",
     "T_total_EMPLEO", "T_total_DESEMPLEO", "T_total_MIXTO_EMPL_DESEMPL", "T_total_NO_EMPLEO",
@@ -1151,6 +1191,7 @@ NUEVO_ORDEN = [
     "Pension_actual", "Cobra_pension_2024/5",
     "fecha_ultima_baja", "Situacion_actual_afiliacion", "Situacion_Paro_Ocupacion",
     "Fecha_inicio_ultima_racha_sin_empleo", "duracion_actual_sin_empleo",
+    "causa_baja_mas_comun", "causas_baja_distintas",
 ]
 
 
@@ -1435,6 +1476,17 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     cnae_3d_dict = dict(zip(cnae_df["codigo"], cnae_df["descripcion"]))
 
     df["Prov_trabajo_ppal"] = df["Prov_trabajo_ppal"].map(provincias_dict).fillna("NO CONSTA").astype("category")
+
+    # 05 PROV_NACIMIENTO / 06 PROV_1a_AFILIACION / Prov_fiscal_actual (2026-09-08, decision
+    # explicita del usuario tras detectar la inconsistencia en la interfaz: solo
+    # Prov_trabajo_ppal se decodificaba, estas 3 se quedaban como codigo INE crudo en vez de
+    # nombre - filtro categorico ilegible). Mismo diccionario y mismo criterio "NO CONSTA" que
+    # Prov_trabajo_ppal.
+    df["05 PROV_NACIMIENTO"] = df["05 PROV_NACIMIENTO"].map(provincias_dict).fillna("NO CONSTA").astype("category")
+    df["06 PROV_1a_AFILIACION"] = (
+        df["06 PROV_1a_AFILIACION"].map(provincias_dict).fillna("NO CONSTA").astype("category")
+    )
+    df["Prov_fiscal_actual"] = df["Prov_fiscal_actual"].map(provincias_dict).fillna("NO CONSTA").astype("category")
 
     # A diferencia de provincias_dict.csv (el nombre YA lleva el codigo, "01 ÁLAVA"),
     # cnae_3d_dict.csv trae codigo y descripcion en columnas separadas: hay que concatenarlos a
