@@ -1,7 +1,7 @@
 """Correccion de claves sucesoras para 04 TIPO_CONTRATO (Afiliacion) y
 agrupacion final en las 5 categorias conocidas + No consta + Otros.
 
-Compartido entre etl/personas_extendida.py (Tipo_Contrato_ppal_Agrupado,
+Compartido entre etl/personas_extendida.py (Tipo_Contr_ppal_Agrupado,
 Grupo A) y app/routers/trayectorias.py (trayectoria categorica de
 Afiliacion) para no reimplementar la logica en 2 sitios. Sin dependencias
 pesadas (solo csv/pathlib de la libreria estandar) para que app/ pueda

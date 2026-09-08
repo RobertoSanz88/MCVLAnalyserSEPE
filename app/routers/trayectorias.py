@@ -119,7 +119,7 @@ def _decodificar_identidad(codigo) -> str:
 #
 # TIPO_CONTRATO: a diferencia de las demas, antes de agrupar corrige claves
 # sucesoras (04 TIPO_CONTRATO trae 147 codigos crudos, muchos deprecados) -
-# logica compartida con etl/personas_extendida.py (Tipo_Contrato_ppal_Agrupado,
+# logica compartida con etl/personas_extendida.py (Tipo_Contr_ppal_Agrupado,
 # Grupo A) via etl/tipo_contrato_claves_sucesoras.py, para no reimplementarla
 # en los 2 sitios - ver ese modulo para el detalle completo de las reglas
 # (claves sucesoras con 1 vs 2 sucesoras, desambiguacion por COEF_T_PARCIAL,

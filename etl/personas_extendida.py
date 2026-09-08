@@ -17,7 +17,9 @@ import pandas as pd
 
 from config import FECHA_CORTE as _FECHA_CORTE_ISO
 from etl import reg_cotizacion_agrupado
-from etl.tipo_contrato_claves_sucesoras import decodificar_agrupado, sql_bin_corregido, sql_corregido
+from etl.tipo_contrato_claves_sucesoras import (
+    decodificar_agrupado, sql_bin_corregido, sql_corregido, sql_cubeta_agrupado,
+)
 
 UN_DIA = pd.Timedelta(days=1)
 CERO_DIAS = pd.Timedelta(days=0)
@@ -379,7 +381,7 @@ def extraer_grupo_a(con, parquet_folder):
     # Reg_cotiz_ppal_Agrupado / T_tot_reg_ppal: familia de regimen (ver
     # etl/reg_cotizacion_agrupado.py) con mas DURACION_EMPLEO acumulada por
     # persona. Agrupa A NIVEL DE EPISODIO, ANTES de sumar por (ipf, familia) -
-    # mismo motivo que Tipo_Contrato_ppal_Agrupado (ver mas abajo): si se
+    # mismo motivo que Tipo_Contr_ppal_Agrupado (ver mas abajo): si se
     # agrupara DESPUES de elegir el codigo crudo ganador, dos codigos de la
     # misma familia (p.ej. 111 y 140, ambos Regimen General) competirian como
     # 2 codigos distintos por la duracion de esa persona en vez de sumar
@@ -444,7 +446,8 @@ def extraer_grupo_a(con, parquet_folder):
         FROM ranked WHERE rn = 1
     """).fetchdf()
 
-    # Tipo_Contrato_ppal_Agrupado / T_tot_tipo_contrato_ppal.
+    # Tipo_Contr_ppal_Agrupado (nombre acortado 2026-09-08, decision explicita del usuario:
+    # "Contrato" -> "Contr", igual abreviatura que tipo_contr_ult_baja) / T_tot_tipo_contrato_ppal.
     # Corrige claves sucesoras de 04 TIPO_CONTRATO A NIVEL DE EPISODIO, antes
     # de sumar DURACION_EMPLEO por (ipf, codigo) - no despues de decidir el
     # contrato principal. Importa por que: si se corrigiera solo el codigo ya
@@ -478,7 +481,7 @@ def extraer_grupo_a(con, parquet_folder):
     # consta' (000) y 'Otros' (990 + huerfanos sin sucesora) son categorias
     # explicitas aqui, no NaN - a diferencia de la version anterior (ELSE
     # NULL), que dejaba esos casos como NaN silencioso.
-    df_tipo["Tipo_Contrato_ppal_Agrupado"] = df_tipo["cubeta"].map(decodificar_agrupado)
+    df_tipo["Tipo_Contr_ppal_Agrupado"] = df_tipo["cubeta"].map(decodificar_agrupado)
     df_tipo = df_tipo.drop(columns=["cubeta"])
 
     # DuckDB devuelve las duraciones como enteros (microsegundos, ver Fase 1), no como
@@ -543,23 +546,34 @@ def extraer_grupo_b(con, parquet_folder):
     # causa_ult_baja / tipo_contr_ult_baja / cnae_ult_baja (2026-09-08, decision explicita del
     # usuario, confirmada por AskUserQuestion): "08 CAUSA_BAJA_AFIL" / "04 TIPO_CONTRATO" /
     # "12 CNAE2009_CC" de ese MISMO episodio (misma ranking que Grupo_Ultimo_Empleo, para
-    # garantizar que las 4 columnas se refieren siempre al mismo episodio) - codigos crudos, sin
-    # decodificar ni agrupar, igual criterio que Causa_Baja_Trab_Ppal.
+    # garantizar que las 4 columnas se refieren siempre al mismo episodio).
+    # causa_ult_baja / cnae_ult_baja: codigos crudos, sin decodificar ni agrupar, igual criterio
+    # que Causa_Baja_Trab_Ppal.
+    # tipo_contr_ult_baja: corregido tras deteccion de error en la interfaz (2026-09-08) - salia
+    # como codigo crudo de TIPO_CONTRATO en vez de con la misma agrupacion que
+    # Tipo_Contr_ppal_Agrupado, inconsistente en el selector de filtros categoricos. Usa
+    # sql_cubeta_agrupado (correccion de claves sucesoras + agrupacion en las 7 categorias de
+    # ETIQUETAS_AGRUPADO), igual pipeline que Tipo_Contr_ppal_Agrupado en Grupo A - aqui se
+    # aplica a UN SOLO episodio (el de la ultima baja), no a la suma acumulada de todos.
+    tipo_ult_cubeta_sql = sql_cubeta_agrupado('"04 TIPO_CONTRATO"', '"05 COEF_T_PARCIAL"')
     df_ultimogrupo = con.execute(f"""
         WITH filtrado AS (
             SELECT "01 IPF" AS ipf, "03 GRU_COTIZACION" AS val, "07 FECHA_BAJA_REAL_AFIL" AS fecha_baja,
                    "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta, "08 CAUSA_BAJA_AFIL" AS causa_baja,
-                   "04 TIPO_CONTRATO" AS tipo_contrato, "12 CNAE2009_CC" AS cnae
+                   ({tipo_ult_cubeta_sql}) AS tipo_contr_cubeta, "12 CNAE2009_CC" AS cnae
             FROM read_parquet('{afiliacion}') WHERE "07 FECHA_BAJA_REAL_AFIL" IS NOT NULL
         ), ranked AS (
-            SELECT ipf, val, causa_baja, tipo_contrato, cnae,
+            SELECT ipf, val, causa_baja, tipo_contr_cubeta, cnae,
                    ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY fecha_baja DESC, fecha_alta DESC) AS rn
             FROM filtrado
         )
         SELECT ipf AS "01 IPF", val AS "Grupo_Ultimo_Empleo",
-               causa_baja AS "causa_ult_baja", tipo_contrato AS "tipo_contr_ult_baja", cnae AS "cnae_ult_baja"
+               causa_baja AS "causa_ult_baja", tipo_contr_cubeta AS "_tipo_contr_ult_baja_cubeta",
+               cnae AS "cnae_ult_baja"
         FROM ranked WHERE rn = 1
     """).fetchdf()
+    df_ultimogrupo["tipo_contr_ult_baja"] = df_ultimogrupo["_tipo_contr_ult_baja_cubeta"].map(decodificar_agrupado)
+    df_ultimogrupo = df_ultimogrupo.drop(columns=["_tipo_contr_ult_baja_cubeta"])
 
     # Fecha_ini_Primer_Empleo sobrevive a la tabla final (ver NUEVO_ORDEN); Fecha_final_Ultimo_Empleo
     # sigue siendo intermedia (se necesita en el Grupo H para Edad_Ultimo_Empleo, pero no se
@@ -1182,7 +1196,7 @@ NUEVO_ORDEN = [
     "%T_total_EMPLEO", "%T_total_DESEMPLEO", "%T_total_MIXTO_EMPL_DESEMPL", "%T_total_NO_EMPLEO",
     "Reg_cotiz_ppal_Agrupado", "T_tot_reg_ppal",
     "Grupo_cotiz_ppal", "t_tot_grupo_ppal",
-    "Tipo_Contrato_ppal_Agrupado", "T_tot_tipo_contrato_ppal",
+    "Tipo_Contr_ppal_Agrupado", "T_tot_tipo_contrato_ppal",
     "Prov_trabajo_ppal", "t_tot_prov_ppal",
     "Act_econ_ppal", "t_tot_act_econ_ppal",
     "Ingresos_bruto_anual_2024", "Prov_fiscal_actual",

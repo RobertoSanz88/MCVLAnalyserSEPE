@@ -33,7 +33,7 @@ TABLES = {
             "t_contrato_mas_largo": "t_contrato_mas_largo",
             "Causa_Baja_Trab_Ppal": "causa_baja_trab_ppal",
             "T_tot_tipo_contrato_ppal": "t_tot_tipo_contrato_ppal",
-            "Tipo_Contrato_ppal_Agrupado": "tipo_contrato_ppal_agrupado",
+            "Tipo_Contr_ppal_Agrupado": "tipo_contr_ppal_agrupado",
             "Grupo_Ultimo_Empleo": "grupo_ultimo_empleo",
             "causa_ult_baja": "causa_ult_baja",
             "tipo_contr_ult_baja": "tipo_contr_ult_baja",

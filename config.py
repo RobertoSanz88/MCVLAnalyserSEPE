@@ -138,7 +138,7 @@ CATEGORICAS_COLECTIVOS = [
     {"columna": "grupo_ultimo_empleo", "limite": None},
     {"columna": "reg_cotiz_ppal_agrupado", "limite": None},
     {"columna": "grupo_cotiz_ppal", "limite": None},
-    {"columna": "tipo_contrato_ppal_agrupado", "limite": None},
+    {"columna": "tipo_contr_ppal_agrupado", "limite": None},
     {"columna": "prov_trabajo_ppal", "limite": 15},
     {"columna": "act_econ_ppal", "limite": 15},
     {"columna": "discap_fiscal", "limite": None},
