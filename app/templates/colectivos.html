@@ -561,7 +561,7 @@
                     <div class="controles-trayectorias">
                         <label>Eje X:
                             <select id="select-eje-x" onchange="cambiarEjeXTrayectorias(this.value)">
-                                <option value="anos_vl">Años de vida laboral</option>
+                                <option value="anos_vl">Años desde inicio de vida laboral</option>
                                 <option value="edad">Edad</option>
                             </select>
                         </label>
@@ -1063,6 +1063,8 @@ const VARIABLES_POR_TABLA = {
         { valor: 'cnae2009_cc', etiqueta: 'Actividad económica (CNAE 2009)', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
         { valor: 'provincia_domic_cc_ppal', etiqueta: 'Provincia del centro de trabajo', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
         { valor: 'tipo_contrato', etiqueta: 'Tipo de contrato', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
+        { valor: 'empleo_publico', etiqueta: 'Empleo público', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
+        { valor: 'causa_baja_afil', etiqueta: 'Causa de baja', tipo: 'categorica', endpoint: '/trayectorias/colectivo/categorica' },
     ],
 };
 
@@ -1291,7 +1293,7 @@ function dibujarGraficoTrayectorias() {
 
     Plotly.newPlot(div, traces, {
         margin: { l: 60, r: 55, t: 10, b: 45 },
-        xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años de vida laboral' : 'Edad' },
+        xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años desde inicio de vida laboral' : 'Edad' },
         yaxis: { title: tituloEjeYTrayectorias(), rangemode: 'tozero' },
         yaxis2: { title: 'N', overlaying: 'y', side: 'right', rangemode: 'tozero', showgrid: false },
         legend: { orientation: 'h', y: -0.2 },
@@ -1384,7 +1386,7 @@ function dibujarGraficoCategoricoTrayectoria() {
 
         Plotly.newPlot(sub.querySelector('.mini-grafico-cat'), traces, {
             margin: { l: 42, r: 40, t: 8, b: 38 },
-            xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años de vida laboral' : 'Edad' },
+            xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años desde inicio de vida laboral' : 'Edad' },
             yaxis: { title: '%', rangemode: 'tozero' },
             yaxis2: { title: 'N', overlaying: 'y', side: 'right', rangemode: 'tozero', showgrid: false },
             showlegend: false,
@@ -1482,7 +1484,7 @@ function dibujarGraficoPorCategorias() {
 
         Plotly.newPlot(panel.querySelector('.mini-grafico-cat'), traces, {
             margin: { l: 40, r: 40, t: 8, b: 35 },
-            xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años de vida laboral' : 'Edad' },
+            xaxis: { title: ejeXTrayectorias === 'anos_vl' ? 'Años desde inicio de vida laboral' : 'Edad' },
             yaxis: { title: '%', rangemode: 'tozero' },
             yaxis2: { title: 'N', overlaying: 'y', side: 'right', rangemode: 'tozero', showgrid: false },
             showlegend: false,

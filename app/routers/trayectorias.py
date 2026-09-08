@@ -136,6 +136,12 @@ VARIABLES_CATEGORICAS = {
         "expr": tipo_contrato_claves_sucesoras.sql_cubeta_agrupado("t.tipo_contrato", "t.coef_t_parcial"),
         "decodificar": tipo_contrato_claves_sucesoras.decodificar_agrupado,
     },
+    # empleo_publico: ya llega como texto "SI"/"NO" desde el ETL (ver Empleo_publico en
+    # etl/personas_extendida.py), igual que tipo_pension - no necesita "decodificar".
+    "empleo_publico": {"tabla": "afiliacion", "expr": "t.empleo_publico"},
+    # causa_baja_afil: codigo crudo de 08 CAUSA_BAJA_AFIL, igual criterio que TRL/CNAE/PROVINCIA
+    # (sin diccionario pedido para decodificarlo todavia, ver comentario mas arriba).
+    "causa_baja_afil": {"tabla": "afiliacion", "expr": "t.causa_baja_afil"},
 }
 
 
@@ -143,6 +149,7 @@ class TrayectoriaCategoricaRequest(SubgruposRequest):
     variable: Literal[
         "tipo_pension", "trl", "gru_cotizacion", "reg_cotizacion",
         "cnae2009_cc", "provincia_domic_cc_ppal", "tipo_contrato",
+        "empleo_publico", "causa_baja_afil",
     ]
 
 
@@ -462,12 +469,17 @@ class TrayectoriaExportRequest(BaseModel):
     resultado: dict
 
 
-_ETIQUETA_EJE = {"anos_vl": "Años de vida laboral", "edad": "Edad"}
+_ETIQUETA_EJE = {"anos_vl": "Años desde inicio de vida laboral", "edad": "Edad"}
+# Nombre de hoja de Excel (2026-09-08): distinto de _ETIQUETA_EJE porque Excel limita los
+# nombres de hoja a 31 caracteres - "Años desde inicio de vida laboral" tiene 33 y
+# wb.create_sheet() lanzaria excepcion. La version larga se sigue usando en pantalla/cabeceras
+# de columna (mas espacio disponible ahi), solo el nombre de la propia hoja se acorta.
+_NOMBRE_HOJA_EJE = {"anos_vl": "Años desde inicio VL", "edad": "Edad"}
 
 
 def _construir_excel_trayectorias(payload: TrayectoriaExportRequest) -> bytes:
     """Hoja 'Colectivos' (igual que en _construir_excel de colectivos.py) +
-    una hoja por eje (Años de vida laboral / Edad), en formato largo (una fila
+    una hoja por eje (Años desde inicio de vida laboral / Edad), en formato largo (una fila
     por punto - o por punto+categoria en categoricas, ver conversacion
     2026-08-28): mas facil de manejar en Excel que un formato ancho cuando la
     variable tiene muchas categorias (Provincia, ~53) sin cambiar de forma
@@ -487,7 +499,7 @@ def _construir_excel_trayectorias(payload: TrayectoriaExportRequest) -> bytes:
     if payload.variable_tipo == "numerica":
         unidad_txt = f" ({payload.unidad})" if payload.unidad else ""
         for eje, etiqueta_eje in _ETIQUETA_EJE.items():
-            ws = wb.create_sheet(etiqueta_eje)
+            ws = wb.create_sheet(_NOMBRE_HOJA_EJE[eje])
             for col, titulo in enumerate(
                 ["Subcolectivo", etiqueta_eje, f"Media{unidad_txt}", f"Mediana{unidad_txt}", "N"], start=1
             ):
@@ -504,7 +516,7 @@ def _construir_excel_trayectorias(payload: TrayectoriaExportRequest) -> bytes:
                     fila += 1
     else:
         for eje, etiqueta_eje in _ETIQUETA_EJE.items():
-            ws = wb.create_sheet(etiqueta_eje)
+            ws = wb.create_sheet(_NOMBRE_HOJA_EJE[eje])
             for col, titulo in enumerate(
                 ["Subcolectivo", etiqueta_eje, "N total", "Categoría", "N categoría", "%"], start=1
             ):
