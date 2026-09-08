@@ -183,6 +183,155 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
     return output_path
 
 
+def fase1b_tramos_fusionados_duckdb(
+    con, parquet_folder, afiliacion_name="tabla_afiliacion_extendida.parquet",
+    output_name="tabla_afiliacion_tramos.parquet",
+):
+    """PASO 2 (2026-09-08, decision explicita del usuario): fusiona episodios de Afiliacion
+    solapados en tramos de calendario sin solape, para poder sumar tiempo de vida laboral sin
+    contar dos veces el mismo dia. Problema que resuelve: DURACION_EMPLEO/DESEMPLEO/NO_EMPLEO se
+    sumaban hasta ahora por episodio bruto, sin comprobar solapes entre episodios de la misma
+    persona - pluriempleo (dos trabajos con fechas solapadas) o solape empleo-desempleo (un
+    episodio de trabajo y uno de prestacion/subsidio con fechas que se pisan) sobrecontaban
+    tiempo, y eso hacia salir DURACION_NO_EMPLEO negativa en un subconjunto de personas.
+
+    Arquitectura (decidida con el usuario via AskUserQuestion, 2026-09-08):
+    tabla_afiliacion_extendida.parquet NO se toca - sigue una fila por episodio bruto con sus
+    columnas originales (TIPO_CONTRATO, REG_COTIZACION, CCC_2...), que Grupo A/B/D necesitan
+    intactas para su logica de "episodio/regimen ganador" por duracion (un tramo fusionado a
+    partir de 2 episodios con distinto TIPO_CONTRATO no tiene un TIPO_CONTRATO valido propio).
+    Los tramos fusionados viven en esta tabla NUEVA y ligera, separada: solo
+    ipf/fecha_inicio_tramo/fecha_fin_tramo/categoria (EMPLEO/DESEMPLEO/MIXTO - NO_EMPLEO no se
+    materializa aqui, se calcula en Grupo C/Paso 3 como residuo: tiempo_total - EMPLEO -
+    DESEMPLEO - MIXTO, no como suma de huecos).
+
+    Usa la MISMA clasificacion TRL que ya existe en Fase 1 para DURACION_EMPLEO/DURACION_DESEMPLEO
+    (700-799 -> DESEMPLEO, TRL 400 excluido de ambas categorias - "peculiaridad... no se
+    considera alta laboral" pero tampoco es prestacion de desempleo -, todo lo demas -> EMPLEO):
+    no redefine que TRL cuenta como que, solo corrige como se suman los tramos con solape.
+
+    Parte A (fusion de episodios de la MISMA categoria, ej. pluriempleo): por persona y
+    categoria, ordenados por fecha_alta, cada episodio se compara contra el MAXIMO de fecha_baja
+    visto hasta el momento (no solo el episodio anterior), para fusionar tambien cadenas de
+    solapes (A solapa B, B solapa C, pero C no solapa A directamente -> los 3 se fusionan igual).
+    Parte B (barrido de eventos entre categorias): con los tramos ya fusionados de EMPLEO y de
+    DESEMPLEO por separado, se generan eventos (+1 al empezar el tramo, -1 al dia siguiente de
+    terminarlo) y se recorren cronologicamente por persona, sumando un contador por categoria.
+    Entre dos eventos consecutivos, el tramo de calendario se clasifica segun que contadores
+    esten activos: solo empleo -> EMPLEO, solo desempleo -> DESEMPLEO, ambos -> MIXTO, ninguno ->
+    NO_EMPLEO (no se guarda esa fila).
+    """
+    afiliacion = _ruta(parquet_folder, afiliacion_name)
+    output_path = _ruta(parquet_folder, output_name)
+
+    con.execute(f"""
+        CREATE OR REPLACE VIEW _tramos_episodios AS
+        SELECT "01 IPF" AS ipf,
+            CASE WHEN COALESCE("15 TRL" >= 700 AND "15 TRL" < 800, FALSE) THEN 'DESEMPLEO'
+                 ELSE 'EMPLEO' END AS categoria,
+            "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta,
+            "Baja_modificada" AS fecha_baja
+        FROM read_parquet('{afiliacion}')
+        -- TRL 400 fuera de la fusion: ni empleo ni desempleo (misma peculiaridad que en Fase 1)
+        WHERE NOT COALESCE("15 TRL" = 400, FALSE)
+          -- episodios con duracion bruta negativa (dato erroneo, ver DURACION_EMPLEO en Fase 1)
+          -- no son un intervalo de calendario valido, se excluyen de la fusion
+          AND "Baja_modificada" >= "06 FECHA_ALTA_REAL_AFIL"
+    """)
+
+    con.execute("""
+        CREATE OR REPLACE VIEW _tramos_max_anterior AS
+        SELECT *,
+            MAX(fecha_baja) OVER (
+                PARTITION BY ipf, categoria ORDER BY fecha_alta
+                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+            ) AS _max_baja_anterior
+        FROM _tramos_episodios
+    """)
+
+    # nuevo_grupo si hay un hueco real (>1 dia) respecto al maximo de fecha_baja visto hasta
+    # ahora - un hueco de 0 o 1 dia significa que los episodios se solapan o se tocan (el dia de
+    # baja cuenta como "en alta", misma convencion que el resto del fichero), asi que se fusionan
+    con.execute("""
+        CREATE OR REPLACE VIEW _tramos_grupos AS
+        SELECT *,
+            SUM(CASE
+                    WHEN _max_baja_anterior IS NULL
+                         OR date_diff('day', _max_baja_anterior, fecha_alta) > 1
+                    THEN 1 ELSE 0
+                END) OVER (
+                PARTITION BY ipf, categoria ORDER BY fecha_alta
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            ) AS _grupo_id
+        FROM _tramos_max_anterior
+    """)
+
+    con.execute("""
+        CREATE OR REPLACE VIEW _tramos_fusionados AS
+        SELECT ipf, categoria,
+            MIN(fecha_alta) AS tramo_alta,
+            MAX(fecha_baja) AS tramo_baja
+        FROM _tramos_grupos
+        GROUP BY ipf, categoria, _grupo_id
+    """)
+
+    # Parte B: eventos (+1 al empezar el tramo fusionado, -1 al dia siguiente de terminarlo),
+    # agrupados por instante (ipf, ts) antes de acumular - dos eventos en el mismo instante
+    # (p.ej. un tramo EMPLEO que termina el mismo dia en que empieza uno DESEMPLEO) deben
+    # aplicarse juntos, no en un orden arbitrario entre filas de la union.
+    con.execute("""
+        CREATE OR REPLACE VIEW _eventos AS
+        SELECT ipf, categoria, tramo_alta AS ts, 1 AS delta FROM _tramos_fusionados
+        UNION ALL
+        SELECT ipf, categoria, tramo_baja + INTERVAL 1 DAY AS ts, -1 AS delta FROM _tramos_fusionados
+    """)
+
+    con.execute("""
+        CREATE OR REPLACE VIEW _eventos_agrupados AS
+        SELECT ipf, ts,
+            SUM(CASE WHEN categoria = 'EMPLEO' THEN delta ELSE 0 END) AS delta_empleo,
+            SUM(CASE WHEN categoria = 'DESEMPLEO' THEN delta ELSE 0 END) AS delta_desempleo
+        FROM _eventos
+        GROUP BY ipf, ts
+    """)
+
+    con.execute("""
+        CREATE OR REPLACE VIEW _eventos_acumulados AS
+        SELECT ipf, ts,
+            SUM(delta_empleo) OVER (
+                PARTITION BY ipf ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            ) AS empleo_activo,
+            SUM(delta_desempleo) OVER (
+                PARTITION BY ipf ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            ) AS desempleo_activo
+        FROM _eventos_agrupados
+    """)
+
+    # El tramo de calendario entre un evento y el siguiente (LEAD) se clasifica por los
+    # contadores vigentes desde este evento. El ultimo evento de cada persona no tiene
+    # "siguiente" (LEAD NULL, fecha_fin_tramo sale NULL) - se descarta junto con los tramos
+    # NO_EMPLEO (categoria NULL): por construccion, tras el ultimo evento ambos contadores
+    # vuelven a 0 (cada tramo fusionado aporta un +1 y un -1), asi que ese resto ya es NO_EMPLEO
+    # y no se materializa aqui (se calcula en Paso 3 como residuo, no como suma de huecos).
+    con.execute(f"""
+        COPY (
+            SELECT ipf, fecha_inicio_tramo, fecha_fin_tramo, categoria
+            FROM (
+                SELECT ipf,
+                    ts AS fecha_inicio_tramo,
+                    LEAD(ts) OVER (PARTITION BY ipf ORDER BY ts) - INTERVAL 1 DAY AS fecha_fin_tramo,
+                    CASE WHEN empleo_activo > 0 AND desempleo_activo > 0 THEN 'MIXTO'
+                         WHEN empleo_activo > 0 THEN 'EMPLEO'
+                         WHEN desempleo_activo > 0 THEN 'DESEMPLEO'
+                         ELSE NULL END AS categoria
+                FROM _eventos_acumulados
+            )
+            WHERE fecha_fin_tramo IS NOT NULL AND categoria IS NOT NULL
+        ) TO '{output_path}' (FORMAT PARQUET)
+    """)
+    return output_path
+
+
 def fusionar_grupo(parquet_folder, extracciones, post_fillna=None):
     """Carga tabla_personas_extendida.parquet, fusiona (left join por 01 IPF) cada extraccion de
     la lista, aplica post_fillna(df) si se da, guarda y devuelve (shape_antes, shape_despues)."""
@@ -398,8 +547,8 @@ def extraer_grupo_b(con, parquet_folder):
     """).fetchdf()
 
     # Fecha_ini_Primer_Empleo sobrevive a la tabla final (ver NUEVO_ORDEN); Fecha_final_Ultimo_Empleo
-    # sigue siendo intermedia (se necesita en el Grupo H para Edad_Ultimo_Empleo/
-    # Anos_VL_excluye_desempleo_inicio_y_fin, pero no se expone como columna propia).
+    # sigue siendo intermedia (se necesita en el Grupo H para Edad_Ultimo_Empleo, pero no se
+    # expone como columna propia).
     # Las dos excluyen episodios de TRL 700-799/400 (prestacion/subsidio/otras peculiaridades sin
     # alta laboral, ver DURACION_EMPLEO) - mismo criterio en ambas, decision explicita del usuario.
     # Fecha_ini_Primer_Empleo corregida 2026-08-20 (commit 84e1ace): sin el filtro, si el episodio
@@ -408,8 +557,14 @@ def extraer_grupo_b(con, parquet_folder):
     # filtro, para 173.291 personas (13,2%, verificado con datos reales - la mayoria cobrando
     # actualmente del SEPE) el episodio MAS RECIENTE era de prestacion/subsidio, asi que
     # Edad_Ultimo_Empleo mostraba su edad actual (o la fecha en que dejo de cobrar) en vez de
-    # cuando dejo de TRABAJAR, y Anos_VL contaba ese tiempo cobrando como si fuera vida laboral.
-    # NULL para quien nunca ha tenido un episodio de empleo real (mismo caso en las dos columnas).
+    # cuando dejo de TRABAJAR. NULL para quien nunca ha tenido un episodio de empleo real (mismo
+    # caso en las dos columnas).
+    # Fecha_inicio_vida_laboral_total (2026-09-08, decision explicita del usuario): igual que
+    # Fecha_ini_Primer_Empleo pero SIN el filtro de TRL 700-799/400 - aqui interesa el primer
+    # episodio de CUALQUIER tipo (empleo o desempleo), es la base de
+    # Tiempo_total_desde_inicio_VL en el Grupo H (sustituye a
+    # Anos_VL_excluye_desempleo_inicio_y_fin, que salia corta para el mismo subconjunto de
+    # personas descrito arriba). No sobrevive a la tabla final (no esta en NUEVO_ORDEN).
     df_fechas = con.execute(f"""
         SELECT "01 IPF" AS "01 IPF",
                MIN("06 FECHA_ALTA_REAL_AFIL") FILTER (
@@ -421,7 +576,8 @@ def extraer_grupo_b(con, parquet_folder):
                    WHERE NOT (
                        COALESCE("15 TRL" >= 700 AND "15 TRL" < 800, FALSE) OR COALESCE("15 TRL" = 400, FALSE)
                    )
-               ) AS "Fecha_final_Ultimo_Empleo"
+               ) AS "Fecha_final_Ultimo_Empleo",
+               MIN("06 FECHA_ALTA_REAL_AFIL") AS "Fecha_inicio_vida_laboral_total"
         FROM read_parquet('{afiliacion}') GROUP BY 1
     """).fetchdf()
 
@@ -472,6 +628,7 @@ def extraer_grupo_b(con, parquet_folder):
 
 def extraer_grupo_c(con, parquet_folder):
     afiliacion = _ruta(parquet_folder, "tabla_afiliacion_extendida.parquet")
+    tramos = _ruta(parquet_folder, "tabla_afiliacion_tramos.parquet")
 
     # num_episodios_alta / duracion_promedio_EMPLEO (excluye episodios de duracion 0 o NULL)
     df_promedioalta = con.execute(f"""
@@ -492,14 +649,26 @@ def extraer_grupo_c(con, parquet_folder):
         GROUP BY 1
     """).fetchdf()
 
-    # T_total_EMPLEO / T_total_DESEMPLEO / T_total_NO_EMPLEO: suma de duraciones por persona
-    # (T_total_NO_EMPLEO no sobrevive a la tabla final, se calcula igual que en el cuaderno)
+    # T_total_EMPLEO / T_total_DESEMPLEO / T_total_MIXTO_EMPL_DESEMPL (PASO 3, 2026-09-08,
+    # decision explicita del usuario): ya NO se suma por episodio bruto (sobrecontaba tiempo en
+    # pluriempleo y en solapes empleo-desempleo, ver Paso 2) - se suma sobre
+    # tabla_afiliacion_tramos.parquet, que ya trae los tramos fusionados/sin solape por
+    # categoria. T_total_NO_EMPLEO ya no se calcula aqui: pasa a ser un residuo en Grupo H
+    # (Tiempo_total_desde_inicio_VL - EMPLEO - DESEMPLEO - MIXTO), no una suma directa
+    # (no sobrevive a la tabla final, igual que antes).
+    # COALESCE(..., 0): FILTER sobre una persona sin ningun tramo de esa categoria (ej. nunca
+    # cobro del SEPE -> 0 tramos DESEMPLEO/MIXTO) da SUM NULL, no 0 - distinto del comportamiento
+    # anterior (0 por episodio, sumaba a 0). 0 es el valor correcto aqui (no hubo tiempo en esa
+    # categoria, no "se desconoce"), igual convencion que la version por episodio.
     df_totales = con.execute(f"""
-        SELECT "01 IPF" AS "01 IPF",
-               SUM("DURACION_EMPLEO") AS "T_total_EMPLEO",
-               SUM("DURACION_DESEMPLEO") AS "T_total_DESEMPLEO",
-               SUM("DURACION_NO_EMPLEO") AS "T_total_NO_EMPLEO"
-        FROM read_parquet('{afiliacion}') GROUP BY 1
+        SELECT ipf AS "01 IPF",
+               COALESCE(SUM(date_diff('day', fecha_inicio_tramo, fecha_fin_tramo) + 1)
+                   FILTER (WHERE categoria = 'EMPLEO'), 0) * {US_POR_DIA} AS "T_total_EMPLEO",
+               COALESCE(SUM(date_diff('day', fecha_inicio_tramo, fecha_fin_tramo) + 1)
+                   FILTER (WHERE categoria = 'DESEMPLEO'), 0) * {US_POR_DIA} AS "T_total_DESEMPLEO",
+               COALESCE(SUM(date_diff('day', fecha_inicio_tramo, fecha_fin_tramo) + 1)
+                   FILTER (WHERE categoria = 'MIXTO'), 0) * {US_POR_DIA} AS "T_total_MIXTO_EMPL_DESEMPL"
+        FROM read_parquet('{tramos}') GROUP BY 1
     """).fetchdf()
 
     # Prov_trabajo_ppal / t_tot_prov_ppal: digitos 5-6 del CCC_2, con mas duracion acumulada
@@ -547,7 +716,9 @@ def extraer_grupo_c(con, parquet_folder):
     ]:
         df[col] = pd.to_timedelta(df[col], unit="us")
     df_totales["T_total_DESEMPLEO"] = pd.to_timedelta(df_totales["T_total_DESEMPLEO"], unit="us")
-    df_totales["T_total_NO_EMPLEO"] = pd.to_timedelta(df_totales["T_total_NO_EMPLEO"], unit="us")
+    df_totales["T_total_MIXTO_EMPL_DESEMPL"] = pd.to_timedelta(
+        df_totales["T_total_MIXTO_EMPL_DESEMPL"], unit="us"
+    )
 
     return [df_promedioalta, df_promediobaja, df_totales, df_prov, df_actecon]
 
@@ -846,10 +1017,26 @@ def extraer_grupo_f(parquet_folder, anio_datos):
     df_estudio_discap_fiscal = df.loc[cond, ["01 IPF"]].drop_duplicates().copy()
     df_estudio_discap_fiscal["Discap_fiscal"] = True
 
-    del df, df_sumado
+    # Prov_fiscal_actual (2026-09-08, decision explicita del usuario): valor tal cual de
+    # "04 PROVINCIA" en Datos fiscales - un unico ejercicio por edicion de la MCVL (esta tabla no
+    # tiene columna de anyo, a diferencia de Pensiones), pero SI puede haber varias filas por
+    # persona (varios pagadores/percepciones en el mismo anyo, ver conteo de filas vs personas
+    # de esta sesion): 51.014 personas (4,2%) tienen mas de un valor distinto de 04 PROVINCIA.
+    # Desempate confirmado por el usuario via AskUserQuestion: provincia del pagador con MAYOR
+    # ingreso bruto (mismo _ingreso_bruto_total ya calculado arriba para Ingresos_bruto_anual),
+    # con la propia provincia como desempate final para determinismo en empates exactos de
+    # ingreso (mismo patron "total DESC, val ASC" ya usado en el resto del fichero).
+    df_ordenado = df.sort_values(
+        ["01 IPF", "_ingreso_bruto_total", "04 PROVINCIA"], ascending=[True, False, True]
+    )
+    df_estudio_provincia_actual = df_ordenado.drop_duplicates(subset="01 IPF", keep="first")[
+        ["01 IPF", "04 PROVINCIA"]
+    ].rename(columns={"04 PROVINCIA": "Prov_fiscal_actual"})
+
+    del df, df_sumado, df_ordenado
     gc.collect()
 
-    extracciones = [df_estudio_ingresosbrutos, df_estudio_discap_fiscal]
+    extracciones = [df_estudio_ingresosbrutos, df_estudio_discap_fiscal, df_estudio_provincia_actual]
     return extracciones, nombre_col_ingresos_brutos
 
 
@@ -948,17 +1135,17 @@ NUEVO_ORDEN = [
     "Edad_Actual_Fecha_Corte",
     "Edad_Primer_Empleo_Signif", "Duracion_1er_Empleo_Signif", "Grupo_cotiz_1er_Empleo_Signif",
     "Edad_Ultimo_Empleo", "Grupo_Ultimo_Empleo",
-    "t_contrato_mas_largo", "Fecha_ini_Primer_Empleo", "Anos_VL_excluye_desempleo_inicio_y_fin",
+    "t_contrato_mas_largo", "Fecha_ini_Primer_Empleo", "Tiempo_total_desde_inicio_VL",
     "duracion_promedio_EMPLEO", "Cotizado_anual_promedio",
     "num_altas_anual_promedio", "num_bajas_anual_promedio",
-    "T_total_EMPLEO", "T_total_DESEMPLEO",
-    "%T_total_EMPLEO", "%T_total_DESEMPLEO",
+    "T_total_EMPLEO", "T_total_DESEMPLEO", "T_total_MIXTO_EMPL_DESEMPL", "T_total_NO_EMPLEO",
+    "%T_total_EMPLEO", "%T_total_DESEMPLEO", "%T_total_MIXTO_EMPL_DESEMPL", "%T_total_NO_EMPLEO",
     "Reg_cotiz_ppal_Agrupado", "T_tot_reg_ppal",
     "Grupo_cotiz_ppal", "t_tot_grupo_ppal",
     "Tipo_Contrato_ppal_Agrupado", "T_tot_tipo_contrato_ppal",
     "Prov_trabajo_ppal", "t_tot_prov_ppal",
     "Act_econ_ppal", "t_tot_act_econ_ppal",
-    "Ingresos_bruto_anual_2024",
+    "Ingresos_bruto_anual_2024", "Prov_fiscal_actual",
     "Discap_fiscal", "Discap_afiliacion", "Discap_pension",
     "Pension_todas_cobradas",
     "Pension_actual", "Cobra_pension_2024/5",
@@ -984,27 +1171,67 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     df = pd.read_parquet(output_path)
     print(f"Grupo H: partiendo de {df.shape}")
 
-    # Edad_Ultimo_Empleo / DURACION_1er_Empleo_a_Ultimo_Empleo
+    # Edad_Ultimo_Empleo
     df["Fecha_ini_Primer_Empleo_completa"] = df["Fecha_ini_Primer_Empleo"].dt.year * 12 + df["Fecha_ini_Primer_Empleo"].dt.month
     df["Fecha_final_Ultimo_Empleo_completa"] = df["Fecha_final_Ultimo_Empleo"].dt.year * 12 + df["Fecha_final_Ultimo_Empleo"].dt.month
     df["02 FECHA_NACIMIENTO_completa"] = df["02 FECHA_NACIMIENTO"].dt.year * 12 + df["02 FECHA_NACIMIENTO"].dt.month
 
     df["Edad_Ultimo_Empleo"] = df["Fecha_final_Ultimo_Empleo_completa"] - df["02 FECHA_NACIMIENTO_completa"]
-    # +UN_DIA (corregido 2026-08-20, encontrado por el usuario): igual convencion que
-    # DURACION_EMPLEO (el dia de baja cuenta como "en alta", confirmado contra la guia -
-    # "el dia de la fecha de baja se considera como dia en alta"). Sin el +1, una resta simple
-    # daba 0 dias cuando el primer y el ultimo empleo real caian el mismo dia (990 personas con
-    # datos reales) en vez del minimo logico de 1 dia.
-    df["DURACION_1er_Empleo_a_Ultimo_Empleo"] = df["Fecha_final_Ultimo_Empleo"] - df["Fecha_ini_Primer_Empleo"] + UN_DIA
-    # Aun con el +1, puede quedar <= 0 si Fecha_final_Ultimo_Empleo es anterior a
-    # Fecha_ini_Primer_Empleo por mas de 1 dia - error de dato (la guia ya avisa de casos raros
-    # de fecha_alta posterior a fecha_baja) en vez de una duracion valida. Se pone a NaT (no un
-    # valor invalido) para que Anos_VL_excluye_desempleo_inicio_y_fin y las variables que
-    # dividen por esta duracion (num_altas_anual_promedio, num_bajas_anual_promedio,
-    # Cotizado_anual_promedio, %T_total_EMPLEO/DESEMPLEO) den NULL en vez de "inf" o un valor
-    # con el signo invertido.
-    df.loc[df["DURACION_1er_Empleo_a_Ultimo_Empleo"] <= CERO_DIAS, "DURACION_1er_Empleo_a_Ultimo_Empleo"] = pd.NaT
     df.drop(columns=["Fecha_ini_Primer_Empleo_completa", "Fecha_final_Ultimo_Empleo_completa"], inplace=True)
+
+    # Tiempo_total_desde_inicio_VL (2026-09-08, decision explicita del usuario):
+    # sustituye a Anos_VL_excluye_desempleo_inicio_y_fin (que a su vez venia de
+    # DURACION_1er_Empleo_a_Ultimo_Empleo = Fecha_final_Ultimo_Empleo - Fecha_ini_Primer_Empleo).
+    # Esas dos fechas EXCLUYEN episodios de TRL 700-799/400 en los extremos (ver
+    # extraer_grupo_b), asi que para el 0,76%/13,2% de personas cuyo episodio mas
+    # antiguo/reciente es de ese tipo, la duracion se quedaba corta respecto al periodo real
+    # cubierto por todos los episodios - relevante porque esta columna es la base de una resta
+    # en T_total_NO_EMPLEO (tiempo_total - EMPLEO - DESEMPLEO - MIXTO) donde el residuo podia
+    # salir negativo para ese mismo subconjunto con la version antigua.
+    # fecha_fin_vl = MIN(FECHA_CORTE, fecha de fallecimiento). "08 FECHA_FALLECIMIENTO" es un
+    # codigo YYYYMM (0 = no aplica, no un NULL real - confirmado en el Paso 0 de verificacion
+    # de esta misma sesion), asi que se decodifica al ULTIMO dia de ese mes, no al primero: la
+    # fecha solo tiene precision de mes, y usar el primer dia recortaria como "fuera de la vida
+    # laboral" actividad legitima ocurrida mas tarde en el mismo mes del fallecimiento -
+    # verificado con datos reales (Paso 0): de los 14.751 fallecidos con afiliacion, usar fin de
+    # mes en vez de inicio de mes reduce de 1.109 a 21 el numero de personas cuyo ultimo episodio
+    # (o hueco activo) excede su propia fecha de fallecimiento; de esos 21, 15 son episodios
+    # "aun activos" (placeholder 2099) en personas que ya constan fallecidas.
+    codigo_fallecimiento = df["08 FECHA_FALLECIMIENTO"]
+    tiene_fallecimiento = codigo_fallecimiento != 0
+    fecha_fallecimiento_fin_mes = pd.Series(pd.NaT, index=df.index).astype("datetime64[us]")
+    if tiene_fallecimiento.any():
+        inicio_mes_fallec = pd.to_datetime(pd.DataFrame({
+            "year": codigo_fallecimiento.loc[tiene_fallecimiento] // 100,
+            "month": codigo_fallecimiento.loc[tiene_fallecimiento] % 100,
+            "day": 1,
+        }))
+        fecha_fallecimiento_fin_mes.loc[tiene_fallecimiento] = inicio_mes_fallec + pd.offsets.MonthEnd(0)
+    fecha_fin_vl = fecha_fallecimiento_fin_mes.fillna(FECHA_CORTE).clip(upper=FECHA_CORTE)
+
+    # +UN_DIA (2026-09-08, correccion tras validacion del Paso 3 - no estaba en la version
+    # inicial de este calculo, que seguia la formula literal fecha_fin_vl -
+    # Fecha_inicio_vida_laboral_total sin la convencion "dia de baja cuenta como en alta" del
+    # resto del fichero, por parecer una diferencia de <=1 dia irrelevante a escala de anyos).
+    # Resulto NO ser irrelevante: T_total_EMPLEO/DESEMPLEO/MIXTO_EMPL_DESEMPL (Grupo C, tramos
+    # fusionados del Paso 2) SI usan esa convencion +1 (inclusive en ambos extremos), asi que sin
+    # este +1 aqui, una persona con CERO hueco real de NO_EMPLEO en toda su vida laboral (cubierta
+    # sin solucion de continuidad desde su primer episodio hasta fecha_fin_vl) generaba
+    # T_total_NO_EMPLEO = -1 dia exacto en el residuo del Paso 3 (Tiempo_total - EMPLEO -
+    # DESEMPLEO - MIXTO) - verificado con datos reales: 72.897 de 72.899 residuos negativos
+    # detectados eran exactamente -1 dia, y desaparecen con este +1 (cuadre algebraico: la suma
+    # inclusive de tramos que cubren el rango [S, E] completo sin huecos da E-S+1 dias, igual que
+    # Tiempo_total con este +1; solo 2 residuos negativos reales quedan, ambos fallecidos cuyo
+    # episodio real excede su propia fecha de fallecimiento - ver Paso 0, impacto ya aceptado
+    # como marginal).
+    df["Tiempo_total_desde_inicio_VL"] = fecha_fin_vl - df["Fecha_inicio_vida_laboral_total"] + UN_DIA
+    # <= 0 -> NaT (mismo criterio que el resto de duraciones de este fichero): en teoria no
+    # deberia poder pasar (fecha_fin_vl >= cualquier Baja_modificada real, ver Fase 1), pero se
+    # protege igual que se hacia con DURACION_1er_Empleo_a_Ultimo_Empleo, por si un caso de dato
+    # erroneo (fallecimiento anterior al primer episodio de Afiliacion) se colara.
+    df.loc[
+        df["Tiempo_total_desde_inicio_VL"] <= CERO_DIAS, "Tiempo_total_desde_inicio_VL"
+    ] = pd.NaT
 
     # Edad_Primer_Empleo_Signif
     df["Fecha_1er_Empleo_Signif_completa"] = df["Fecha_1er_Empleo_Signif"].dt.year * 12 + df["Fecha_1er_Empleo_Signif"].dt.month
@@ -1032,13 +1259,19 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     fecha_corte_completa = FECHA_CORTE.year * 12 + FECHA_CORTE.month
     df["Edad_Actual_Fecha_Corte"] = (fecha_corte_completa - fecha_nacimiento_completa) / 12
 
-    # num_altas_anual_promedio / num_bajas_anual_promedio: normalizados por anyos de vida laboral
-    df["num_altas_anual_promedio"] = df["num_episodios_alta"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"].dt.days * 365
-    df["num_bajas_anual_promedio"] = df["num_episodios_baja"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"].dt.days * 365
+    # num_altas_anual_promedio / num_bajas_anual_promedio: normalizados por anyos de vida laboral.
+    # Denominador cambiado de DURACION_1er_Empleo_a_Ultimo_Empleo a
+    # Tiempo_total_desde_inicio_VL el 2026-09-08 (consecuencia automatica de que la
+    # primera columna ya no existe, ver PASO 1 - NOTA pendiente de revision en otra sesion:
+    # decidir si "todo el periodo" es la base correcta para estas 2 tasas o si conviene
+    # separarlas de nuevo).
+    df["num_altas_anual_promedio"] = df["num_episodios_alta"] / df["Tiempo_total_desde_inicio_VL"].dt.days * 365
+    df["num_bajas_anual_promedio"] = df["num_episodios_baja"] / df["Tiempo_total_desde_inicio_VL"].dt.days * 365
     df.drop(columns=["num_episodios_alta", "num_episodios_baja"], inplace=True)
 
-    # Cotizado_anual_promedio: normalizado por anyos de vida laboral
-    df["Cotizado_anual_promedio"] = df["Cotizado_total"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"].dt.days * 365 / 100
+    # Cotizado_anual_promedio: normalizado por anyos de vida laboral (mismo cambio de
+    # denominador que num_altas/bajas_anual_promedio, mismo motivo, misma NOTA pendiente).
+    df["Cotizado_anual_promedio"] = df["Cotizado_total"] / df["Tiempo_total_desde_inicio_VL"].dt.days * 365 / 100
 
     # Nacionalidad_agrupado / Pais_nacim_agrupado
     condiciones = [
@@ -1124,25 +1357,49 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     df.loc[es_parado & es_ld, "Situacion_Paro_Ocupacion"] = "Parado_LD"
     df.loc[es_parado & ~es_ld, "Situacion_Paro_Ocupacion"] = "Parado_NoLD"
 
-    # %T_total_EMPLEO / %T_total_DESEMPLEO: proporcion (0-1) sobre la duracion total de
-    # vida laboral, x100 para que sea un porcentaje real (0-100) acorde al nombre de la
-    # columna. El cuaderno reconstruyo esta formula (el codigo original de 2023 que la
-    # produjo se habia perdido) sin el x100 y con una advertencia sin resolver
-    # ("REVISAR ... verificar que es la definicion que se queria") que esta version
-    # anterior de este script tampoco llevaba - decision explicita del usuario tras
-    # detectar que los valores (0,8 / 0,9 / 0,1...) no podian ser un porcentaje real.
-    df["%T_total_EMPLEO"] = df["T_total_EMPLEO"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"] * 100
-    df["%T_total_DESEMPLEO"] = df["T_total_DESEMPLEO"] / df["DURACION_1er_Empleo_a_Ultimo_Empleo"] * 100
+    # T_total_NO_EMPLEO (PASO 3, 2026-09-08, decision explicita del usuario - materializada como
+    # columna el mismo dia, a peticion expresa del usuario): residuo, no suma directa -
+    # Tiempo_total_desde_inicio_VL menos las 3 categorias ya fusionadas/sin solape
+    # (Paso 2: T_total_EMPLEO/DESEMPLEO/MIXTO_EMPL_DESEMPL). Por construccion no deberia poder
+    # salir negativo - verificado con datos reales (tras el fix del +1 dia en
+    # Tiempo_total_desde_inicio_VL, ver mas arriba): solo 2 residuos negativos en
+    # 1,31M personas, ambos fallecidos cuyo episodio real excede su propia fecha de
+    # fallecimiento (ver Paso 0, impacto ya aceptado como marginal) - no un fallo del barrido.
+    df["T_total_NO_EMPLEO"] = (
+        df["Tiempo_total_desde_inicio_VL"]
+        - df["T_total_EMPLEO"] - df["T_total_DESEMPLEO"] - df["T_total_MIXTO_EMPL_DESEMPL"]
+    )
+    _negativos_no_empleo = (df["T_total_NO_EMPLEO"] < CERO_DIAS).sum()
+    print(
+        f"T_total_NO_EMPLEO negativo (deberia ser 0 por construccion; "
+        f"si no lo es, fallo en el barrido del Paso 2): {_negativos_no_empleo}"
+    )
+
+    # %T_total_EMPLEO / %T_total_DESEMPLEO / %T_total_MIXTO_EMPL_DESEMPL / %T_total_NO_EMPLEO
+    # (PASO 3, 2026-09-08): proporcion (0-100) sobre Tiempo_total_desde_inicio_VL, con
+    # T_total_EMPLEO/DESEMPLEO/MIXTO_EMPL_DESEMPL/NO_EMPLEO ya fusionados/sin solape (Paso 2) o
+    # residuo (Paso 3) como numerador - antes de este cambio, suma por episodio bruto sin
+    # comprobar solapes (ver comentario 2026-08-20 mas abajo sobre el x100) y con
+    # DURACION_1er_Empleo_a_Ultimo_Empleo como denominador (ver Paso 1 mas arriba).
+    # %T_total_NO_EMPLEO materializada a peticion expresa del usuario (2026-09-08, junto con
+    # T_total_NO_EMPLEO mas arriba) - las 4 suman 100 por construccion (T_total_NO_EMPLEO es
+    # el residuo exacto de las otras 3), verificado con datos reales en la validacion del Paso 3.
+    # El x100 en si (proporcion 0-1 -> porcentaje real 0-100) viene del cuaderno original de
+    # 2023 (codigo perdido, reconstruido sin el x100 y con una advertencia sin resolver -
+    # "REVISAR ... verificar que es la definicion que se queria" - que esta version anterior de
+    # este script tampoco llevaba) - decision explicita del usuario tras detectar que los
+    # valores (0,8 / 0,9 / 0,1...) no podian ser un porcentaje real.
+    df["%T_total_EMPLEO"] = df["T_total_EMPLEO"] / df["Tiempo_total_desde_inicio_VL"] * 100
+    df["%T_total_DESEMPLEO"] = df["T_total_DESEMPLEO"] / df["Tiempo_total_desde_inicio_VL"] * 100
+    df["%T_total_MIXTO_EMPL_DESEMPL"] = (
+        df["T_total_MIXTO_EMPL_DESEMPL"] / df["Tiempo_total_desde_inicio_VL"] * 100
+    )
+    df["%T_total_NO_EMPLEO"] = df["T_total_NO_EMPLEO"] / df["Tiempo_total_desde_inicio_VL"] * 100
 
     # Conversion de columnas Timedelta a anyos (in-place)
     for col in df.columns:
         if pd.api.types.is_timedelta64_dtype(df[col]):
             df[col] = df[col].dt.days / DIAS_POR_ANIO
-    # Renombrada 2026-08-20 (decision explicita del usuario): "Anos_VL" no dejaba claro que,
-    # tras los fixes de Fecha_ini_Primer_Empleo/Fecha_final_Ultimo_Empleo (commits 84e1ace,
-    # c7d9469), los extremos del periodo excluyen episodios de desempleo/prestacion - pero
-    # un hueco de desempleo EN MEDIO del periodo (entre dos empleos reales) si sigue contando.
-    df = df.rename(columns={"DURACION_1er_Empleo_a_Ultimo_Empleo": "Anos_VL_excluye_desempleo_inicio_y_fin"})
 
     # Diccionario de grupos de cotizacion
     for columna in ["Grupo_cotiz_ppal", "Grupo_cotiz_1er_Empleo_Signif", "Grupo_Ultimo_Empleo"]:
@@ -1153,16 +1410,16 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     df = df[df["02 FECHA_NACIMIENTO"].notna()].copy()
     print(f"Filas eliminadas por no tener fecha de nacimiento: {antes - df.shape[0]}")
 
-    # Filtrar outliers de Anos_VL_excluye_desempleo_inicio_y_fin (± 3 desviaciones estandar)
-    media = df["Anos_VL_excluye_desempleo_inicio_y_fin"].mean()
-    std = df["Anos_VL_excluye_desempleo_inicio_y_fin"].std()
+    # Filtrar outliers de Tiempo_total_desde_inicio_VL (± 3 desviaciones estandar)
+    media = df["Tiempo_total_desde_inicio_VL"].mean()
+    std = df["Tiempo_total_desde_inicio_VL"].std()
     limite_inferior = media - 3 * std
     limite_superior = media + 3 * std
     outliers = df[
-        (df["Anos_VL_excluye_desempleo_inicio_y_fin"] < limite_inferior)
-        | (df["Anos_VL_excluye_desempleo_inicio_y_fin"] > limite_superior)
+        (df["Tiempo_total_desde_inicio_VL"] < limite_inferior)
+        | (df["Tiempo_total_desde_inicio_VL"] > limite_superior)
     ]
-    print(f"Outliers de Anos_VL_excluye_desempleo_inicio_y_fin: {len(outliers)} ({len(outliers) / len(df) * 100:.2f}%)")
+    print(f"Outliers de Tiempo_total_desde_inicio_VL: {len(outliers)} ({len(outliers) / len(df) * 100:.2f}%)")
     df = df[~df.index.isin(outliers.index)].copy()
 
     # Sexo: 0/1/2 -> "NO CONSTA"/"Hombre"/"Mujer". El cuaderno no transforma esta columna (se

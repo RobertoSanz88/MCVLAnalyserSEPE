@@ -20,8 +20,9 @@ import pandas as pd
 from etl.optimize_types import TABLE_CONFIGS, process_table, process_table_grande
 from etl.personas_extendida import (
     bootstrap_personas_extendida, extraer_grupo_a, extraer_grupo_b, extraer_grupo_c,
-    fase1_afiliacion_extendida_duckdb, fase2_pensiones_extendida, fusionar_grupo,
-    fusionar_grupo_d, fusionar_grupo_e, fusionar_grupo_f, fusionar_grupo_g, grupo_h_final,
+    fase1_afiliacion_extendida_duckdb, fase1b_tramos_fusionados_duckdb, fase2_pensiones_extendida,
+    fusionar_grupo, fusionar_grupo_d, fusionar_grupo_e, fusionar_grupo_f, fusionar_grupo_g,
+    grupo_h_final,
 )
 from etl.recursos import ram_total_gb, threads_optimos
 
@@ -75,6 +76,7 @@ def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv,
     elif accion == "afiliacion":
         process_table_grande(TABLE_CONFIGS["1"], year, raw_root, parquet_folder, con, borrar_txt=borrar_txt)
         fase1_afiliacion_extendida_duckdb(con, parquet_folder)
+        fase1b_tramos_fusionados_duckdb(con, parquet_folder)
         _borrar_optimizada(parquet_folder, "afiliacion")
 
     elif accion == "todas":
