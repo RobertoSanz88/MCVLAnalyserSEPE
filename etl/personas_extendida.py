@@ -1513,6 +1513,18 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     codigo_cnae = df["Act_econ_ppal"].astype("Int64").astype(str).str.zfill(3)
     df["Act_econ_ppal"] = (codigo_cnae + " " + codigo_cnae.map(cnae_3d_dict)).fillna("NO CONSTA").astype("category")
 
+    # act_econ_ult_baja (2026-09-08, decision explicita del usuario): corregido para llevar la
+    # MISMA codificacion que Act_econ_ppal ("561 Restaurantes y puestos de comidas", no solo el
+    # codigo crudo) - de paso resuelve tambien el bug de tipo (float64/DOUBLE por el NaN del
+    # left join, ver comentario de Causa_Baja_Trab_Ppal mas arriba), porque el resultado final
+    # es VARCHAR igual que Act_econ_ppal.
+    codigo_cnae_ult_baja = df["act_econ_ult_baja"].astype("Int64").astype(str).str.zfill(3)
+    df["act_econ_ult_baja"] = (
+        (codigo_cnae_ult_baja + " " + codigo_cnae_ult_baja.map(cnae_3d_dict))
+        .fillna("NO CONSTA")
+        .astype("category")
+    )
+
     # Nacionalidad / Pais de nacimiento: mismo tratamiento que Prov_trabajo_ppal/Act_econ_ppal,
     # decodificando el codigo crudo ("N01") a "codigo nombre" ("N01 Alemania") con la tabla
     # oficial de la guia MCVL (1.004 NACIONALIDAD, identica para 1.009 PAIS_NACIMIENTO segun la
@@ -1532,28 +1544,27 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
         .astype("category")
     )
 
-    # Causa_Baja_Trab_Ppal / causa_ult_baja / causa_baja_mas_comun / causas_baja_distintas /
-    # act_econ_ult_baja (2026-09-08, decision explicita del usuario): bug detectado en la
-    # interfaz - estos 5 codigos crudos llegan aqui como float64 (DOUBLE en el Parquet), no como
-    # entero, porque el left join de fusionar_grupo() introduce NaN para las 45.638 personas sin
-    # ningun episodio de Afiliacion, y pandas sube de tipo entero a float en cuanto hay un NaN de
-    # por medio. La interfaz clasifica "numerica" vs "categorica" por el tipo DuckDB (ver
-    # app/routers/colectivos.py, TIPOS_NUMERICOS/TIPOS_CATEGORICOS), asi que estos 5 codigos
-    # identificadores (no cantidades - causas_baja_distintas SI es un conteo real, pero el
-    # usuario prefirio tratarla igual, con pocos valores distintos 1-14, mas util como filtro
-    # categorico exacto que como umbral numerico) salian mal clasificados como "numerica".
-    # Se convierten a texto (Int64 nullable -> str, preservando NULL real, no "<NA>" ni "54.0")
-    # y luego "NO CONSTA" + category, mismo criterio que el resto de columnas categoricas de
-    # este fichero (Prov_trabajo_ppal, Act_econ_ppal...).
+    # Causa_Baja_Trab_Ppal / causa_ult_baja / causa_baja_mas_comun (2026-09-08, decision
+    # explicita del usuario): bug detectado en la interfaz - estos codigos crudos llegan aqui
+    # como float64 (DOUBLE en el Parquet), no como entero, porque el left join de
+    # fusionar_grupo() introduce NaN para las 45.638 personas sin ningun episodio de Afiliacion,
+    # y pandas sube de tipo entero a float en cuanto hay un NaN de por medio. La interfaz
+    # clasifica "numerica" vs "categorica" por el tipo DuckDB (ver app/routers/colectivos.py,
+    # TIPOS_NUMERICOS/TIPOS_CATEGORICOS), asi que estos codigos identificadores salian mal
+    # clasificados como "numerica". Se convierten a texto (Int64 nullable -> str, preservando
+    # NULL real, no "<NA>" ni "54.0") y luego "NO CONSTA" + category, mismo criterio que el
+    # resto de columnas categoricas de este fichero.
+    # causas_baja_distintas de-incluida (2026-09-08, revertido): SI es numerica de verdad (un
+    # conteo), decision revertida por el usuario - se queda con su dtype natural (float64 con
+    # NaN para quien no tiene episodios, igual que cualquier otra columna numerica del fichero).
+    # act_econ_ult_baja NO va en este bloque: se decodifica aparte, igual que Act_econ_ppal (ver
+    # mas abajo), no solo se corrige el tipo.
     def _codigo_a_categoria(serie):
         entero = serie.astype("Int64")
         texto = entero.astype(str).mask(entero.isna())
         return texto.fillna("NO CONSTA").astype("category")
 
-    for columna in [
-        "Causa_Baja_Trab_Ppal", "causa_ult_baja", "causa_baja_mas_comun",
-        "causas_baja_distintas", "act_econ_ult_baja",
-    ]:
+    for columna in ["Causa_Baja_Trab_Ppal", "causa_ult_baja", "causa_baja_mas_comun"]:
         df[columna] = _codigo_a_categoria(df[columna])
 
     # Reordenar y seleccionar las columnas finales
