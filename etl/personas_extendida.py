@@ -1532,6 +1532,30 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
         .astype("category")
     )
 
+    # Causa_Baja_Trab_Ppal / causa_ult_baja / causa_baja_mas_comun / causas_baja_distintas /
+    # act_econ_ult_baja (2026-09-08, decision explicita del usuario): bug detectado en la
+    # interfaz - estos 5 codigos crudos llegan aqui como float64 (DOUBLE en el Parquet), no como
+    # entero, porque el left join de fusionar_grupo() introduce NaN para las 45.638 personas sin
+    # ningun episodio de Afiliacion, y pandas sube de tipo entero a float en cuanto hay un NaN de
+    # por medio. La interfaz clasifica "numerica" vs "categorica" por el tipo DuckDB (ver
+    # app/routers/colectivos.py, TIPOS_NUMERICOS/TIPOS_CATEGORICOS), asi que estos 5 codigos
+    # identificadores (no cantidades - causas_baja_distintas SI es un conteo real, pero el
+    # usuario prefirio tratarla igual, con pocos valores distintos 1-14, mas util como filtro
+    # categorico exacto que como umbral numerico) salian mal clasificados como "numerica".
+    # Se convierten a texto (Int64 nullable -> str, preservando NULL real, no "<NA>" ni "54.0")
+    # y luego "NO CONSTA" + category, mismo criterio que el resto de columnas categoricas de
+    # este fichero (Prov_trabajo_ppal, Act_econ_ppal...).
+    def _codigo_a_categoria(serie):
+        entero = serie.astype("Int64")
+        texto = entero.astype(str).mask(entero.isna())
+        return texto.fillna("NO CONSTA").astype("category")
+
+    for columna in [
+        "Causa_Baja_Trab_Ppal", "causa_ult_baja", "causa_baja_mas_comun",
+        "causas_baja_distintas", "act_econ_ult_baja",
+    ]:
+        df[columna] = _codigo_a_categoria(df[columna])
+
     # Reordenar y seleccionar las columnas finales
     columnas_presentes = [c for c in NUEVO_ORDEN if c in df.columns]
     columnas_faltantes = [c for c in NUEVO_ORDEN if c not in df.columns]
