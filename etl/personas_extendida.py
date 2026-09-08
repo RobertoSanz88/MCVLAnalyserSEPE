@@ -123,7 +123,14 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
             CASE WHEN date_part('year', "07 FECHA_BAJA_REAL_AFIL") = 2099
                  THEN TIMESTAMP '2025-06-01'
                  ELSE "07 FECHA_BAJA_REAL_AFIL"
-            END AS "Baja_modificada"
+            END AS "Baja_modificada",
+            -- Empleo_publico (2026-09-08, decision explicita del usuario, confirmada por
+            -- AskUserQuestion tras dictado por voz ambiguo): letras de NIF del empleador que
+            -- identifican sector publico - P (Corporacion local), Q (Organismo publico), S
+            -- (Organo de la Administracion del Estado/CCAA). "SI"/"NO" (no booleano), mismo
+            -- criterio de texto ya usado en este fichero para Cobra_pension_*.
+            CASE WHEN UPPER("18 EMPLEADOR_LETRA_NIF") IN ('P', 'Q', 'S') THEN 'SI' ELSE 'NO' END
+                AS "Empleo_publico"
         FROM read_parquet('{}')
     """.format(optimizada))
 

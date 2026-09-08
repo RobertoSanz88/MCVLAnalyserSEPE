@@ -114,6 +114,7 @@ TABLES = {
             "DURACION_DESEMPLEO": "duracion_desempleo",
             "Alta_desplazada": "alta_desplazada",
             "DURACION_NO_EMPLEO": "duracion_no_empleo",
+            "Empleo_publico": "empleo_publico",
         },
     ),
     # Bases de cotizacion: solo las 3 columnas que usa /trayectorias/colectivo
