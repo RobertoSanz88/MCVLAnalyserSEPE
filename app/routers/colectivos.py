@@ -892,6 +892,137 @@ def cruce_puntos(request: Request, body: PuntosRequest):
     return {"x": [f[0] for f in filas], "y": [f[1] for f in filas]}
 
 
+# Exportacion a Excel de "Cruce de variables" (2026-09-09): igual que
+# /trayectorias/colectivo/exportar, NO se recalcula nada - el frontend ya
+# tiene en JS el resultado del cruce activo (ultimoResultadoCruce, de
+# /colectivos/cruce o /colectivos/cruce-central) y manda tal cual el bloque
+# que corresponde a lo que se ve AHORA MISMO en pantalla (un subgrupo
+# concreto, no los 4 - decision explicita del usuario: exportar los datos
+# del grafico concreto en pantalla, no un volcado completo). Excepcion
+# deliberada: "Diagrama de dispersion" (numerica x numerica) no manda sus
+# puntos individuales (hasta 1,3M, no caben en una hoja de Excel - limite
+# ~1.048.576 filas) - el frontend manda siempre la rejilla de densidad para
+# ese tipo, aunque el grafico en pantalla sea de puntos. Otra excepcion: el
+# modo "3 variables" (categorica_categorica_central) exporta Media Y
+# Mediana en 2 hojas siempre, aunque el switch del grafico solo muestre una
+# de las 2 a la vez - ambas ya vienen calculadas juntas en la misma
+# respuesta del backend, no tiene sentido limitarse a la que estaba activa.
+#
+# Formato LARGO (una fila por celda/categoria), no una matriz ancha - mismo
+# criterio ya usado en _construir_excel_trayectorias de trayectorias.py: el
+# numero de columnas de una matriz cambiaria segun cuantas categorias tenga
+# la variable (hasta 20+"Resto"), un formato largo es siempre la misma forma.
+class CruceExportRequest(BaseModel):
+    tipo: Literal[
+        "numerica_numerica", "categorica_categorica", "numerica_categorica", "categorica_categorica_central",
+    ]
+    variable1: str
+    variable2: str
+    variable_central: str | None = None
+    tipo_grafico: str
+    subgrupo_etiqueta: str | None = None  # solo con filtro de colectivo (no en el modo de 3 variables)
+    datos: dict  # el bloque ya calculado tal cual lo tiene el frontend (sub, o el resultado entero en modo central)
+
+
+def _construir_excel_cruce(payload: CruceExportRequest) -> bytes:
+    negrita = Font(bold=True)
+    wb = Workbook()
+    ws = wb.active
+    datos = payload.datos
+
+    if payload.tipo == "categorica_categorica_central":
+        # 2 hojas (Media/Mediana), no una sola con el switch activo en
+        # pantalla: a diferencia del resto de tipos (donde exportar solo lo
+        # que se ve evita duplicar trabajo), aqui las 2 estan siempre
+        # calculadas de golpe en la misma respuesta del backend (ver
+        # _cruce_categorica_categorica_central) y el usuario las quiere las 2
+        # juntas en el Excel, no solo la que estaba activa en el grafico.
+        for i, (clave, etiqueta_valor) in enumerate((("z_media", "Media"), ("z_mediana", "Mediana"))):
+            hoja = ws if i == 0 else wb.create_sheet(etiqueta_valor)
+            hoja.title = etiqueta_valor
+            for col, titulo in enumerate([payload.variable1, payload.variable2, etiqueta_valor, "N"], start=1):
+                hoja.cell(row=1, column=col, value=titulo).font = negrita
+            fila = 2
+            for iy, cat_y in enumerate(datos["y"]):
+                for ix, cat_x in enumerate(datos["x"]):
+                    n = datos["n"][iy][ix]
+                    if not n:
+                        continue
+                    hoja.cell(row=fila, column=1, value=cat_x)
+                    hoja.cell(row=fila, column=2, value=cat_y)
+                    hoja.cell(row=fila, column=3, value=datos[clave][iy][ix])
+                    hoja.cell(row=fila, column=4, value=n)
+                    fila += 1
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        return buffer.getvalue()
+
+    ws.title = "Cruce"
+
+    if payload.tipo == "numerica_categorica" and payload.tipo_grafico == "histograma":
+        for col, titulo in enumerate(["Subcolectivo", payload.variable2, payload.variable1, "N"], start=1):
+            ws.cell(row=1, column=col, value=titulo).font = negrita
+        fila = 2
+        for categoria, conteos in datos["histograma_por_categoria"].items():
+            for centro, n in zip(datos["histograma_bins"], conteos):
+                if not n:
+                    continue
+                ws.cell(row=fila, column=1, value=payload.subgrupo_etiqueta)
+                ws.cell(row=fila, column=2, value=categoria)
+                ws.cell(row=fila, column=3, value=centro)
+                ws.cell(row=fila, column=4, value=n)
+                fila += 1
+
+    elif payload.tipo == "numerica_categorica":
+        # Boxplot (por defecto): una fila por categoria, no por celda.
+        for col, titulo in enumerate(
+            ["Subcolectivo", payload.variable2, "N", "Mínimo", "Q1", "Mediana", "Q3", "Máximo"], start=1
+        ):
+            ws.cell(row=1, column=col, value=titulo).font = negrita
+        for fila, caja in enumerate(datos["cajas"], start=2):
+            ws.cell(row=fila, column=1, value=payload.subgrupo_etiqueta)
+            ws.cell(row=fila, column=2, value=caja["categoria"])
+            ws.cell(row=fila, column=3, value=caja["n"])
+            ws.cell(row=fila, column=4, value=caja["min"])
+            ws.cell(row=fila, column=5, value=caja["q1"])
+            ws.cell(row=fila, column=6, value=caja["mediana"])
+            ws.cell(row=fila, column=7, value=caja["q3"])
+            ws.cell(row=fila, column=8, value=caja["max"])
+
+    else:
+        # numerica_numerica (siempre la rejilla de densidad, ver cabecera) o
+        # categorica_categorica (tabla de contingencia): misma forma, una
+        # fila por celda con recuento > 0.
+        for col, titulo in enumerate(["Subcolectivo", payload.variable1, payload.variable2, "N"], start=1):
+            ws.cell(row=1, column=col, value=titulo).font = negrita
+        fila = 2
+        for iy, cat_y in enumerate(datos["y"]):
+            for ix, cat_x in enumerate(datos["x"]):
+                n = datos["z"][iy][ix]
+                if not n:
+                    continue
+                ws.cell(row=fila, column=1, value=payload.subgrupo_etiqueta)
+                ws.cell(row=fila, column=2, value=cat_x)
+                ws.cell(row=fila, column=3, value=cat_y)
+                ws.cell(row=fila, column=4, value=n)
+                fila += 1
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+@router.post("/colectivos/cruce/exportar")
+def exportar_cruce(payload: CruceExportRequest):
+    contenido = _construir_excel_cruce(payload)
+    return StreamingResponse(
+        io.BytesIO(contenido),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=cruce.xlsx"},
+    )
+
+
 def _construir_excel(resultados: dict) -> bytes:
     """Vuelca los mismos datos de _calcular_subgrupos a un .xlsx: una hoja
     'Colectivos' (nombre + recuento de cada uno de los 4 subgrupos, para saber
