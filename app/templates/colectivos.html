@@ -429,7 +429,7 @@
             <p>Observatorio de las Ocupaciones · SEPE</p>
         </div>
         <div class="header-badges">
-            <span class="badge">v1.1</span>
+            <span class="badge">v1.2</span>
         </div>
     </header>
 
@@ -1285,8 +1285,8 @@ function dibujarGraficoTrayectorias() {
         traces.push({
             type: 'scatter', mode: 'lines', name: 'N ' + etiqueta, showlegend: false,
             x: serie.map(p => p.x), y: serie.map(p => p.n),
-            yaxis: 'y2', opacity: 0.4,
-            line: { color: COLOR_SUBGRUPO[nombre], width: 1, dash: 'dot' },
+            yaxis: 'y2', opacity: 0.75,
+            line: { color: COLOR_SUBGRUPO[nombre], width: 2.5, dash: 'dash' },
             hovertemplate: `N: %{y}<extra></extra>`,
         });
     }
@@ -1379,8 +1379,8 @@ function dibujarGraficoCategoricoTrayectoria() {
         traces.push({
             type: 'scatter', mode: 'lines', name: 'N', showlegend: false,
             x: serie.map(p => p.x), y: serie.map(p => p.n),
-            yaxis: 'y2', opacity: 0.4,
-            line: { color: COLOR_SUBGRUPO[nombre], width: 1, dash: 'dot' },
+            yaxis: 'y2', opacity: 0.75,
+            line: { color: COLOR_SUBGRUPO[nombre], width: 2.5, dash: 'dash' },
             hovertemplate: `N: %{y}<extra></extra>`,
         });
 
@@ -1477,8 +1477,8 @@ function dibujarGraficoPorCategorias() {
         traces.push({
             type: 'scatter', mode: 'lines', name: 'N', showlegend: false,
             x: xFiable, y: xFiable.map(x => totalPorX[x]),
-            yaxis: 'y2', opacity: 0.4,
-            line: { color: COLOR_OTROS, width: 1, dash: 'dot' },
+            yaxis: 'y2', opacity: 0.75,
+            line: { color: COLOR_OTROS, width: 2.5, dash: 'dash' },
             hovertemplate: `N: %{y}<extra></extra>`,
         });
 
