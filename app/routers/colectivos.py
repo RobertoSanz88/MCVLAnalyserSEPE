@@ -505,11 +505,32 @@ class CruceRequest(SubgruposRequest):
     variable2: str
 
 
-def _cruce_numerica_numerica(con, condiciones: dict, v1: str, v2: str) -> dict:
-    min1, max1, min2, max2 = con.execute(
-        f"SELECT MIN({v1}), MAX({v1}), MIN({v2}), MAX({v2}) FROM personas "
-        f"WHERE {v1} IS NOT NULL AND {v2} IS NOT NULL"
+# Percentil bajo/alto usado como bordes de rejilla de densidad/histograma en
+# vez del MIN/MAX real (2026-09-09, decision explicita del usuario tras ver
+# Ingresos_bruto_anual_2024 con un valor de 647.000€: con MIN/MAX real, un
+# solo valor extremo estira los bordes y aplasta el resto de los NBINS_*
+# practicamente vacios contra un lado del grafico). Los valores fuera de
+# [p1, p99] NO se pierden - el mismo LEAST/GREATEST que ya recortaba el
+# indice de bin a [0, NBINS-1] los pliega solos en el primer/ultimo bin, sin
+# tocar esa parte de la logica.
+PERCENTIL_RANGO_BAJO = 0.01
+PERCENTIL_RANGO_ALTO = 0.99
+
+
+def _rango_percentiles(con, columna: str) -> tuple:
+    """(percentil 1, percentil 99) de `columna` en toda la tabla `personas`
+    (sin filtrar por subgrupo, mismo motivo que _top_categorias: que los 4
+    subgrupos compartan siempre la misma escala de eje)."""
+    return con.execute(
+        f"SELECT QUANTILE_CONT({columna}, {PERCENTIL_RANGO_BAJO}), "
+        f"QUANTILE_CONT({columna}, {PERCENTIL_RANGO_ALTO}) "
+        f"FROM personas WHERE {columna} IS NOT NULL"
     ).fetchone()
+
+
+def _cruce_numerica_numerica(con, condiciones: dict, v1: str, v2: str) -> dict:
+    min1, max1 = _rango_percentiles(con, v1)
+    min2, max2 = _rango_percentiles(con, v2)
 
     resultado = {}
     # Si alguna variable no tiene rango (todo NULL, o un unico valor
@@ -608,13 +629,13 @@ def _cruce_numerica_categorica(con, condiciones: dict, v_num: str, v_cat: str) -
         params_cat = []
         categorias_finales = top_cats
 
-    # Bordes de histograma FIJOS (min/max de TODA la tabla, sin filtrar) para
-    # que todas las categorias y los 4 subgrupos compartan la misma escala de
-    # eje X - mismo criterio que la rejilla de densidad de numerica x
-    # numerica (comparabilidad al cambiar de categoria o de subgrupo).
-    minv, maxv = con.execute(
-        f"SELECT MIN({v_num}), MAX({v_num}) FROM personas WHERE {v_num} IS NOT NULL"
-    ).fetchone()
+    # Bordes de histograma FIJOS (percentiles 1-99 de TODA la tabla, sin
+    # filtrar - ver _rango_percentiles) para que todas las categorias y los 4
+    # subgrupos compartan la misma escala de eje X - mismo criterio que la
+    # rejilla de densidad de numerica x numerica (comparabilidad al cambiar
+    # de categoria o de subgrupo, y robustez frente a un valor extremo
+    # aislado que aplastaria el resto de bins contra un lado del grafico).
+    minv, maxv = _rango_percentiles(con, v_num)
     sin_rango = minv is None or maxv == minv
     ancho = None if sin_rango else (maxv - minv) / NBINS_HISTOGRAMA
     centros_bin = [] if sin_rango else [minv + ancho * (i + 0.5) for i in range(NBINS_HISTOGRAMA)]
@@ -660,11 +681,28 @@ def _cruce_numerica_categorica(con, condiciones: dict, v_num: str, v_cat: str) -
                 if cat in histogramas:
                     histogramas[cat][b] = n
 
+        # Bigotes = convencion estandar de Tukey (1,5x RIC desde Q1/Q3),
+        # recortados al min/max real si el rango real es mas corto - no el
+        # min/max real directamente (2026-09-09, decision explicita del
+        # usuario tras ver Ingresos_bruto_anual_2024 con un valor de
+        # 647.000€: con el min/max real, un solo valor extremo estira el eje
+        # entero y aplasta la caja real contra un lado). No hay outliers
+        # sueltos dibujados aparte (exigiria valores individuales, que este
+        # endpoint nunca envia) - solo se acorta el bigote.
+        def _bigotes(mn, mx, q1, q3):
+            if q1 is None or q3 is None:
+                return mn, mx
+            ric = q3 - q1
+            return max(mn, q1 - 1.5 * ric), min(mx, q3 + 1.5 * ric)
+
         resultado[nombre] = {
             "etiqueta": etiqueta,
             "recuento": total,
             "cajas": [
-                {"categoria": cat, "n": n, "min": mn, "max": mx, "q1": q1, "mediana": med, "q3": q3}
+                {
+                    "categoria": cat, "n": n, "min": mn, "max": mx, "q1": q1, "mediana": med, "q3": q3,
+                    **dict(zip(("bigote_inf", "bigote_sup"), _bigotes(mn, mx, q1, q3))),
+                }
                 for cat, n, mn, mx, q1, med, q3 in filas
             ],
             "histograma_bins": centros_bin,

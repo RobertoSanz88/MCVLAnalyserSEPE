@@ -2458,6 +2458,10 @@ async function dibujarCruceDispersion(div, v1, v2, fuenteComun) {
     }
 
     const { x, y } = cachePuntosCruce[subgrupoObjetivo];
+    div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]] - tambien cuando
+    // los puntos ya estaban en cache (el "Cargando..." de arriba no se
+    // ejecuta ese camino, pero el div puede traer HTML de OTRO tipo de
+    // grafico de antes igualmente).
     Plotly.newPlot(div, [{
         type: 'scattergl', mode: 'markers', x, y,
         marker: { color: COLOR_SUBGRUPO[subgrupoObjetivo], size: 3, opacity: 0.35 },
@@ -2513,6 +2517,12 @@ function dibujarCruceHistograma(div, sub, v1, fuenteComun) {
 // en categorica x categorica son las categorias de cada variable (tabla de
 // contingencia) - visualmente identico, solo cambia el dato.
 function dibujarCruceHeatmap(div, sub, v1, v2, esNumNum, fuenteComun) {
+    // div.innerHTML='' SIEMPRE antes de Plotly.newPlot, aunque este tipo en
+    // concreto no monte HTML propio - ver [[feedback_plotly_reusar_div]]:
+    // si el tipo de grafico ANTERIOR en este mismo div si dejo HTML propio
+    // (histograma, o el aviso "Cargando..." de dispersion), Plotly.newPlot
+    // no lo limpia solo y queda superpuesto.
+    div.innerHTML = '';
     Plotly.newPlot(div, [{
         type: 'heatmap', x: sub.x, y: sub.y, z: sub.z,
         colorscale: 'YlGnBu',
@@ -2533,6 +2543,7 @@ function dibujarCruceHeatmap(div, sub, v1, v2, esNumNum, fuenteComun) {
 // subgrupo + "Otros" para el resto, mismo patron que dibujarApiladas() en
 // "Analisis de colectivos".
 function dibujarCruceBarrasApiladas(div, sub, v1, v2, pct100, fuenteComun) {
+    div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
     const totalesPorX = sub.x.map((_, ix) => sub.z.reduce((s, fila) => s + fila[ix], 0));
 
     const totalPorY = sub.y.map((cat, iy) => ({
@@ -2579,6 +2590,7 @@ function dibujarCruceBarrasApiladas(div, sub, v1, v2, pct100, fuenteComun) {
 // area, no radio (convencion estandar de dataviz). Sin burbuja donde N=0
 // (celda vacia), en vez de una burbuja de tamanyo 0 invisible pero presente.
 function dibujarCruceBurbujas(div, sub, v1, v2, fuenteComun) {
+    div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
     const xs = [], ys = [], ns = [];
     let maxN = 0;
     for (let iy = 0; iy < sub.y.length; iy++) {
@@ -2614,17 +2626,22 @@ function dibujarCruceBurbujas(div, sub, v1, v2, fuenteComun) {
 }
 
 // numerica_categorica: boxplot con cuartiles ya calculados en SQL
-// (Q1/mediana/Q3/min/max por categoria) - nunca se envian valores
-// individuales al navegador, hasta 1,3M personas por categoria.
+// (Q1/mediana/Q3 por categoria) - nunca se envian valores individuales al
+// navegador, hasta 1,3M personas por categoria. Bigotes = bigote_inf/
+// bigote_sup (convencion Tukey, 1,5x RIC recortado al min/max real), NO
+// c.min/c.max directamente - un valor extremo aislado (ver conversacion,
+// Ingresos_bruto_anual_2024 con un caso de 647.000€) estiraria el eje
+// entero y aplastaria la caja real contra un lado.
 function dibujarCruceBoxplot(div, sub, v1, v2, fuenteComun) {
+    div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
     Plotly.newPlot(div, [{
         type: 'box',
         x: sub.cajas.map(c => c.categoria),
         q1: sub.cajas.map(c => c.q1),
         median: sub.cajas.map(c => c.mediana),
         q3: sub.cajas.map(c => c.q3),
-        lowerfence: sub.cajas.map(c => c.min),
-        upperfence: sub.cajas.map(c => c.max),
+        lowerfence: sub.cajas.map(c => c.bigote_inf),
+        upperfence: sub.cajas.map(c => c.bigote_sup),
         marker: { color: COLOR_SUBGRUPO[subgrupoSeleccionadoCruce] },
         text: sub.cajas.map(c => `N: ${fmtEntero(c.n)}`),
         hovertemplate: `${v2}: %{x}<br>${v1}: %{y}<br>%{text}<extra></extra>`,

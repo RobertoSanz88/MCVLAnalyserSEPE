@@ -133,6 +133,7 @@ CATEGORICAS_COLECTIVOS = [
     {"columna": "sexo", "limite": None},
     {"columna": "nacionalidad_agrupado", "limite": None},
     {"columna": "pais_nacim_agrupado", "limite": None},
+    {"columna": "situacion_paro_ocupacion", "limite": None},
     {"columna": "situacion_actual_afiliacion", "limite": None},
     {"columna": "grupo_cotiz_1er_empleo_signif", "limite": None},
     {"columna": "grupo_ultimo_empleo", "limite": None},
@@ -141,9 +142,8 @@ CATEGORICAS_COLECTIVOS = [
     {"columna": "tipo_contr_ppal_agrupado", "limite": None},
     {"columna": "prov_trabajo_ppal", "limite": 15},
     {"columna": "act_econ_ppal", "limite": 15},
+    {"columna": "cobra_pension_*", "limite": None},
     {"columna": "discap_fiscal", "limite": None},
     {"columna": "discap_afiliacion", "limite": None},
     {"columna": "discap_pension", "limite": None},
-    {"columna": "cobra_pension_*", "limite": None},
-    {"columna": "situacion_paro_ocupacion", "limite": None},
 ]
