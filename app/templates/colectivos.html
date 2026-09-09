@@ -2536,21 +2536,31 @@ function dibujarCruceHeatmap(div, sub, v1, v2, esNumNum, fuenteComun) {
 }
 
 // Barras apiladas / apiladas 100% (categorica x categorica): eje X = las
-// categorias de v1 (ya venian con tope de 20+Resto del backend, ver
+// categorias de v1 (ya venian con tope de 20+"Resto" del backend, ver
 // TOP_N_CATEGORICO en colectivos.py), apiladas por categoria de v2 - pero
 // solo hay 7 colores de identidad distinguibles (PALETA_VALOR), asi que
 // aqui se pliega ADEMAS a las 7 categorias de v2 con mas peso en ESTE
 // subgrupo + "Otros" para el resto, mismo patron que dibujarApiladas() en
-// "Analisis de colectivos".
+// "Analisis de colectivos". "Resto" (si lo trae v2 desde el backend) NUNCA
+// compite por uno de los 7 colores - se pliega siempre dentro de "Otros"
+// (decision explicita del usuario, 2026-09-09: confuso ver "Resto" y
+// "Otros" a la vez en el mismo grafico, dos cajones de sastre con nombre
+// distinto que casi significan lo mismo).
 function dibujarCruceBarrasApiladas(div, sub, v1, v2, pct100, fuenteComun) {
     div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
     const totalesPorX = sub.x.map((_, ix) => sub.z.reduce((s, fila) => s + fila[ix], 0));
 
-    const totalPorY = sub.y.map((cat, iy) => ({
-        cat, iy, total: sub.z[iy].reduce((s, n) => s + n, 0),
-    })).sort((a, b) => b.total - a.total);
-    const topY = totalPorY.slice(0, PALETA_VALOR.length);
-    const hayOtros = totalPorY.length > PALETA_VALOR.length;
+    const candidatosY = sub.y
+        .map((cat, iy) => ({ cat, iy, total: sub.z[iy].reduce((s, n) => s + n, 0) }))
+        .filter(({ cat }) => cat !== 'Resto')
+        .sort((a, b) => b.total - a.total);
+    const topY = candidatosY.slice(0, PALETA_VALOR.length);
+    // hayOtros tambien si "Resto" existe en v2, aunque los candidatos
+    // "reales" quepan en los 7 colores - "Resto" siempre va a Otros, nunca
+    // se pierde silenciosamente. totalesPorX ya suma TODAS las filas de
+    // sub.z (Resto incluido), asi que el residuo total-topY de mas abajo lo
+    // absorbe solo, sin tratamiento aparte.
+    const hayOtros = candidatosY.length > PALETA_VALOR.length || sub.y.includes('Resto');
 
     const aValores = (fila) => pct100
         ? fila.map((n, ix) => totalesPorX[ix] ? 100 * n / totalesPorX[ix] : 0)
