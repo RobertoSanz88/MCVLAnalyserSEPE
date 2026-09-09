@@ -2235,7 +2235,12 @@ function seleccionarSubgrupoIndividual(nombre) {
 // pedir al backend.
 const TIPOS_GRAFICO_CRUCE = {
     numerica_numerica: [{ valor: 'densidad', etiqueta: 'Mapa de densidad' }],
-    categorica_categorica: [{ valor: 'contingencia', etiqueta: 'Mapa de calor (tabla de contingencia)' }],
+    categorica_categorica: [
+        { valor: 'contingencia', etiqueta: 'Mapa de calor (tabla de contingencia)' },
+        { valor: 'apiladas', etiqueta: 'Barras apiladas' },
+        { valor: 'apiladas100', etiqueta: 'Barras apiladas 100%' },
+        { valor: 'burbujas', etiqueta: 'Gráfico de burbujas' },
+    ],
     numerica_categorica: [{ valor: 'boxplot', etiqueta: 'Diagrama de cajas (boxplot)' }],
 };
 
@@ -2365,45 +2370,149 @@ function dibujarGraficoCruce() {
     const sub = ultimoResultadoCruce.subgrupos[subgrupoSeleccionadoCruce];
     const v1 = ultimoResultadoCruce.variable1;
     const v2 = ultimoResultadoCruce.variable2;
+    const tipoGrafico = document.getElementById('select-tipo-grafico-cruce').value;
     const fuenteComun = { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26', size: 11 };
 
-    if (ultimoResultadoCruce.tipo === 'numerica_numerica' || ultimoResultadoCruce.tipo === 'categorica_categorica') {
-        // Mismo trace (heatmap) para las 2 combinaciones: en numerica x
-        // numerica x/y son centros de celda de la rejilla de densidad, en
-        // categorica x categorica son las categorias de cada variable (tabla
-        // de contingencia) - visualmente identico, solo cambia el dato.
-        const esNumNum = ultimoResultadoCruce.tipo === 'numerica_numerica';
-        Plotly.newPlot(div, [{
-            type: 'heatmap', x: sub.x, y: sub.y, z: sub.z,
-            colorscale: 'YlGnBu',
-            hovertemplate: `${v1}: %{x` + (esNumNum ? ':,.2f' : '') + `}<br>${v2}: %{y` + (esNumNum ? ':,.2f' : '') + `}<br>N: %{z:,}<extra></extra>`,
-            colorbar: { title: 'N' },
-        }], {
-            margin: { l: esNumNum ? 65 : 140, r: 20, t: 15, b: esNumNum ? 55 : 120 },
-            xaxis: { title: v1 }, yaxis: { title: v2 },
-            font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
-        }, { responsive: true, displaylogo: false });
+    if (ultimoResultadoCruce.tipo === 'numerica_numerica') {
+        dibujarCruceHeatmap(div, sub, v1, v2, true, fuenteComun);
+    } else if (ultimoResultadoCruce.tipo === 'categorica_categorica') {
+        if (tipoGrafico === 'apiladas' || tipoGrafico === 'apiladas100') {
+            dibujarCruceBarrasApiladas(div, sub, v1, v2, tipoGrafico === 'apiladas100', fuenteComun);
+        } else if (tipoGrafico === 'burbujas') {
+            dibujarCruceBurbujas(div, sub, v1, v2, fuenteComun);
+        } else {
+            dibujarCruceHeatmap(div, sub, v1, v2, false, fuenteComun);
+        }
     } else {
-        // numerica_categorica: boxplot con cuartiles ya calculados en SQL
-        // (Q1/mediana/Q3/min/max por categoria) - nunca se envian valores
-        // individuales al navegador, hasta 1,3M personas por categoria.
-        Plotly.newPlot(div, [{
-            type: 'box',
-            x: sub.cajas.map(c => c.categoria),
-            q1: sub.cajas.map(c => c.q1),
-            median: sub.cajas.map(c => c.mediana),
-            q3: sub.cajas.map(c => c.q3),
-            lowerfence: sub.cajas.map(c => c.min),
-            upperfence: sub.cajas.map(c => c.max),
-            marker: { color: COLOR_SUBGRUPO[subgrupoSeleccionadoCruce] },
-            text: sub.cajas.map(c => `N: ${fmtEntero(c.n)}`),
-            hovertemplate: `${v2}: %{x}<br>${v1}: %{y}<br>%{text}<extra></extra>`,
-        }], {
-            margin: { l: 65, r: 20, t: 15, b: 90 },
-            xaxis: { title: v2, tickangle: -25 }, yaxis: { title: v1 },
-            font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
-        }, { responsive: true, displaylogo: false });
+        dibujarCruceBoxplot(div, sub, v1, v2, fuenteComun);
     }
+}
+
+// Mismo trace (heatmap) para numerica x numerica y categorica x categorica:
+// en numerica x numerica x/y son centros de celda de la rejilla de densidad,
+// en categorica x categorica son las categorias de cada variable (tabla de
+// contingencia) - visualmente identico, solo cambia el dato.
+function dibujarCruceHeatmap(div, sub, v1, v2, esNumNum, fuenteComun) {
+    Plotly.newPlot(div, [{
+        type: 'heatmap', x: sub.x, y: sub.y, z: sub.z,
+        colorscale: 'YlGnBu',
+        hovertemplate: `${v1}: %{x` + (esNumNum ? ':,.2f' : '') + `}<br>${v2}: %{y` + (esNumNum ? ':,.2f' : '') + `}<br>N: %{z:,}<extra></extra>`,
+        colorbar: { title: 'N' },
+    }], {
+        margin: { l: esNumNum ? 65 : 140, r: 20, t: 15, b: esNumNum ? 55 : 120 },
+        xaxis: { title: v1 }, yaxis: { title: v2 },
+        font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+    }, { responsive: true, displaylogo: false });
+}
+
+// Barras apiladas / apiladas 100% (categorica x categorica): eje X = las
+// categorias de v1 (ya venian con tope de 20+Resto del backend, ver
+// TOP_N_CATEGORICO en colectivos.py), apiladas por categoria de v2 - pero
+// solo hay 7 colores de identidad distinguibles (PALETA_VALOR), asi que
+// aqui se pliega ADEMAS a las 7 categorias de v2 con mas peso en ESTE
+// subgrupo + "Otros" para el resto, mismo patron que dibujarApiladas() en
+// "Analisis de colectivos".
+function dibujarCruceBarrasApiladas(div, sub, v1, v2, pct100, fuenteComun) {
+    const totalesPorX = sub.x.map((_, ix) => sub.z.reduce((s, fila) => s + fila[ix], 0));
+
+    const totalPorY = sub.y.map((cat, iy) => ({
+        cat, iy, total: sub.z[iy].reduce((s, n) => s + n, 0),
+    })).sort((a, b) => b.total - a.total);
+    const topY = totalPorY.slice(0, PALETA_VALOR.length);
+    const hayOtros = totalPorY.length > PALETA_VALOR.length;
+
+    const aValores = (fila) => pct100
+        ? fila.map((n, ix) => totalesPorX[ix] ? 100 * n / totalesPorX[ix] : 0)
+        : fila;
+    const formatoY = pct100 ? '%{y:.1f}%' : 'N: %{y:,}';
+
+    const traces = topY.map(({ cat, iy }, i) => ({
+        type: 'bar', name: cat, x: sub.x, y: aValores(sub.z[iy]),
+        marker: { color: PALETA_VALOR[i] },
+        hovertemplate: `${v1}: %{x}<br>${v2}: ${cat}<br>${formatoY}<extra></extra>`,
+    }));
+    if (hayOtros) {
+        const filaOtros = sub.x.map((_, ix) => {
+            const sumaTop = topY.reduce((s, { iy }) => s + sub.z[iy][ix], 0);
+            return Math.max(0, totalesPorX[ix] - sumaTop);
+        });
+        traces.push({
+            type: 'bar', name: 'Otros', x: sub.x, y: aValores(filaOtros),
+            marker: { color: COLOR_OTROS },
+            hovertemplate: `${v1}: %{x}<br>${v2}: Otros<br>${formatoY}<extra></extra>`,
+        });
+    }
+
+    Plotly.newPlot(div, traces, {
+        barmode: 'stack',
+        margin: { l: 60, r: 20, t: 15, b: 110 },
+        xaxis: { title: v1, tickangle: -25 },
+        yaxis: { title: pct100 ? '%' : 'N', range: pct100 ? [0, 100] : undefined },
+        legend: { orientation: 'h', y: -0.35 },
+        font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+    }, { responsive: true, displaylogo: false });
+}
+
+// Burbujas (categorica x categorica): alternativa al mapa de calor - misma
+// tabla de contingencia, tamanyo de burbuja en vez de color de celda. Area
+// (no radio) proporcional a N, tope de 45px de diametro - el ojo percibe
+// area, no radio (convencion estandar de dataviz). Sin burbuja donde N=0
+// (celda vacia), en vez de una burbuja de tamanyo 0 invisible pero presente.
+function dibujarCruceBurbujas(div, sub, v1, v2, fuenteComun) {
+    const xs = [], ys = [], ns = [];
+    let maxN = 0;
+    for (let iy = 0; iy < sub.y.length; iy++) {
+        for (let ix = 0; ix < sub.x.length; ix++) {
+            const n = sub.z[iy][ix];
+            if (n > 0) maxN = Math.max(maxN, n);
+        }
+    }
+    for (let iy = 0; iy < sub.y.length; iy++) {
+        for (let ix = 0; ix < sub.x.length; ix++) {
+            const n = sub.z[iy][ix];
+            if (n <= 0) continue;
+            xs.push(sub.x[ix]); ys.push(sub.y[iy]); ns.push(n);
+        }
+    }
+    const TAM_MAX_PX = 45;
+    const escala = maxN > 0 ? TAM_MAX_PX / Math.sqrt(maxN) : 1;
+
+    Plotly.newPlot(div, [{
+        type: 'scatter', mode: 'markers', x: xs, y: ys,
+        marker: {
+            size: ns.map(n => Math.sqrt(n) * escala), sizemode: 'diameter',
+            color: '#00815A', opacity: 0.75, line: { color: '#00593F', width: 1 },
+        },
+        text: ns.map(n => fmtEntero(n)),
+        hovertemplate: `${v1}: %{x}<br>${v2}: %{y}<br>N: %{text}<extra></extra>`,
+    }], {
+        margin: { l: 140, r: 20, t: 15, b: 120 },
+        xaxis: { title: v1, tickangle: -25, type: 'category' },
+        yaxis: { title: v2, type: 'category' },
+        font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+    }, { responsive: true, displaylogo: false });
+}
+
+// numerica_categorica: boxplot con cuartiles ya calculados en SQL
+// (Q1/mediana/Q3/min/max por categoria) - nunca se envian valores
+// individuales al navegador, hasta 1,3M personas por categoria.
+function dibujarCruceBoxplot(div, sub, v1, v2, fuenteComun) {
+    Plotly.newPlot(div, [{
+        type: 'box',
+        x: sub.cajas.map(c => c.categoria),
+        q1: sub.cajas.map(c => c.q1),
+        median: sub.cajas.map(c => c.mediana),
+        q3: sub.cajas.map(c => c.q3),
+        lowerfence: sub.cajas.map(c => c.min),
+        upperfence: sub.cajas.map(c => c.max),
+        marker: { color: COLOR_SUBGRUPO[subgrupoSeleccionadoCruce] },
+        text: sub.cajas.map(c => `N: ${fmtEntero(c.n)}`),
+        hovertemplate: `${v2}: %{x}<br>${v1}: %{y}<br>%{text}<extra></extra>`,
+    }], {
+        margin: { l: 65, r: 20, t: 15, b: 90 },
+        xaxis: { title: v2, tickangle: -25 }, yaxis: { title: v1 },
+        font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+    }, { responsive: true, displaylogo: false });
 }
 
 async function cargarIpfAleatorio() {
