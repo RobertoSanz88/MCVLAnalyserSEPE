@@ -2217,17 +2217,20 @@ async function exportarExcelTrayectorias() {
     descargarBlob(await resp.blob(), 'trayectorias.xlsx');
 }
 
-// Exporta exactamente lo que se ve ahora mismo en el grafico de "Cruce de
-// variables" (mismo criterio WYSIWYG que exportarExcelTrayectorias) - NO se
-// vuelve a pedir al backend salvo la propia exportacion, que solo reordena
-// a .xlsx el JSON ya recibido en ultimoResultadoCruce (ver
-// /colectivos/cruce/exportar). "Diagrama de dispersion" es la unica
-// excepcion real: manda la rejilla de densidad de ese mismo sub (ya viene
-// en la respuesta aunque el grafico en pantalla sea de puntos), nunca los
-// puntos individuales cacheados en cachePuntosCruce - no caben en una hoja
-// de Excel. En el modo "3 variables" no hay subgrupo que mandar (poblacion
-// completa) - se manda el resultado entero, y el backend exporta Media Y
-// Mediana en 2 hojas siempre (las 2 ya vienen calculadas juntas).
+// Exporta el cruce activo de "Cruce de variables" tal cual esta calculado
+// (mismo criterio WYSIWYG que exportarExcelTrayectorias) - NO se vuelve a
+// pedir al backend salvo la propia exportacion, que solo reordena a .xlsx
+// el JSON ya recibido en ultimoResultadoCruce (ver /colectivos/cruce/exportar).
+// Con filtro de colectivo, se mandan los 4 subgrupos de una vez (decision
+// explicita del usuario, 2026-09-09: "de un tiron los cuatro subcolectivos,
+// uno en cada pestaña" - no solo el marcado en pantalla como en la primera
+// version), el backend hace una hoja por cada uno. "Diagrama de dispersion"
+// es la unica excepcion real: cada subgrupo manda su rejilla de densidad
+// (ya viene en la respuesta aunque el grafico en pantalla sea de puntos),
+// nunca los puntos individuales cacheados en cachePuntosCruce - no caben en
+// una hoja de Excel. En el modo "3 variables" no hay subgrupos (poblacion
+// completa) - se manda el resultado entero, y el backend exporta Media,
+// Mediana y N en 3 hojas siempre (ya vienen calculadas juntas).
 async function exportarExcelCruce() {
     if (!ultimoResultadoCruce) return;
     const cuerpo = {
@@ -2236,14 +2239,10 @@ async function exportarExcelCruce() {
         variable2: ultimoResultadoCruce.variable2,
         variable_central: ultimoResultadoCruce.variable_central ?? null,
         tipo_grafico: document.getElementById('select-tipo-grafico-cruce').value,
+        datos: ultimoResultadoCruce.tipo === 'categorica_categorica_central'
+            ? ultimoResultadoCruce
+            : ultimoResultadoCruce.subgrupos,
     };
-    if (ultimoResultadoCruce.tipo === 'categorica_categorica_central') {
-        cuerpo.datos = ultimoResultadoCruce;
-    } else {
-        const sub = ultimoResultadoCruce.subgrupos[subgrupoSeleccionadoCruce];
-        cuerpo.subgrupo_etiqueta = sub.etiqueta;
-        cuerpo.datos = sub;
-    }
     const resp = await fetch('/colectivos/cruce/exportar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

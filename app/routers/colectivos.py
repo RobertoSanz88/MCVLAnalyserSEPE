@@ -895,23 +895,30 @@ def cruce_puntos(request: Request, body: PuntosRequest):
 # Exportacion a Excel de "Cruce de variables" (2026-09-09): igual que
 # /trayectorias/colectivo/exportar, NO se recalcula nada - el frontend ya
 # tiene en JS el resultado del cruce activo (ultimoResultadoCruce, de
-# /colectivos/cruce o /colectivos/cruce-central) y manda tal cual el bloque
-# que corresponde a lo que se ve AHORA MISMO en pantalla (un subgrupo
-# concreto, no los 4 - decision explicita del usuario: exportar los datos
-# del grafico concreto en pantalla, no un volcado completo). Excepcion
-# deliberada: "Diagrama de dispersion" (numerica x numerica) no manda sus
-# puntos individuales (hasta 1,3M, no caben en una hoja de Excel - limite
-# ~1.048.576 filas) - el frontend manda siempre la rejilla de densidad para
-# ese tipo, aunque el grafico en pantalla sea de puntos. Otra excepcion: el
-# modo "3 variables" (categorica_categorica_central) exporta Media Y
-# Mediana en 2 hojas siempre, aunque el switch del grafico solo muestre una
-# de las 2 a la vez - ambas ya vienen calculadas juntas en la misma
-# respuesta del backend, no tiene sentido limitarse a la que estaba activa.
+# /colectivos/cruce o /colectivos/cruce-central) y manda tal cual. Con
+# filtro de colectivo (3 tipos "normales"), UNA HOJA POR SUBGRUPO, los 4 de
+# un tiron (decision explicita del usuario, 2026-09-09: la primera version
+# solo exportaba el subgrupo marcado en pantalla - "de un tiron los cuatro
+# subcolectivos, uno en cada pestaña"); sin filtro (modo "3 variables") no
+# hay subgrupos, es poblacion completa. Excepcion deliberada: "Diagrama de
+# dispersion" (numerica x numerica) no manda sus puntos individuales (hasta
+# 1,3M, no caben en una hoja de Excel - limite ~1.048.576 filas) - el
+# frontend manda siempre la rejilla de densidad para ese tipo, aunque el
+# grafico en pantalla sea de puntos. Otra excepcion: el modo "3 variables"
+# exporta Media Y Mediana en 2 hojas siempre, aunque el switch del grafico
+# solo muestre una de las 2 a la vez - ambas ya vienen calculadas juntas en
+# la misma respuesta del backend, no tiene sentido limitarse a la activa.
 #
-# Formato LARGO (una fila por celda/categoria), no una matriz ancha - mismo
-# criterio ya usado en _construir_excel_trayectorias de trayectorias.py: el
-# numero de columnas de una matriz cambiaria segun cuantas categorias tenga
-# la variable (hasta 20+"Resto"), un formato largo es siempre la misma forma.
+# Formato REJILLA (matriz: una fila por valor de un eje, una columna por
+# valor del otro) para todo lo que ya es conceptualmente una tabla de 2 ejes
+# - numerica_numerica, categorica_categorica, el histograma de
+# numerica_categorica, y las 3 hojas del modo "3 variables" - decision
+# explicita del usuario, 2026-09-09, tras ver el formato largo inicial (2
+# columnas con una fila por celda): mas facil de leer como la propia tabla
+# de contingencia/heatmap que ya se ve en pantalla. El boxplot de
+# numerica_categorica es la unica excepcion real: no es una tabla de 2 ejes
+# (cada fila ya es una categoria distinta con varias estadisticas), se queda
+# en su forma natural de una fila por categoria.
 class CruceExportRequest(BaseModel):
     tipo: Literal[
         "numerica_numerica", "categorica_categorica", "numerica_categorica", "categorica_categorica_central",
@@ -920,8 +927,68 @@ class CruceExportRequest(BaseModel):
     variable2: str
     variable_central: str | None = None
     tipo_grafico: str
-    subgrupo_etiqueta: str | None = None  # solo con filtro de colectivo (no en el modo de 3 variables)
-    datos: dict  # el bloque ya calculado tal cual lo tiene el frontend (sub, o el resultado entero en modo central)
+    # 3 tipos "normales": los 4 subgrupos tal cual (mismo dict que
+    # ultimoResultadoCruce.subgrupos en el frontend, clave = nombre de
+    # ORDEN_SUBGRUPOS). categorica_categorica_central: el resultado entero
+    # (x/y/z_media/z_mediana/n), no hay subgrupos.
+    datos: dict
+
+
+def _escribir_grid_cruce(ws, fila_inicio: int, titulo_esquina: str, x: list, y: list, valores: list, negrita: Font):
+    """Tabla-rejilla en `ws` a partir de `fila_inicio`: esa fila es la
+    cabecera de columnas (titulo_esquina en la esquina + un valor de `x` por
+    columna), y a continuacion una fila por cada valor de `y` con los datos
+    de `valores` (matriz [fila_y][col_x], mismo shape que ya usa el backend
+    para z/z_media/z_mediana/n). Celdas sin dato (0 o None) se dejan en
+    blanco en vez de escribir un 0 - relevante sobre todo en
+    z_media/z_mediana, donde None es literalmente "nadie en esa celda", no
+    "el promedio vale 0"."""
+    ws.cell(row=fila_inicio, column=1, value=titulo_esquina).font = negrita
+    for ix, cat_x in enumerate(x):
+        ws.cell(row=fila_inicio, column=2 + ix, value=cat_x).font = negrita
+    for iy, cat_y in enumerate(y):
+        ws.cell(row=fila_inicio + 1 + iy, column=1, value=cat_y).font = negrita
+        for ix, cat_x in enumerate(x):
+            v = valores[iy][ix]
+            if v:
+                ws.cell(row=fila_inicio + 1 + iy, column=2 + ix, value=v)
+
+
+def _escribir_hoja_cruce_subgrupo(ws, sub: dict, variable1: str, variable2: str, tipo: str, tipo_grafico: str, negrita: Font):
+    """Una hoja = un subgrupo: cabecera con etiqueta/recuento del subgrupo
+    (para saber de que numeros habla la hoja sin volver a la app, mismo
+    espiritu que la hoja 'Colectivos' de _construir_excel) + la tabla de
+    datos a partir de la fila 4."""
+    ws.cell(row=1, column=1, value="Subcolectivo").font = negrita
+    ws.cell(row=1, column=2, value=sub["etiqueta"])
+    ws.cell(row=2, column=1, value="Personas").font = negrita
+    ws.cell(row=2, column=2, value=sub["recuento"])
+
+    fila_cabecera = 4
+    if tipo == "numerica_categorica" and tipo_grafico == "histograma":
+        categorias = list(sub["histograma_por_categoria"].keys())
+        valores = [sub["histograma_por_categoria"][cat] for cat in categorias]
+        _escribir_grid_cruce(ws, fila_cabecera, f"{variable2} \\ {variable1}", sub["histograma_bins"], categorias, valores, negrita)
+
+    elif tipo == "numerica_categorica":
+        # Boxplot (por defecto): una fila por categoria, no es una tabla de 2
+        # ejes - se queda en su forma natural, ver cabecera del fichero.
+        for col, titulo in enumerate(["Categoría", "N", "Mínimo", "Q1", "Mediana", "Q3", "Máximo"], start=1):
+            ws.cell(row=fila_cabecera, column=col, value=titulo).font = negrita
+        for i, caja in enumerate(sub["cajas"]):
+            fila = fila_cabecera + 1 + i
+            ws.cell(row=fila, column=1, value=caja["categoria"])
+            ws.cell(row=fila, column=2, value=caja["n"])
+            ws.cell(row=fila, column=3, value=caja["min"])
+            ws.cell(row=fila, column=4, value=caja["q1"])
+            ws.cell(row=fila, column=5, value=caja["mediana"])
+            ws.cell(row=fila, column=6, value=caja["q3"])
+            ws.cell(row=fila, column=7, value=caja["max"])
+
+    else:
+        # numerica_numerica (rejilla de densidad, ver cabecera) o
+        # categorica_categorica (tabla de contingencia): misma forma.
+        _escribir_grid_cruce(ws, fila_cabecera, f"{variable2} \\ {variable1}", sub["x"], sub["y"], sub["z"], negrita)
 
 
 def _construir_excel_cruce(payload: CruceExportRequest) -> bytes:
@@ -931,82 +998,30 @@ def _construir_excel_cruce(payload: CruceExportRequest) -> bytes:
     datos = payload.datos
 
     if payload.tipo == "categorica_categorica_central":
-        # 2 hojas (Media/Mediana), no una sola con el switch activo en
-        # pantalla: a diferencia del resto de tipos (donde exportar solo lo
-        # que se ve evita duplicar trabajo), aqui las 2 estan siempre
-        # calculadas de golpe en la misma respuesta del backend (ver
-        # _cruce_categorica_categorica_central) y el usuario las quiere las 2
-        # juntas en el Excel, no solo la que estaba activa en el grafico.
-        for i, (clave, etiqueta_valor) in enumerate((("z_media", "Media"), ("z_mediana", "Mediana"))):
+        # 3 hojas (Media/Mediana/N), no solo la que estaba activa en el
+        # switch del grafico - Media y Mediana ya vienen calculadas de golpe
+        # en la misma respuesta del backend (ver
+        # _cruce_categorica_categorica_central), y N (cuantas personas hay
+        # detras de cada celda) es necesario para interpretar si una
+        # media/mediana es fiable o son 3 personas sueltas.
+        titulo_esquina = f"{payload.variable2} \\ {payload.variable1}"
+        for i, (clave, etiqueta_valor) in enumerate((("z_media", "Media"), ("z_mediana", "Mediana"), ("n", "N"))):
             hoja = ws if i == 0 else wb.create_sheet(etiqueta_valor)
             hoja.title = etiqueta_valor
-            for col, titulo in enumerate([payload.variable1, payload.variable2, etiqueta_valor, "N"], start=1):
-                hoja.cell(row=1, column=col, value=titulo).font = negrita
-            fila = 2
-            for iy, cat_y in enumerate(datos["y"]):
-                for ix, cat_x in enumerate(datos["x"]):
-                    n = datos["n"][iy][ix]
-                    if not n:
-                        continue
-                    hoja.cell(row=fila, column=1, value=cat_x)
-                    hoja.cell(row=fila, column=2, value=cat_y)
-                    hoja.cell(row=fila, column=3, value=datos[clave][iy][ix])
-                    hoja.cell(row=fila, column=4, value=n)
-                    fila += 1
-
-        buffer = io.BytesIO()
-        wb.save(buffer)
-        return buffer.getvalue()
-
-    ws.title = "Cruce"
-
-    if payload.tipo == "numerica_categorica" and payload.tipo_grafico == "histograma":
-        for col, titulo in enumerate(["Subcolectivo", payload.variable2, payload.variable1, "N"], start=1):
-            ws.cell(row=1, column=col, value=titulo).font = negrita
-        fila = 2
-        for categoria, conteos in datos["histograma_por_categoria"].items():
-            for centro, n in zip(datos["histograma_bins"], conteos):
-                if not n:
-                    continue
-                ws.cell(row=fila, column=1, value=payload.subgrupo_etiqueta)
-                ws.cell(row=fila, column=2, value=categoria)
-                ws.cell(row=fila, column=3, value=centro)
-                ws.cell(row=fila, column=4, value=n)
-                fila += 1
-
-    elif payload.tipo == "numerica_categorica":
-        # Boxplot (por defecto): una fila por categoria, no por celda.
-        for col, titulo in enumerate(
-            ["Subcolectivo", payload.variable2, "N", "Mínimo", "Q1", "Mediana", "Q3", "Máximo"], start=1
-        ):
-            ws.cell(row=1, column=col, value=titulo).font = negrita
-        for fila, caja in enumerate(datos["cajas"], start=2):
-            ws.cell(row=fila, column=1, value=payload.subgrupo_etiqueta)
-            ws.cell(row=fila, column=2, value=caja["categoria"])
-            ws.cell(row=fila, column=3, value=caja["n"])
-            ws.cell(row=fila, column=4, value=caja["min"])
-            ws.cell(row=fila, column=5, value=caja["q1"])
-            ws.cell(row=fila, column=6, value=caja["mediana"])
-            ws.cell(row=fila, column=7, value=caja["q3"])
-            ws.cell(row=fila, column=8, value=caja["max"])
-
+            _escribir_grid_cruce(hoja, 1, titulo_esquina, datos["x"], datos["y"], datos[clave], negrita)
     else:
-        # numerica_numerica (siempre la rejilla de densidad, ver cabecera) o
-        # categorica_categorica (tabla de contingencia): misma forma, una
-        # fila por celda con recuento > 0.
-        for col, titulo in enumerate(["Subcolectivo", payload.variable1, payload.variable2, "N"], start=1):
-            ws.cell(row=1, column=col, value=titulo).font = negrita
-        fila = 2
-        for iy, cat_y in enumerate(datos["y"]):
-            for ix, cat_x in enumerate(datos["x"]):
-                n = datos["z"][iy][ix]
-                if not n:
-                    continue
-                ws.cell(row=fila, column=1, value=payload.subgrupo_etiqueta)
-                ws.cell(row=fila, column=2, value=cat_x)
-                ws.cell(row=fila, column=3, value=cat_y)
-                ws.cell(row=fila, column=4, value=n)
-                fila += 1
+        # Los 3 tipos "normales": una hoja por cada uno de los 4 subgrupos,
+        # de un tiron. "Subgrupo N" (no la etiqueta completa, p.ej. "sexo
+        # Hombre + nacionalidad Espana") porque Excel limita el nombre de
+        # hoja a 31 caracteres y no admite ciertos caracteres - la etiqueta
+        # completa va dentro de la propia hoja (fila 1), no hace falta
+        # acortarla ahi.
+        for i, nombre in enumerate(ORDEN_SUBGRUPOS):
+            hoja = ws if i == 0 else wb.create_sheet()
+            hoja.title = f"Subgrupo {i + 1}"
+            _escribir_hoja_cruce_subgrupo(
+                hoja, datos[nombre], payload.variable1, payload.variable2, payload.tipo, payload.tipo_grafico, negrita,
+            )
 
     buffer = io.BytesIO()
     wb.save(buffer)
