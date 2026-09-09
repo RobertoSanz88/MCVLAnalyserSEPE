@@ -105,13 +105,12 @@
 
         /* --- Contenido --- */
         #contenido { flex: 1; display: flex; overflow: hidden; }
-        /* Un solo panel-filtros compartido por las dos pestanas (Analisis y
-           Trayectorias); a su derecha, solo una de las dos .contenido-vista
-           esta visible a la vez (la otra queda display:none, ver cambiarVista()). */
+        /* Cada pestana es una .contenido-vista; solo una esta visible a la vez
+           (las demas quedan display:none, ver cambiarVista()). "Seleccion de
+           colectivo" (2026-09-09) es la unica en columna (switch arriba +
+           2 columnas debajo) - las demas siguen siendo una fila de paneles. */
         .contenido-vista { flex: 1; display: flex; overflow: hidden; min-width: 0; }
         .panel { padding: 1rem 1.1rem; overflow-y: auto; }
-        #panel-filtros { width: var(--sidebar-w); flex: none; background: var(--bg3);
-                          border-right: 1px solid var(--border); }
         #panel-numericas { flex: 1; min-width: 320px; background: var(--bg2); border-right: 1px solid var(--border); }
         #panel-categoricas { flex: 1; min-width: 320px; background: var(--bg2); }
         /* Franja vertical propia de Trayectorias, a la derecha de panel-filtros:
@@ -122,6 +121,60 @@
                                        border-right: 1px solid var(--border); }
         #panel-trayectorias { flex: 1; min-width: 320px; background: var(--bg2);
                                 display: flex; flex-direction: column; }
+
+        /* --- Pestana "Seleccion de colectivo" (2026-09-09) --- */
+        /* Antes vivia como panel-filtros, una franja fija compartida por
+           Analisis/Trayectorias; ahora es su propia pestana (la primera),
+           con mucho mas espacio disponible - de ahi que las cajas de
+           variables/valores puedan ser mas altas (flex, no un max-height
+           fijo como .lista-columnas-cruce) y el bloque "Asignar a Filtro
+           1-4" se duplique (uno para el flujo numerico, otro para el
+           categorico - antes era un unico flujo compartido que mostraba
+           Operador o Categoria segun el tipo de variable elegida). El
+           switch "Filtro de colectivos" de arriba del todo (filtroColectivoGlobal)
+           es el UNICO que queda en toda la app - Individuales y Cruce tenian
+           cada uno el suyo propio, quitados a favor de este (ver
+           actualizarSelectorSubgrupoIndividual/actualizarModoCruce). Analisis
+           y Trayectorias de colectivos todavia no reaccionan a el (pendiente,
+           el usuario dara esas instrucciones pestana a pestana). */
+        .contenido-seleccion-vista { flex-direction: column; }
+        .fila-switch-global { display: flex; align-items: center; gap: 0.8rem; flex: none;
+                                padding: 0.7rem 1.1rem; border-bottom: 1px solid var(--border); background: var(--bg2); }
+        .nota-filtro-global { font-size: 0.78rem; color: var(--muted); }
+
+        #panel-seleccion-colectivo { flex: 1; display: flex; overflow: hidden; }
+        #columna-seleccion-izquierda { flex: 1.3; min-width: 480px; background: var(--bg3);
+                                          border-right: 1px solid var(--border);
+                                          display: flex; flex-direction: column; }
+        #columna-seleccion-derecha { flex: 1; min-width: 340px; background: var(--bg2);
+                                        display: flex; flex-direction: column; }
+
+        /* Fila = un flujo completo (lista de variables + configuracion + Asignar
+           a + Seleccionar), uno para numericas y otro para categoricas - cada
+           uno ocupa la mitad de la altura disponible (flex:1) para aprovechar
+           el alto de la pestana entera, en vez del max-height fijo de antes. */
+        .fila-seleccion-tipo { flex: 1; display: flex; gap: 1rem; min-height: 0; margin-bottom: 1rem; }
+        .fila-seleccion-tipo:last-child { margin-bottom: 0; }
+        .bloque-lista-variable, .bloque-config-variable { flex: 1; min-width: 0;
+                                                              display: flex; flex-direction: column; min-height: 0; }
+        .lista-columnas-seleccion { flex: 1; min-height: 80px; overflow-y: auto; border: 1.5px solid var(--border);
+                                       border-radius: 7px; background: var(--bg); }
+        .lista-valores-categoria { padding: 0.5rem 0.65rem; }
+        .lista-valores-categoria label { display: block; font-size: 0.82rem; padding: 0.15rem 0; }
+        .bloque-config-variable .destino-filtro { flex: none; }
+        .bloque-config-variable button { flex: none; align-self: flex-start; }
+
+        /* Resultados de los 4 filtros, en rejilla 2x2 (antes iban apilados
+           uno debajo de otro en la misma columna estrecha). */
+        .grid-resumen-filtros { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; margin-bottom: 1rem; }
+
+        /* Misma caja .recuentos-colectivo que Analisis/Trayectorias (ver
+           renderizarRecuentosNumericas, contenedoresRecuentosEnVivo) - aqui
+           con letra mas grande, a peticion explicita del usuario, porque hay
+           mas espacio y es el unico contenido de esta zona de la pestana. */
+        #recuentos-seleccion.recuentos-grande { font-size: 1.15em; padding: 1rem 1.2rem; }
+        .recuentos-grande .lista-recuentos, .recuentos-grande .pastilla-recuentos .valor-recuento { font-size: 0.92rem; }
+        .recuentos-grande .titulo-pastilla { font-size: 0.8rem; }
 
         /* --- Selector de tabla (Bases/Pensiones/Afiliacion), vertical, dentro de panel-tablas-trayectorias --- */
         .selector-tablas { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.1rem; flex: none; }
@@ -190,11 +243,11 @@
                                           gap: 0.7rem; }
 
         .panel::-webkit-scrollbar, #sidebar::-webkit-scrollbar,
-        #lista-columnas::-webkit-scrollbar, #lista-categorias::-webkit-scrollbar,
-        .lista-columnas-cruce::-webkit-scrollbar { width: 6px; }
+        .lista-columnas-cruce::-webkit-scrollbar, .lista-columnas-seleccion::-webkit-scrollbar,
+        .lista-valores-categoria::-webkit-scrollbar { width: 6px; }
         .panel::-webkit-scrollbar-thumb, #sidebar::-webkit-scrollbar-thumb,
-        #lista-columnas::-webkit-scrollbar-thumb, #lista-categorias::-webkit-scrollbar-thumb,
-        .lista-columnas-cruce::-webkit-scrollbar-thumb {
+        .lista-columnas-cruce::-webkit-scrollbar-thumb, .lista-columnas-seleccion::-webkit-scrollbar-thumb,
+        .lista-valores-categoria::-webkit-scrollbar-thumb {
             background: var(--border); border-radius: 3px; }
 
         h2 { font-size: 0.95rem; font-weight: 800; color: var(--text); margin: 0 0 0.9rem;
@@ -219,26 +272,22 @@
         .individual-persona { display: flex; gap: 1.2rem; font-size: 0.85rem; color: var(--text);
                                 margin: 0 0 0.8rem; }
         .individual-persona b { color: var(--verde-dk); font-size: 1rem; }
-        /* Switch "Aplicar filtro de colectivos" (No/Si, mismo componente
-           .switch-vista que Datos/Graficos - ver mas abajo): en No (por
-           defecto), IPF aleatorio de toda Personas, igual que hasta ahora. En
-           Si, restringido al subgrupo elegido en el selector de al lado
-           (mismos filtro1-4 que Analisis/Trayectorias de colectivo -
-           panel-filtros esta oculto en esta pestana, pero su estado ya
-           configurado se reutiliza igual). Selector A LA DERECHA del switch,
-           no debajo, para no gastar una fila entera solo en esto. */
-        .fila-switch-individual { display: flex; align-items: center; gap: 0.8rem; margin: 0 0 0.8rem;
-                                    flex-wrap: wrap; }
+        /* Selector de subgrupo (chips + nombre completo del elegido): "Aplicar
+           filtro de colectivos" ya no es un switch local de esta pestana
+           (2026-09-09) - vive una sola vez en "Seleccion de colectivo"
+           (filtroColectivoGlobal). Aqui solo queda el selector, visible o no
+           segun ese estado global - ver actualizarSelectorSubgrupoIndividual().
+           "Chips" en fila (no en columna como la leyenda de recuentos de las
+           otras 2 pestanas): una sola seleccionada a la vez, resaltada. El
+           nombre del subgrupo seleccionado (etiqueta completa) va a
+           continuacion de los chips, dentro del mismo contenedor - ver
+           renderizarSelectorSubgrupoIndividual. */
         .switch-filtro-label { font-size: 0.82rem; font-weight: 600; color: var(--text); }
-        /* "Chips" clicables del selector de subgrupo, en fila (no en columna
-           como la leyenda de recuentos de las otras 2 pestanas) para caber al
-           lado del switch - una sola seleccionada a la vez, resaltada. Margen
-           izquierdo extra (ademas del gap de .fila-switch-individual) para que
-           no queden pegados a los botones No/Si. El nombre del subgrupo
-           seleccionado (etiqueta completa) va a continuacion de los chips,
-           dentro del mismo contenedor - ver renderizarSelectorSubgrupoIndividual. */
+        /* margin-left en vez de bottom: clase compartida con #cruce-selector-subgrupo
+           (Cruce de variables), que sigue viviendo inline en su fila
+           .controles-trayectorias junto al selector de grafico. */
         .selector-subgrupo-individual { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;
-                                          margin-left: 0.6rem; }
+                                          margin: 0 0 0.8rem 0.6rem; }
         .individual-subgrupo-nombre { font-size: 0.78rem; color: var(--muted); margin-left: 0.3rem; }
         .fila-subgrupo-individual { cursor: pointer; padding: 0.2rem 0.5rem; border-radius: 6px;
                                       border: 1.5px solid var(--border); font-size: 0.72rem; white-space: nowrap;
@@ -279,8 +328,6 @@
         /* --- Selector de atributo --- */
         .tipos-filtro { margin-bottom: 0.6rem; }
         .tipos-filtro label { margin-right: 1rem; font-size: 0.82rem; color: var(--muted); font-weight: 600; }
-        #lista-columnas { max-height: 220px; overflow-y: auto; border: 1.5px solid var(--border);
-                           border-radius: 7px; background: var(--bg); }
         .fila-columna { padding: 0.4rem 0.65rem; cursor: pointer; display: flex;
                          justify-content: space-between; font-size: 0.85rem; border-left: 3px solid transparent; }
         .fila-columna:hover { background: rgba(4,160,110,0.06); }
@@ -288,15 +335,17 @@
                                        color: var(--verde-dk); border-left-color: var(--verde-dk); }
         .fila-columna .tipo { color: var(--muted); font-size: 0.7rem; font-family: var(--mono); }
 
-        #config-filtro { margin-top: 0.8rem; padding: 0.7rem 0.75rem; background: var(--bg);
-                          border: 1.5px solid var(--border); border-radius: 7px; display: none; }
-        #config-filtro select, #config-filtro input[type=number] {
+        /* Config del flujo numerico/categorico (pestana Seleccion de
+           colectivo) - ya no vive dentro de una caja #config-filtro comun
+           (esa caja mostraba Operador O Categoria segun el tipo elegido);
+           cada .bloque-config-variable es su propio flujo independiente,
+           ver cabecera de la seccion "Pestana Seleccion de colectivo". */
+        .bloque-config-variable select, .bloque-config-variable input[type=number] {
             font-family: var(--font); font-size: 0.85rem; padding: 0.3rem 0.45rem;
             border: 1.5px solid var(--border); border-radius: 5px; background: var(--bg2); color: var(--text); }
-        #config-filtro select:focus, #config-filtro input[type=number]:focus { outline: none; border-color: var(--verde-acc); }
-        #config-numerica label { display: block; margin-bottom: 0.4rem; }
-        #lista-categorias { max-height: 150px; overflow-y: auto; margin: 0.5rem 0; }
-        #lista-categorias label { display: block; font-size: 0.82rem; padding: 0.15rem 0; }
+        .bloque-config-variable select:focus, .bloque-config-variable input[type=number]:focus {
+            outline: none; border-color: var(--verde-acc); }
+        .bloque-config-variable > label { display: block; margin-bottom: 0.4rem; }
         .destino-filtro { margin: 0.6rem 0; font-size: 0.82rem; color: var(--muted); }
         .destino-filtro .destino-titulo { display: block; margin-bottom: 0.35rem; }
         .destino-filtro .destino-fila { margin-top: 0.3rem; }
@@ -464,7 +513,8 @@
 
     <div id="app">
         <div id="sidebar">
-            <div class="pestana activa" id="pestana-analisis" onclick="cambiarVista('analisis')">Análisis de colectivos</div>
+            <div class="pestana activa" id="pestana-seleccion" onclick="cambiarVista('seleccion')">Selección de colectivo</div>
+            <div class="pestana" id="pestana-analisis" onclick="cambiarVista('analisis')">Análisis de colectivos</div>
             <div class="pestana" id="pestana-trayectorias" onclick="cambiarVista('trayectorias')">Trayectorias de colectivos</div>
             <div class="pestana" id="pestana-individuales" onclick="cambiarVista('individuales')">Trayectorias individuales</div>
             <div class="pestana" id="pestana-cruce" onclick="cambiarVista('cruce')">Cruce de variables</div>
@@ -479,72 +529,110 @@
         </div>
 
         <div id="contenido">
-            <div id="panel-filtros" class="panel">
-                <h2>Selección de colectivo</h2>
-
-                <div class="tipos-filtro">
-                    <label><input type="checkbox" id="mostrar-numericas" checked> Numéricas</label>
-                    <label><input type="checkbox" id="mostrar-categoricas" checked> Categóricas</label>
+            <div id="contenido-seleccion" class="contenido-vista contenido-seleccion-vista">
+                <div class="fila-switch-global">
+                    <span class="switch-filtro-label">Filtro de colectivos</span>
+                    <div class="switch-vista" id="switch-filtro-global">
+                        <button type="button" onclick="cambiarFiltroColectivoGlobal(false)">No</button>
+                        <button type="button" class="activa" onclick="cambiarFiltroColectivoGlobal(true)">Sí</button>
+                    </div>
+                    <span class="nota-filtro-global">Si "No", se estudia toda la MCVL sin filtrar.</span>
                 </div>
-                <div id="lista-columnas"></div>
 
-                <div id="config-filtro">
-                    <div id="config-numerica" style="display:none">
-                        <label>Operador:
-                            <select id="operador-numerico">
-                                <option value=">=">&gt;=</option>
-                                <option value=">">&gt;</option>
-                                <option value="<=">&lt;=</option>
-                                <option value="<">&lt;</option>
-                                <option value="==">=</option>
-                            </select>
-                        </label>
-                        <label>Valor: <input type="number" id="valor-numerico" step="any"></label>
-                    </div>
-                    <div id="config-categorica" style="display:none">
-                        <div id="lista-categorias"></div>
-                    </div>
-                    <div class="destino-filtro">
-                        <span class="destino-titulo">Asignar a:</span>
-                        <div class="destino-fila">
-                            <label><input type="radio" name="destino" value="1" checked> Filtro 1</label>
-                            <label><input type="radio" name="destino" value="2"> Filtro 2</label>
+                <div id="panel-seleccion-colectivo">
+                    <div id="columna-seleccion-izquierda" class="panel">
+                        <h2>Selección de colectivo</h2>
+
+                        <div class="fila-seleccion-tipo">
+                            <div class="bloque-lista-variable">
+                                <h3>Numéricas</h3>
+                                <div id="lista-numericas" class="lista-columnas-seleccion"></div>
+                            </div>
+                            <div class="bloque-config-variable">
+                                <h3>Operador</h3>
+                                <label>Operador:
+                                    <select id="operador-numerico">
+                                        <option value=">=">&gt;=</option>
+                                        <option value=">">&gt;</option>
+                                        <option value="<=">&lt;=</option>
+                                        <option value="<">&lt;</option>
+                                        <option value="==">=</option>
+                                    </select>
+                                </label>
+                                <label>Valor: <input type="number" id="valor-numerico" step="any"></label>
+                                <div class="destino-filtro">
+                                    <span class="destino-titulo">Asignar a:</span>
+                                    <div class="destino-fila">
+                                        <label><input type="radio" name="destino-num" value="1" checked> Filtro 1</label>
+                                        <label><input type="radio" name="destino-num" value="2"> Filtro 2</label>
+                                    </div>
+                                    <div class="destino-fila">
+                                        <label><input type="radio" name="destino-num" value="3" id="radio-destino-num-3" disabled> Filtro 3</label>
+                                        <label><input type="radio" name="destino-num" value="4" id="radio-destino-num-4" disabled> Filtro 4</label>
+                                    </div>
+                                </div>
+                                <button id="boton-seleccionar-numerica" onclick="aplicarFiltro('numerica')">Seleccionar</button>
+                            </div>
                         </div>
-                        <div class="destino-fila">
-                            <label><input type="radio" name="destino" value="3" id="radio-destino-3" disabled> Filtro 3</label>
-                            <label><input type="radio" name="destino" value="4" id="radio-destino-4" disabled> Filtro 4</label>
+
+                        <div class="fila-seleccion-tipo">
+                            <div class="bloque-lista-variable">
+                                <h3>Categóricas</h3>
+                                <div id="lista-categoricas" class="lista-columnas-seleccion"></div>
+                            </div>
+                            <div class="bloque-config-variable">
+                                <h3>Categoría</h3>
+                                <div id="lista-valores-categoria" class="lista-columnas-seleccion lista-valores-categoria"></div>
+                                <div class="destino-filtro">
+                                    <span class="destino-titulo">Asignar a:</span>
+                                    <div class="destino-fila">
+                                        <label><input type="radio" name="destino-cat" value="1" checked> Filtro 1</label>
+                                        <label><input type="radio" name="destino-cat" value="2"> Filtro 2</label>
+                                    </div>
+                                    <div class="destino-fila">
+                                        <label><input type="radio" name="destino-cat" value="3" id="radio-destino-cat-3" disabled> Filtro 3</label>
+                                        <label><input type="radio" name="destino-cat" value="4" id="radio-destino-cat-4" disabled> Filtro 4</label>
+                                    </div>
+                                </div>
+                                <button id="boton-seleccionar-categorica" onclick="aplicarFiltro('categorica')">Seleccionar</button>
+                            </div>
                         </div>
                     </div>
-                    <button id="boton-seleccionar" onclick="aplicarFiltro()">Seleccionar</button>
+
+                    <div id="columna-seleccion-derecha" class="panel">
+                        <div class="grid-resumen-filtros">
+                            <div>
+                                <h3>Filtro 1</h3>
+                                <div id="resumen-filtro1" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+                                <label class="check-contracolectivo">
+                                    <input type="checkbox" id="contracolectivo-1" checked onchange="toggleContracolectivo(1)">
+                                    Contracolectivo automático
+                                </label>
+                            </div>
+                            <div>
+                                <h3>Filtro 2</h3>
+                                <div id="resumen-filtro2" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+                                <label class="check-contracolectivo">
+                                    <input type="checkbox" id="contracolectivo-2" checked onchange="toggleContracolectivo(2)">
+                                    Contracolectivo automático
+                                </label>
+                            </div>
+                            <div id="bloque-filtro3-contenedor" style="display:none">
+                                <h3>Filtro 3 <span class="nota-eje">(nuevo eje; Filtro 1 queda fijo)</span></h3>
+                                <div id="resumen-filtro3" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+                            </div>
+                            <div id="bloque-filtro4-contenedor" style="display:none">
+                                <h3>Filtro 4 <span class="nota-eje">(nuevo eje; Filtro 2 queda fijo)</span></h3>
+                                <div id="resumen-filtro4" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+                            </div>
+                        </div>
+
+                        <div id="recuentos-seleccion" class="recuentos-colectivo recuentos-grande"></div>
+                    </div>
                 </div>
-
-                <h3>Filtro 1</h3>
-                <div id="resumen-filtro1" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
-                <label class="check-contracolectivo">
-                    <input type="checkbox" id="contracolectivo-1" checked onchange="toggleContracolectivo(1)">
-                    Contracolectivo automático
-                </label>
-
-                <h3>Filtro 2</h3>
-                <div id="resumen-filtro2" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
-                <label class="check-contracolectivo">
-                    <input type="checkbox" id="contracolectivo-2" checked onchange="toggleContracolectivo(2)">
-                    Contracolectivo automático
-                </label>
-
-                <div id="bloque-filtro3-contenedor" style="display:none">
-                    <h3>Filtro 3 <span class="nota-eje">(nuevo eje; Filtro 1 queda fijo)</span></h3>
-                    <div id="resumen-filtro3" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
-                </div>
-
-                <div id="bloque-filtro4-contenedor" style="display:none">
-                    <h3>Filtro 4 <span class="nota-eje">(nuevo eje; Filtro 2 queda fijo)</span></h3>
-                    <div id="resumen-filtro4" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
-                </div>
-
             </div>
 
-            <div id="contenido-analisis" class="contenido-vista">
+            <div id="contenido-analisis" class="contenido-vista" style="display:none">
                 <div id="panel-numericas" class="panel">
                     <div id="recuentos-numericas" class="recuentos-colectivo"></div>
                     <div class="cabecera-panel">
@@ -554,7 +642,7 @@
                             <button type="button" data-vista="graficos" onclick="cambiarVistaNumericas('graficos')">Gráficos</button>
                         </div>
                     </div>
-                    <div id="contenedor-numericas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
+                    <div id="contenedor-numericas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en "Selección de colectivo", y pulsa Calcular.</p></div>
                 </div>
 
                 <div id="panel-categoricas" class="panel">
@@ -565,7 +653,7 @@
                             <button type="button" data-vista="graficos" onclick="cambiarVistaCategoricas('graficos')">Gráficos</button>
                         </div>
                     </div>
-                    <div id="contenedor-categoricas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular.</p></div>
+                    <div id="contenedor-categoricas"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en "Selección de colectivo", y pulsa Calcular.</p></div>
                 </div>
             </div>
 
@@ -604,7 +692,7 @@
                         </div>
                     </div>
                     <p class="nota-trayectoria-categorica" id="nota-trayectoria-categorica" style="display:none"></p>
-                    <div id="grafico-trayectoria"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular, para ver las trayectorias del colectivo.</p></div>
+                    <div id="grafico-trayectoria"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en "Selección de colectivo", y pulsa Calcular, para ver las trayectorias del colectivo.</p></div>
                 </div>
             </div>
 
@@ -615,14 +703,7 @@
                             <button type="button" id="boton-ipf-aleatorio" class="boton-ipf-aleatorio" onclick="cargarIpfAleatorio()">IPF aleatorio</button>
                         </h2>
                     </div>
-                    <div class="fila-switch-individual">
-                        <span class="switch-filtro-label">Aplicar filtro de colectivos</span>
-                        <div class="switch-vista" id="switch-filtro-individual">
-                            <button type="button" class="activa" onclick="cambiarFiltroColectivoIndividual(false)">No</button>
-                            <button type="button" onclick="cambiarFiltroColectivoIndividual(true)">Sí</button>
-                        </div>
-                        <div id="individual-selector-subgrupo" class="selector-subgrupo-individual" style="display:none"></div>
-                    </div>
+                    <div id="individual-selector-subgrupo" class="selector-subgrupo-individual" style="display:none"></div>
                     <div id="individual-persona" class="individual-persona"></div>
                     <p class="aviso-vacio" id="individual-aviso">Pulsa "IPF aleatorio" para ver la trayectoria de una persona al azar.</p>
                     <div id="individual-timeline">
@@ -636,14 +717,7 @@
                 <div id="panel-variables-cruce" class="panel">
                     <h2>Variables a cruzar</h2>
 
-                    <div class="fila-switch-individual">
-                        <span class="switch-filtro-label">Aplicar filtro de colectivos</span>
-                        <div class="switch-vista" id="switch-filtro-cruce">
-                            <button type="button" onclick="cambiarFiltroColectivoCruce(false)">No</button>
-                            <button type="button" class="activa" onclick="cambiarFiltroColectivoCruce(true)">Sí</button>
-                        </div>
-                    </div>
-                    <p class="aviso-vacio" id="cruce-aviso-filtros" style="display:none">Configura Filtro 1 y Filtro 2 en "Análisis de colectivos" o "Trayectorias de colectivos" primero.</p>
+                    <p class="aviso-vacio" id="cruce-aviso-filtros" style="display:none">Configura Filtro 1 y Filtro 2 en "Selección de colectivo" primero.</p>
 
                     <h3>Variable 1</h3>
                     <div class="tipos-filtro" id="fila-tipos-var1-cruce">
@@ -711,7 +785,21 @@ const COLOR_SUBGRUPO = {
     filtro1_si__filtro2_no: '#2C6CB0',
     filtro1_no__filtro2_si: '#C9A700',
     filtro1_no__filtro2_no: '#8A4E9E',
+    toda_mcvl: '#00815A', // mismo verde principal - un unico grupo, no hay nada que distinguir
 };
+
+// "Filtro de colectivos" en No (switch global, ver filtroColectivoGlobal):
+// "Analisis de colectivos" pasa a un unico grupo "Toda la MCVL" en vez de 4
+// subgrupos (2026-09-09, decision explicita del usuario) - mismo id que
+// GRUPO_SIN_FILTRO en colectivos.py. gruposActivos() es la unica fuente de
+// verdad de "que grupos estoy mostrando ahora mismo" para toda la pestana
+// Analisis (tabla/graficos numericos y categoricos, recuento, Excel) - itera
+// esto en vez de ORDEN_SUBGRUPOS directamente, para que el mismo codigo
+// sirva con 1 o con 4 grupos.
+const GRUPO_SIN_FILTRO = 'toda_mcvl';
+function gruposActivos() {
+    return filtroColectivoGlobal ? ORDEN_SUBGRUPOS : [GRUPO_SIN_FILTRO];
+}
 
 let vistaNumericas = 'datos';
 let ultimosSubgruposNumericos = null;
@@ -761,22 +849,47 @@ const TIPOS_GRAFICO_CATEGORICO = [
 // categorias del mapa de calor): un numero + una leyenda una vez en la propia
 // caja es mas legible que 4 nombres largos rotados o apretados en el eje.
 const NUMERO_SUBGRUPO = Object.fromEntries(ORDEN_SUBGRUPOS.map((n, i) => [n, String(i + 1)]));
+NUMERO_SUBGRUPO[GRUPO_SIN_FILTRO] = ''; // un unico grupo no necesita numerarse
 
 let columnasDisponibles = { numericas: [], categoricas: [] };
-let columnaSeleccionada = null; // { nombre, tipo }
+// Antes habia una unica columnaSeleccionada (numerica O categorica, segun
+// que fila clicaba el usuario en una sola lista combinada). Desde que
+// "Seleccion de colectivo" tiene 2 flujos independientes en paralelo (uno
+// por tipo, ver seccion CSS "Pestana Seleccion de colectivo"), cada uno
+// guarda su propia seleccion - se puede tener a la vez una numerica Y una
+// categorica "a medio construir", sin que una pise a la otra.
+let columnaSeleccionadaNumerica = null; // { nombre } o null
+let columnaSeleccionadaCategorica = null; // { nombre } o null
 let valoresPorColumna = {}; // columna -> lista de valores distintos (para el label del complementario)
 let filtros = { 1: null, 2: null, 3: null, 4: null }; // Filtro tal cual lo espera el backend
 // Eje A = Filtro 1 (+ Filtro 3 si se desactiva su contracolectivo automatico).
 // Eje B = Filtro 2 (+ Filtro 4 si se desactiva su contracolectivo automatico).
 let contracolectivo = { 1: true, 2: true };
 
-// Que pestana de #sidebar esta activa ahora mismo: 'analisis', 'trayectorias'
-// o 'individuales'. panel-filtros (la definicion del colectivo) es comun a
-// las 2 primeras, solo cambia que hay a su derecha (#contenido-analisis vs
-// #contenido-trayectorias); "individuales" no define un colectivo (es una
-// persona sola, sin filtros), asi que oculta panel-filtros y los botones
-// Calcular/Exportar (que tampoco aplican ahi).
-let vistaActiva = 'analisis';
+// Switch "Filtro de colectivos" de la pestana "Seleccion de colectivo"
+// (2026-09-09) - UNICO en toda la app: Individuales y Cruce ya no tienen
+// cada uno el suyo propio (ver actualizarSelectorSubgrupoIndividual,
+// actualizarModoCruce - ambos leen esta variable y se refrescan al entrar
+// en su pestana, no al cambiar este switch directamente, porque viven en
+// otra pestana). Analisis/Trayectorias de colectivos todavia no reaccionan
+// a el - pendiente, el usuario dara esas instrucciones pestana a pestana.
+let filtroColectivoGlobal = true;
+
+function cambiarFiltroColectivoGlobal(activo) {
+    filtroColectivoGlobal = activo;
+    document.querySelectorAll('#switch-filtro-global button').forEach((btn, i) => {
+        btn.classList.toggle('activa', (i === 1) === activo);
+    });
+}
+
+// Que pestana de #sidebar esta activa ahora mismo. "seleccion" (primera
+// pestana, vista inicial) aloja la definicion del colectivo (filtro1-4),
+// compartida por el resto - las demas pestanas ya no la muestran
+// directamente, solo leen el mismo estado (filtros/contracolectivo).
+// "individuales" no define un colectivo propio (es una persona sola), asi
+// que oculta los botones Calcular/Exportar (que tampoco aplican ahi) - lo
+// mismo que "seleccion" ahora, que tampoco calcula/exporta nada por si sola.
+let vistaActiva = 'seleccion';
 let ipfActualIndividual = null; // null = todavia no se ha cargado ningun IPF en esta pestana
 let fechaCorteIndividual = null; // fecha de corte de esta MCVL, viene del backend en cada carga
 
@@ -784,61 +897,84 @@ function cambiarVista(vista) {
     if (vista === vistaActiva) return;
     vistaActiva = vista;
 
+    document.getElementById('pestana-seleccion').classList.toggle('activa', vista === 'seleccion');
     document.getElementById('pestana-analisis').classList.toggle('activa', vista === 'analisis');
     document.getElementById('pestana-trayectorias').classList.toggle('activa', vista === 'trayectorias');
     document.getElementById('pestana-individuales').classList.toggle('activa', vista === 'individuales');
     document.getElementById('pestana-cruce').classList.toggle('activa', vista === 'cruce');
+    document.getElementById('contenido-seleccion').style.display = vista === 'seleccion' ? 'flex' : 'none';
     document.getElementById('contenido-analisis').style.display = vista === 'analisis' ? 'flex' : 'none';
     document.getElementById('contenido-trayectorias').style.display = vista === 'trayectorias' ? 'flex' : 'none';
     document.getElementById('contenido-individuales').style.display = vista === 'individuales' ? 'flex' : 'none';
     document.getElementById('contenido-cruce').style.display = vista === 'cruce' ? 'flex' : 'none';
-    // "Cruce de variables" ya no usa panel-filtros directamente (2026-09-09):
-    // en modo "Aplicar filtro de colectivos = Si" sigue dependiendo del mismo
-    // filtro1/filtro2 configurados en Analisis/Trayectorias (igual que
-    // Individuales, ver mas abajo), pero ya no se ven ni se editan desde
-    // aqui - solo el switch + el aviso propio de esta pestana.
-    document.getElementById('panel-filtros').style.display = (vista === 'individuales' || vista === 'cruce') ? 'none' : 'block';
-    document.getElementById('bloque-acciones-sidebar').style.display = vista === 'individuales' ? 'none' : 'block';
+    document.getElementById('bloque-acciones-sidebar').style.display =
+        (vista === 'individuales' || vista === 'seleccion') ? 'none' : 'block';
     // "Exportar Excel" tiene una exportacion propia por pestana (Analisis:
     // paso 1; Trayectorias: paso 2; Cruce: paso 3, ver conversacion
-    // 2026-08-28 y 2026-09-09) - se oculta solo en Individuales (no tiene
-    // ninguna). "Calcular" no se toca aqui.
-    document.getElementById('boton-exportar').style.display = vista === 'individuales' ? 'none' : 'block';
+    // 2026-08-28 y 2026-09-09) - se oculta en Individuales y en Seleccion
+    // (ninguna de las 2 calcula/exporta nada por si misma). "Calcular" no se
+    // toca aqui (bloque-acciones-sidebar entero ya se oculta arriba).
+    document.getElementById('boton-exportar').style.display =
+        (vista === 'individuales' || vista === 'seleccion') ? 'none' : 'block';
     actualizarBotonExportar();
 
-    // Trayectorias es navegable desde el principio (el usuario decide en que
-    // pestana define el colectivo, da igual cual - panel-filtros es comun a
-    // las dos). Ya no se recalcula sola al entrar: igual que en Analisis, el
-    // colectivo (recuentos) se ve al momento pero el grafico se queda como
-    // estaba (o con el aviso inicial) hasta que se pulse Calcular - ver
-    // alPulsarCalcular().
+    // Analisis de colectivos: mismo patron que Cruce (modoCruceRenderizado) -
+    // solo se reconstruye si filtroColectivoGlobal realmente cambio desde la
+    // ultima vez que se entro a esta pestana, no en cada visita.
+    if (vista === 'analisis' && modoAnalisisRenderizado !== filtroColectivoGlobal) {
+        actualizarModoAnalisis();
+    }
+
+    // Trayectorias de colectivos: mismo patron que Analisis
+    // (modoTrayectoriasRenderizado) - solo se reconstruye si
+    // filtroColectivoGlobal realmente cambio desde la ultima vez que se
+    // entro a esta pestana, no en cada visita. Trayectorias es navegable
+    // desde el principio (el usuario decide en que pestana define el
+    // colectivo, da igual cual). Ya no se recalcula sola al entrar: igual
+    // que en Analisis, el colectivo (recuentos) se ve al momento pero el
+    // grafico se queda como estaba (o con el aviso inicial) hasta que se
+    // pulse Calcular - ver alPulsarCalcular().
+    if (vista === 'trayectorias' && modoTrayectoriasRenderizado !== filtroColectivoGlobal) {
+        actualizarModoTrayectorias();
+    }
 
     // Trayectorias individuales: primera vez que se entra, carga un IPF al
     // azar sola (no hace falta pulsar el boton) - ver cargarIpfAleatorio().
+    // filtroColectivoGlobal (el switch, ahora en "Seleccion de colectivo")
+    // puede haber cambiado desde la ultima visita a esta pestana - se
+    // refresca el selector/boton siempre, no solo cuando esta activo (antes
+    // el switch vivia aqui mismo y no hacia falta cubrir el caso "estaba
+    // activo y ahora ya no": el propio click ya lo dejaba oculto).
     if (vista === 'individuales') {
         if (ipfActualIndividual === null) cargarIpfAleatorio();
-        // Los filtros pueden haber cambiado en otra pestana desde la ultima
-        // vez que se entro aqui con el switch activado - se refresca el
-        // selector/boton por si acaso (filtrosListos() puede haber cambiado).
-        if (filtroColectivoIndividual) cambiarFiltroColectivoIndividual(true);
+        actualizarSelectorSubgrupoIndividual();
     }
 
-    // Cruce de variables, con el switch en "Si": mismo motivo que Individuales
-    // arriba - filtro1/filtro2 pueden haber cambiado (o haberse completado)
-    // en otra pestana desde la ultima vez que se entro aqui.
-    if (vista === 'cruce' && filtroColectivoCruce) {
-        document.getElementById('cruce-aviso-filtros').style.display = filtrosListos() ? 'none' : 'block';
+    // Cruce de variables: mismo motivo que Individuales arriba, pero aqui la
+    // reconstruccion es mas cara (limpia el resultado calculado, las
+    // variables elegidas si dejan de ser validas, etc.) - solo se dispara si
+    // el modo realmente cambio desde la ultima vez que se entro a esta
+    // pestana (modoCruceRenderizado), no en cada visita.
+    if (vista === 'cruce') {
+        if (modoCruceRenderizado !== filtroColectivoGlobal) {
+            actualizarModoCruce();
+        } else if (filtroColectivoGlobal) {
+            document.getElementById('cruce-aviso-filtros').style.display = filtrosListos() ? 'none' : 'block';
+        }
     }
     actualizarBotonCalcular();
 }
 
 // boton-calcular es un solo elemento compartido por todas las pestanas (ver
 // #bloque-acciones-sidebar) - su condicion de habilitado depende de CUAL esta
-// activa: en todas salvo "Cruce con el switch en No" (que no necesita ningun
-// filtro de colectivo, ver cambiarFiltroColectivoCruce) sigue siendo
-// filtrosListos(), igual que siempre.
+// activa: en Analisis/Trayectorias/Cruce con filtroColectivoGlobal en No (ver
+// actualizarModoAnalisis/actualizarModoTrayectorias/actualizarModoCruce) no
+// hace falta ningun filtro de colectivo, se habilita siempre; en el resto
+// sigue siendo filtrosListos().
 function actualizarBotonCalcular() {
-    const listo = (vistaActiva === 'cruce' && !filtroColectivoCruce) ? true : filtrosListos();
+    const vistasSinFiltro = ['analisis', 'trayectorias', 'cruce'];
+    const sinFiltroNecesario = vistasSinFiltro.includes(vistaActiva) && !filtroColectivoGlobal;
+    const listo = sinFiltroNecesario ? true : filtrosListos();
     document.getElementById('boton-calcular').disabled = !listo;
 }
 
@@ -850,20 +986,29 @@ function filtrosListos() {
     return !!(ejeA && ejeB);
 }
 
+// Grupos de radios "Asignar a" duplicados (2026-09-09): uno por flujo
+// (numerico/categorico, ver seccion CSS "Pestana Seleccion de colectivo"),
+// pero solo hay UN destino logico compartido (filtros[1..4]) - toggleContracolectivo
+// y avanzarDestino actuan sobre los 2 grupos a la vez para que se mantengan
+// sincronizados entre si (si se completa Filtro 1 desde el flujo numerico,
+// el flujo categorico tambien debe saltar a ofrecer Filtro 2 a continuacion).
+const GRUPOS_DESTINO = ['destino-num', 'destino-cat'];
+
 function toggleContracolectivo(n) {
     const activo = document.getElementById('contracolectivo-' + n).checked;
     contracolectivo[n] = activo;
     const extra = n === 1 ? 3 : 4;
 
-    document.getElementById('radio-destino-' + extra).disabled = activo;
+    for (const grupo of GRUPOS_DESTINO) {
+        const radioExtra = document.getElementById(`radio-${grupo}-${extra}`);
+        radioExtra.disabled = activo;
+        if (activo && radioExtra.checked) {
+            document.querySelector(`input[name=${grupo}][value="${n}"]`).checked = true;
+        }
+    }
     document.getElementById('bloque-filtro' + extra + '-contenedor').style.display = activo ? 'none' : 'block';
 
-    if (activo) {
-        // Se reactiva el automatico: el filtro extra deja de usarse aunque se
-        // mantenga su valor, por si el usuario lo desactiva otra vez despues.
-        const radioExtra = document.getElementById('radio-destino-' + extra);
-        if (radioExtra.checked) document.querySelector(`input[name=destino][value="${n}"]`).checked = true;
-    } else {
+    if (!activo) {
         // Se desactiva: si Filtro 1 y 2 ya estan aplicados, el hueco que se
         // acaba de abrir (Filtro 3 o 4) es el siguiente destino logico -
         // permite encadenar la siguiente seleccion de columna sin tocar el radio.
@@ -882,21 +1027,17 @@ function toggleContracolectivo(n) {
 // Analisis o trayectoria) NO se dispara solo: espera siempre a
 // alPulsarCalcular(). La pestana "Trayectorias de colectivos" en si ya no se
 // deshabilita nunca - ver [[cambiarVista]] y filtrosListos().
+// Solo se llama desde controles que viven en "Seleccion de colectivo"
+// (toggleContracolectivo, aplicarFiltro) - vistaActiva siempre vale
+// 'seleccion' mientras esto se ejecuta (Cruce/Individuales ya no tienen
+// forma de tocar filtros directamente), por eso no hace falta refrescar el
+// aviso de Cruce aqui: eso ya lo cubre cambiarVista() al ENTRAR a esa
+// pestana, que es el unico momento en que puede quedar desactualizado.
 function actualizarEstadoFiltros() {
     const listo = filtrosListos();
 
     actualizarBotonCalcular();
     actualizarBotonExportar();
-    // Cruce con el switch en "Si" tambien depende de filtro1/filtro2 - si el
-    // usuario esta en esa pestana y los acaba de completar en otra sesion de
-    // configuracion (cambiarVista ya cubre el caso de "entrar" a la pestana;
-    // esto cubre "cambiar filtros mientras ya se esta viendo", aunque en la
-    // practica no puede pasar a la vez porque panel-filtros esta oculto en
-    // Cruce - se deja por coherencia con el resto de la funcion).
-    if (vistaActiva === 'cruce' && filtroColectivoCruce) {
-        document.getElementById('cruce-aviso-filtros').style.display = listo ? 'none' : 'block';
-    }
-
     actualizarRecuentosEnVivo(listo);
 }
 
@@ -922,75 +1063,92 @@ async function actualizarRecuentosEnVivo(listo) {
 async function cargarColumnas() {
     const resp = await fetch('/colectivos/columnas');
     columnasDisponibles = await resp.json();
-    renderizarListaColumnas();
+    renderizarListaNumericas();
+    renderizarListaCategoricas();
     poblarVariablesCruce();
 }
 
-function renderizarListaColumnas() {
-    const verNum = document.getElementById('mostrar-numericas').checked;
-    const verCat = document.getElementById('mostrar-categoricas').checked;
-    const cont = document.getElementById('lista-columnas');
+// 2 listas independientes (no una combinada con checkboxes Numericas/
+// Categoricas como antes): cada una siempre muestra solo su tipo, ver
+// seccion CSS "Pestana Seleccion de colectivo".
+function renderizarListaNumericas() {
+    const cont = document.getElementById('lista-numericas');
     cont.innerHTML = '';
-
-    const filas = [];
-    if (verNum) columnasDisponibles.numericas.forEach(c => filas.push({ nombre: c, tipo: 'numerica' }));
-    if (verCat) columnasDisponibles.categoricas.forEach(c => filas.push({ nombre: c, tipo: 'categorica' }));
-    filas.sort((a, b) => a.nombre.localeCompare(b.nombre));
-
-    for (const f of filas) {
+    const nombres = [...columnasDisponibles.numericas].sort();
+    for (const nombre of nombres) {
         const div = document.createElement('div');
         div.className = 'fila-columna';
-        if (columnaSeleccionada && columnaSeleccionada.nombre === f.nombre) div.classList.add('seleccionada');
-        div.innerHTML = `<span>${f.nombre}</span><span class="tipo">${f.tipo === 'numerica' ? 'num' : 'cat'}</span>`;
-        div.onclick = () => seleccionarColumna(f.nombre, f.tipo);
+        if (columnaSeleccionadaNumerica && columnaSeleccionadaNumerica.nombre === nombre) div.classList.add('seleccionada');
+        div.innerHTML = `<span>${nombre}</span><span class="tipo">num</span>`;
+        div.onclick = () => seleccionarColumnaNumerica(nombre);
         cont.appendChild(div);
     }
 }
 
-document.getElementById('mostrar-numericas').addEventListener('change', renderizarListaColumnas);
-document.getElementById('mostrar-categoricas').addEventListener('change', renderizarListaColumnas);
-
-async function seleccionarColumna(nombre, tipo) {
-    columnaSeleccionada = { nombre, tipo };
-    renderizarListaColumnas();
-
-    document.getElementById('config-filtro').style.display = 'block';
-    document.getElementById('config-numerica').style.display = tipo === 'numerica' ? 'block' : 'none';
-    document.getElementById('config-categorica').style.display = tipo === 'categorica' ? 'block' : 'none';
-
-    if (tipo === 'categorica') {
-        const lista = document.getElementById('lista-categorias');
-        lista.innerHTML = 'Cargando...';
-        const resp = await fetch('/colectivos/valores/' + encodeURIComponent(nombre));
-        const data = await resp.json();
-        valoresPorColumna[nombre] = data.valores; // cache para el label del complementario
-        lista.innerHTML = '';
-        for (const valor of data.valores) {
-            const label = document.createElement('label');
-            const input = document.createElement('input');
-            input.type = 'checkbox';
-            input.value = valor;
-            label.appendChild(input);
-            label.append(' ' + valor);
-            lista.appendChild(label);
-        }
+function renderizarListaCategoricas() {
+    const cont = document.getElementById('lista-categoricas');
+    cont.innerHTML = '';
+    const nombres = [...columnasDisponibles.categoricas].sort();
+    for (const nombre of nombres) {
+        const div = document.createElement('div');
+        div.className = 'fila-columna';
+        if (columnaSeleccionadaCategorica && columnaSeleccionadaCategorica.nombre === nombre) div.classList.add('seleccionada');
+        div.innerHTML = `<span>${nombre}</span><span class="tipo">cat</span>`;
+        div.onclick = () => seleccionarColumnaCategorica(nombre);
+        cont.appendChild(div);
     }
 }
 
-function aplicarFiltro() {
-    if (!columnaSeleccionada) return;
-    const destino = document.querySelector('input[name=destino]:checked').value;
+function seleccionarColumnaNumerica(nombre) {
+    columnaSeleccionadaNumerica = { nombre };
+    renderizarListaNumericas();
+}
+
+async function seleccionarColumnaCategorica(nombre) {
+    columnaSeleccionadaCategorica = { nombre };
+    renderizarListaCategoricas();
+
+    const lista = document.getElementById('lista-valores-categoria');
+    lista.innerHTML = 'Cargando...';
+    const resp = await fetch('/colectivos/valores/' + encodeURIComponent(nombre));
+    const data = await resp.json();
+    // La respuesta puede llegar tarde si el usuario ya eligio otra columna
+    // categorica mientras tanto - no pisar esa seleccion mas reciente con
+    // los valores de una anterior.
+    if (!columnaSeleccionadaCategorica || columnaSeleccionadaCategorica.nombre !== nombre) return;
+    valoresPorColumna[nombre] = data.valores; // cache para el label del complementario
+    lista.innerHTML = '';
+    for (const valor of data.valores) {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = valor;
+        label.appendChild(input);
+        label.append(' ' + valor);
+        lista.appendChild(label);
+    }
+}
+
+// tipo: 'numerica' o 'categorica' - un flujo independiente y completo cada
+// uno (lista propia + configuracion propia + "Asignar a" propio), ver
+// seccion CSS "Pestana Seleccion de colectivo". Antes habia una unica
+// funcion sin parametro que miraba columnaSeleccionada.tipo para decidir.
+function aplicarFiltro(tipo) {
+    const grupo = tipo === 'numerica' ? 'destino-num' : 'destino-cat';
+    const destino = document.querySelector(`input[name=${grupo}]:checked`).value;
 
     let filtro;
-    if (columnaSeleccionada.tipo === 'numerica') {
+    if (tipo === 'numerica') {
+        if (!columnaSeleccionadaNumerica) return;
         const operador = document.getElementById('operador-numerico').value;
         const valor = parseFloat(document.getElementById('valor-numerico').value);
         if (isNaN(valor)) { mostrarAviso('Introduce un valor numérico.', 'error'); return; }
-        filtro = { columna: columnaSeleccionada.nombre, tipo: 'numerica', operador, valor };
+        filtro = { columna: columnaSeleccionadaNumerica.nombre, tipo: 'numerica', operador, valor };
     } else {
-        const marcadas = [...document.querySelectorAll('#lista-categorias input:checked')].map(i => i.value);
+        if (!columnaSeleccionadaCategorica) return;
+        const marcadas = [...document.querySelectorAll('#lista-valores-categoria input:checked')].map(i => i.value);
         if (marcadas.length === 0) { mostrarAviso('Marca al menos una categoría.', 'error'); return; }
-        filtro = { columna: columnaSeleccionada.nombre, tipo: 'categorica', categorias: marcadas };
+        filtro = { columna: columnaSeleccionadaCategorica.nombre, tipo: 'categorica', categorias: marcadas };
     }
 
     filtros[destino] = filtro;
@@ -1012,11 +1170,17 @@ function siguienteDestino() {
     return null;
 }
 
+// Adelanta LOS 2 grupos de radios (numerico y categorico) al mismo destino
+// siguiente - solo hay un destino logico compartido (filtros[1..4]), asi
+// que ambos flujos deben ofrecer siempre el mismo proximo hueco, se haya
+// aplicado el ultimo filtro desde el flujo que se haya aplicado.
 function avanzarDestino() {
     const siguiente = siguienteDestino();
     if (!siguiente) return;
-    const radio = document.querySelector(`input[name=destino][value="${siguiente}"]`);
-    if (radio && !radio.disabled) radio.checked = true;
+    for (const grupo of GRUPOS_DESTINO) {
+        const radio = document.querySelector(`input[name=${grupo}][value="${siguiente}"]`);
+        if (radio && !radio.disabled) radio.checked = true;
+    }
 }
 
 // Columnas tratadas como binarias por decision explicita aunque tengan mas
@@ -1073,6 +1237,33 @@ function renderizarResumenFiltro(n) {
 }
 
 let ultimoResultado = null;
+// Que valor de filtroColectivoGlobal estaba activo la ultima vez que se
+// reconstruyo "Analisis de colectivos" entera (actualizarModoAnalisis) -
+// mismo patron que modoCruceRenderizado en Cruce de variables. Arranca en
+// concordancia con el valor inicial de filtroColectivoGlobal para no
+// reconstruir de mas en la primera visita.
+let modoAnalisisRenderizado = true;
+
+function actualizarModoAnalisis() {
+    modoAnalisisRenderizado = filtroColectivoGlobal;
+    ultimoResultado = null;
+    ultimosSubgruposNumericos = null;
+    ultimosSubgruposCategoricos = null;
+    const mensaje = filtroColectivoGlobal
+        ? 'Configura Filtro 1 y Filtro 2 en "Selección de colectivo", y pulsa Calcular.'
+        : 'Pulsa Calcular para ver las estadísticas de toda la MCVL.';
+    document.getElementById('contenedor-numericas').innerHTML = `<p class="aviso-vacio">${mensaje}</p>`;
+    document.getElementById('contenedor-categoricas').innerHTML = `<p class="aviso-vacio">${mensaje}</p>`;
+    const cont = document.getElementById('recuentos-numericas');
+    if (cont) cont.innerHTML = '';
+    // Al volver a Si, restaura de inmediato la vista previa en vivo de
+    // filtro1-4 (si ya estan listos) - contenedoresRecuentosEnVivo() ya
+    // incluye recuentos-numericas en este modo, pero solo se rellena la
+    // proxima vez que cambie algun filtro sin este empujon.
+    if (filtroColectivoGlobal) actualizarRecuentosEnVivo(filtrosListos());
+    actualizarBotonCalcular();
+    actualizarBotonExportar();
+}
 
 // Filtro 3/4 solo viajan al backend si su eje tiene el contracolectivo
 // automatico desactivado; si no, el backend calcula el complementario solo.
@@ -1083,17 +1274,29 @@ function cuerpoPeticion() {
     return body;
 }
 
+// "Filtro de colectivos" en No (switch global, ver filtroColectivoGlobal):
+// sin filtro1/filtro2 que mandar, /colectivos/subgrupos-sin-filtro no
+// necesita cuerpo - el resto de la funcion (renderizarNumericas/Categoricas)
+// no distingue de donde vino el resultado, solo mira gruposActivos().
 async function calcular() {
-    const cuerpo = cuerpoPeticion();
-    const resp = await fetch('/colectivos/subgrupos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cuerpo),
-    });
-    if (!resp.ok) { mostrarAviso('Error al calcular: ' + (await resp.text()), 'error'); return; }
-    ultimoResultado = await resp.json();
+    let datos;
+    if (filtroColectivoGlobal) {
+        const resp = await fetch('/colectivos/subgrupos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cuerpoPeticion()),
+        });
+        if (!resp.ok) { mostrarAviso('Error al calcular: ' + (await resp.text()), 'error'); return; }
+        datos = await resp.json();
+    } else {
+        const resp = await fetch('/colectivos/subgrupos-sin-filtro');
+        if (!resp.ok) { mostrarAviso('Error al calcular: ' + (await resp.text()), 'error'); return; }
+        datos = await resp.json();
+    }
+    ultimoResultado = datos;
     renderizarNumericas(ultimoResultado.subgrupos);
     renderizarCategoricas(ultimoResultado.subgrupos);
+    actualizarBotonExportar(); // ya hay resultado que exportar
 }
 
 // Unico onclick de #boton-calcular, compartido por las 2 pestanas (ver
@@ -1205,6 +1408,27 @@ let ultimoCuerpoTrayectorias = null;
 // quedandose pintado tras pedir CNAE2009_CC). Solo se aplica la respuesta de
 // la ultima peticion lanzada.
 let tokenTrayectorias = 0;
+
+// Que valor de filtroColectivoGlobal estaba activo la ultima vez que se
+// reconstruyo "Trayectorias de colectivos" entera - mismo patron que
+// modoAnalisisRenderizado/modoCruceRenderizado. Arranca en concordancia con
+// el valor inicial de filtroColectivoGlobal para no reconstruir de mas en
+// la primera visita.
+let modoTrayectoriasRenderizado = true;
+
+function actualizarModoTrayectorias() {
+    modoTrayectoriasRenderizado = filtroColectivoGlobal;
+    ultimoResultadoTrayectorias = null;
+    ultimoCuerpoTrayectorias = null;
+    const cont = document.getElementById('recuentos-trayectorias');
+    if (cont) cont.innerHTML = '';
+    document.getElementById('grafico-trayectoria').innerHTML = `<p class="aviso-vacio">${filtroColectivoGlobal
+        ? 'Configura Filtro 1 y Filtro 2 en "Selección de colectivo", y pulsa Calcular, para ver las trayectorias del colectivo.'
+        : 'Pulsa Calcular para ver las trayectorias de toda la MCVL.'}</p>`;
+    if (filtroColectivoGlobal) actualizarRecuentosEnVivo(filtrosListos());
+    actualizarBotonCalcular();
+    actualizarBotonExportar();
+}
 
 function variableActivaInfo() {
     return VARIABLES_POR_TABLA[tablaTrayectorias].find(v => v.valor === variableTrayectoria);
@@ -1371,7 +1595,7 @@ function dibujarGraficoTrayectorias() {
     div.innerHTML = '';
     const traces = [];
 
-    for (const nombre of ORDEN_SUBGRUPOS) {
+    for (const nombre of gruposActivos()) {
         const r = ultimoResultadoTrayectorias[nombre];
         const serie = r.series[ejeXTrayectorias];
         if (!serie.length) continue;
@@ -1429,8 +1653,9 @@ function dibujarGraficoCategoricoTrayectoria() {
     // tonos - ver dibujarApiladas), el resto se pliega en "Otros valores"
     // (gris, COLOR_OTROS). Mismo color por identidad de categoria en los 4
     // mini-graficos, para poder comparar subcolectivos entre si de un vistazo.
+    const grupos = gruposActivos();
     const pesoTotal = new Map();
-    for (const nombre of ORDEN_SUBGRUPOS) {
+    for (const nombre of grupos) {
         for (const p of ultimoResultadoTrayectorias[nombre].series[ejeXTrayectorias]) {
             for (const [cat, v] of Object.entries(p.valores)) {
                 pesoTotal.set(cat, (pesoTotal.get(cat) || 0) + v.n);
@@ -1449,7 +1674,7 @@ function dibujarGraficoCategoricoTrayectoria() {
     ).join('') + (hayOtras ? `<span><span class="leyenda-swatch" style="background:${COLOR_OTROS}"></span>Otros valores</span>` : '');
 
     const rejilla = document.getElementById('rejilla-trayectoria-cat');
-    for (const nombre of ORDEN_SUBGRUPOS) {
+    for (const nombre of grupos) {
         const r = ultimoResultadoTrayectorias[nombre];
         // Mismo corte por fiabilidad que la trayectoria numerica (ver
         // umbralFiabilidad): por debajo del umbral, ese punto no se dibuja.
@@ -1530,19 +1755,20 @@ function dibujarGraficoPorCategorias() {
     cont.innerHTML = '<div class="grid-categorias-trayectoria" id="grid-categorias-trayectoria"></div>';
     const grid = document.getElementById('grid-categorias-trayectoria');
 
+    const grupos = gruposActivos();
     const categorias = [];
     const vistas = new Set();
-    for (const nombre of ORDEN_SUBGRUPOS) {
+    for (const nombre of grupos) {
         for (const cat of ultimoResultadoTrayectorias[nombre].categorias) {
             if (!vistas.has(cat)) { vistas.add(cat); categorias.push(cat); }
         }
     }
 
     // Umbral de esta vista: no es el N de un subcolectivo (aqui se reparte
-    // el total entre los 4), es el N COMBINADO de los 4 en ese punto. "N >
-    // 1%" se interpreta sobre el recuento total del colectivo (suma de los
-    // 4 subcolectivos), no sobre uno solo - ver conversacion 2026-08-28.
-    const recuentoTotalColectivo = ORDEN_SUBGRUPOS.reduce((s, nombre) => s + ultimoResultadoTrayectorias[nombre].recuento, 0);
+    // el total entre los grupos activos), es el N COMBINADO en ese punto.
+    // "N > 1%" se interpreta sobre el recuento total del colectivo (suma de
+    // los grupos), no sobre uno solo - ver conversacion 2026-08-28.
+    const recuentoTotalColectivo = grupos.reduce((s, nombre) => s + ultimoResultadoTrayectorias[nombre].recuento, 0);
     const umbralTotal = umbralFiabilidad(recuentoTotalColectivo);
 
     for (const categoria of categorias) {
@@ -1555,24 +1781,24 @@ function dibujarGraficoPorCategorias() {
         // esta categoria en un punto aporta 0, no se omite (sigue sumando al
         // total de los otros 3).
         const nPorX = {};
-        for (const nombre of ORDEN_SUBGRUPOS) {
+        for (const nombre of grupos) {
             for (const p of ultimoResultadoTrayectorias[nombre].series[ejeXTrayectorias]) {
                 (nPorX[p.x] ??= {})[nombre] = p.valores[categoria]?.n ?? 0;
             }
         }
 
-        // Puntos por debajo del umbral se descartan ENTEROS (las 4 areas de
-        // ese x a la vez) - no tiene sentido enseñar un reparto fiable de un
-        // total que no lo es.
+        // Puntos por debajo del umbral se descartan ENTEROS (todas las areas
+        // de ese x a la vez) - no tiene sentido enseñar un reparto fiable de
+        // un total que no lo es.
         const xFiable = [], totalPorX = {};
         for (const x of Object.keys(nPorX).map(Number).sort((a, b) => a - b)) {
-            const total = ORDEN_SUBGRUPOS.reduce((s, nombre) => s + (nPorX[x][nombre] ?? 0), 0);
+            const total = grupos.reduce((s, nombre) => s + (nPorX[x][nombre] ?? 0), 0);
             if (total < umbralTotal) continue;
             xFiable.push(x);
             totalPorX[x] = total;
         }
 
-        const traces = ORDEN_SUBGRUPOS.map(nombre => ({
+        const traces = grupos.map(nombre => ({
             type: 'scatter', mode: 'lines', name: ultimoResultadoTrayectorias[nombre].etiqueta, stackgroup: 'uno',
             x: xFiable,
             y: xFiable.map(x => 100 * (nPorX[x][nombre] ?? 0) / totalPorX[x]),
@@ -1608,38 +1834,70 @@ function dibujarGraficoPorCategorias() {
 // Solo se llama desde alPulsarCalcular (boton Calcular) - ya no se dispara
 // sola al cambiar filtro/tabla/variable, ver actualizarEstadoFiltros,
 // cambiarTablaTrayectorias y cambiarVariableTrayectoria.
+// Con filtroColectivoGlobal en Si, exactamente como siempre (filtro1-4,
+// POST). En No (2026-09-09), sin filtro1-4 que mandar - GET al mismo
+// endpoint con sufijo "-sin-filtro" (variable categorica como query param,
+// ver trayectorias.py) y un unico grupo GRUPO_SIN_FILTRO en la respuesta en
+// vez de los 4 subgrupos; el resto de la funcion (redibujarTrayectoria,
+// recuentos) no distingue de donde vino el resultado, solo mira gruposActivos().
 async function sincronizarTrayectorias() {
     const div = document.getElementById('grafico-trayectoria');
-    if (!filtrosListos()) {
-        div.innerHTML = '<p class="aviso-vacio">Configura Filtro 1 y Filtro 2, y pulsa Calcular, para ver las trayectorias del colectivo.</p>';
-        return;
-    }
-
     const info = variableActivaInfo();
-    const cuerpo = cuerpoPeticion();
-    if (info.tipo === 'categorica') cuerpo.variable = info.valor;
-    const clave = tablaTrayectorias + ':' + info.valor + ':' + JSON.stringify(cuerpo);
-    if (clave === ultimoCuerpoTrayectorias) return; // mismo colectivo+tabla+variable, el grafico ya esta al dia
 
-    const nombreTabla = NOMBRE_TABLA_TRAYECTORIAS[tablaTrayectorias];
-    div.innerHTML = `<p class="aviso-vacio">Calculando trayectorias del colectivo… puede tardar un rato (recorre toda la tabla de ${nombreTabla}).</p>`;
+    if (filtroColectivoGlobal) {
+        if (!filtrosListos()) {
+            div.innerHTML = '<p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en "Selección de colectivo", y pulsa Calcular, para ver las trayectorias del colectivo.</p>';
+            return;
+        }
+        const cuerpo = cuerpoPeticion();
+        if (info.tipo === 'categorica') cuerpo.variable = info.valor;
+        const clave = 'si:' + tablaTrayectorias + ':' + info.valor + ':' + JSON.stringify(cuerpo);
+        if (clave === ultimoCuerpoTrayectorias) return; // mismo colectivo+tabla+variable, el grafico ya esta al dia
 
-    const miToken = ++tokenTrayectorias;
-    const resp = await fetch(info.endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cuerpo),
-    });
-    if (miToken !== tokenTrayectorias) return; // ya hay una peticion mas nueva en marcha, esta respuesta es vieja
-    if (!resp.ok) {
-        div.innerHTML = '<p class="aviso-vacio">Error al calcular: ' + (await resp.text()) + '</p>';
-        return;
+        const nombreTabla = NOMBRE_TABLA_TRAYECTORIAS[tablaTrayectorias];
+        div.innerHTML = `<p class="aviso-vacio">Calculando trayectorias del colectivo… puede tardar un rato (recorre toda la tabla de ${nombreTabla}).</p>`;
+
+        const miToken = ++tokenTrayectorias;
+        const resp = await fetch(info.endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cuerpo),
+        });
+        if (miToken !== tokenTrayectorias) return; // ya hay una peticion mas nueva en marcha, esta respuesta es vieja
+        if (!resp.ok) {
+            div.innerHTML = '<p class="aviso-vacio">Error al calcular: ' + (await resp.text()) + '</p>';
+            return;
+        }
+        const datos = await resp.json();
+        if (miToken !== tokenTrayectorias) return; // idem, por si una peticion mas nueva se adelanto mientras se parseaba la respuesta
+        ultimoCuerpoTrayectorias = clave;
+        ultimoResultadoTrayectorias = datos;
+    } else {
+        const clave = 'no:' + tablaTrayectorias + ':' + info.valor;
+        if (clave === ultimoCuerpoTrayectorias) return;
+
+        const nombreTabla = NOMBRE_TABLA_TRAYECTORIAS[tablaTrayectorias];
+        div.innerHTML = `<p class="aviso-vacio">Calculando trayectorias de toda la MCVL… puede tardar un rato (recorre toda la tabla de ${nombreTabla}).</p>`;
+
+        const miToken = ++tokenTrayectorias;
+        const endpoint = info.endpoint + '-sin-filtro' + (info.tipo === 'categorica' ? '?variable=' + encodeURIComponent(info.valor) : '');
+        const resp = await fetch(endpoint);
+        if (miToken !== tokenTrayectorias) return;
+        if (!resp.ok) {
+            div.innerHTML = '<p class="aviso-vacio">Error al calcular: ' + (await resp.text()) + '</p>';
+            return;
+        }
+        const datos = await resp.json();
+        if (miToken !== tokenTrayectorias) return;
+        ultimoCuerpoTrayectorias = clave;
+        ultimoResultadoTrayectorias = datos;
     }
-    const datos = await resp.json();
-    if (miToken !== tokenTrayectorias) return; // idem, por si una peticion mas nueva se adelanto mientras se parseaba la respuesta
-    ultimoCuerpoTrayectorias = clave;
-    ultimoResultadoTrayectorias = datos;
-    renderizarRecuentosEnTodos(ultimoResultadoTrayectorias);
+
+    // "recuentos-trayectorias" ya no forma parte de la vista previa en vivo
+    // cuando el switch esta en No (ver contenedoresRecuentosEnVivo) - se
+    // actualiza aqui, directamente, con el resultado real ya calculado
+    // (gruposActivos(): 1 grupo "Toda la MCVL" o los 4 subgrupos de siempre).
+    renderizarRecuentosNumericas(ultimoResultadoTrayectorias, 'recuentos-trayectorias', gruposActivos());
     redibujarTrayectoria();
     actualizarBotonExportar(); // ya hay datos de trayectoria que exportar
 }
@@ -1685,38 +1943,55 @@ function estadisticoDestacado(media, desviacion) {
     return Math.abs(desviacion / media) > 0.3 ? 'mediana' : 'media';
 }
 
-// Valor absoluto de personas de cada subcolectivo - fuera del switch
-// Datos/Graficos (se pinta una vez y se queda igual pase lo que pase con el
-// switch, no es una vista mas sino contexto siempre visible). Se pinta en
-// dos sitios (pestana Analisis y pestana Trayectorias, ver
-// renderizarRecuentosEnTodos) con exactamente el mismo aspecto y datos, asi
-// que recibe el id del contenedor en vez de asumir uno fijo. subgrupos aqui
-// solo necesita .etiqueta/.recuento por entrada - vale tanto el resultado
-// completo de /colectivos/subgrupos como el ligero de /colectivos/recuentos.
-function renderizarRecuentosNumericas(subgrupos, contenedorId) {
+// Valor absoluto de personas de cada grupo - fuera del switch Datos/Graficos
+// (se pinta una vez y se queda igual pase lo que pase con el switch, no es
+// una vista mas sino contexto siempre visible). Se pinta en varios sitios
+// (pestanas Seleccion/Analisis/Trayectorias, ver renderizarRecuentosEnTodos)
+// con exactamente el mismo aspecto, asi que recibe el id del contenedor en
+// vez de asumir uno fijo. `grupos` (por defecto los 4 subgrupos de siempre)
+// es la lista de claves a recorrer en `subgrupos` - Analisis pasa
+// gruposActivos() explicitamente (1 o 4, ver GRUPO_SIN_FILTRO), el resto de
+// llamadores (Seleccion, Trayectorias, todavia sin modo "sin filtro") se
+// quedan con el valor por defecto. subgrupos aqui solo necesita
+// .etiqueta/.recuento por entrada - vale tanto el resultado completo de
+// /colectivos/subgrupos(-sin-filtro) como el ligero de /colectivos/recuentos.
+function renderizarRecuentosNumericas(subgrupos, contenedorId, grupos = ORDEN_SUBGRUPOS) {
     const cont = document.getElementById(contenedorId);
     if (!cont) return;
     cont.innerHTML = `
-        <div class="lista-recuentos">${ORDEN_SUBGRUPOS.map(nombre => `
+        <div class="lista-recuentos">${grupos.map(nombre => `
             <div><span class="numero-subgrupo">${NUMERO_SUBGRUPO[nombre]}</span>
                 <span class="leyenda-swatch" style="background:${COLOR_SUBGRUPO[nombre]}"></span>${subgrupos[nombre].etiqueta}</div>
         `).join('')}</div>
         <div class="columna-pastilla">
             <span class="titulo-pastilla">Personas</span>
-            <div class="pastilla-recuentos">${ORDEN_SUBGRUPOS.map(nombre => `
+            <div class="pastilla-recuentos">${grupos.map(nombre => `
                 <span class="valor-recuento" style="border-color:${COLOR_SUBGRUPO[nombre]}">${fmtEntero(subgrupos[nombre].recuento)}</span>
             `).join('')}</div>
         </div>`;
 }
 
-const CONTENEDORES_RECUENTOS = ['recuentos-numericas', 'recuentos-trayectorias'];
+// "recuentos-seleccion" (pestana "Seleccion de colectivo") se duplica aqui a
+// proposito, decision explicita del usuario 2026-09-09: la misma caja
+// tambien se queda donde ya estaba en Analisis/Trayectorias (no se quita de
+// ahi), simplemente con la fuente mas grande en Seleccion (ver
+// #recuentos-seleccion.recuentos-grande) por tener mas sitio disponible.
+// "recuentos-numericas" (Analisis) y "recuentos-trayectorias" (Trayectorias)
+// NO entran en esta vista previa cuando el switch global esta en No: en ese
+// modo no hay filtro1-4 que previsualizar ahi, cada pestana gestiona su
+// propia caja directamente con el resultado real ya calculado (1 grupo
+// "Toda la MCVL" - ver renderizarNumericas/sincronizarTrayectorias).
+function contenedoresRecuentosEnVivo() {
+    const base = ['recuentos-seleccion'];
+    return filtroColectivoGlobal ? [...base, 'recuentos-numericas', 'recuentos-trayectorias'] : base;
+}
 
 function renderizarRecuentosEnTodos(subgrupos) {
-    for (const id of CONTENEDORES_RECUENTOS) renderizarRecuentosNumericas(subgrupos, id);
+    for (const id of contenedoresRecuentosEnVivo()) renderizarRecuentosNumericas(subgrupos, id);
 }
 
 function limpiarRecuentos() {
-    for (const id of CONTENEDORES_RECUENTOS) {
+    for (const id of contenedoresRecuentosEnVivo()) {
         const cont = document.getElementById(id);
         if (cont) cont.innerHTML = '';
     }
@@ -1724,24 +1999,29 @@ function limpiarRecuentos() {
 
 function renderizarNumericas(subgrupos) {
     ultimosSubgruposNumericos = subgrupos;
-    renderizarRecuentosEnTodos(subgrupos);
+    // "recuentos-numericas" (Analisis) ya no forma parte de la vista previa
+    // en vivo cuando el switch esta en No (ver contenedoresRecuentosEnVivo) -
+    // se actualiza aqui, directamente, con el resultado real ya calculado
+    // (gruposActivos(): 1 grupo "Toda la MCVL" o los 4 subgrupos de siempre).
+    renderizarRecuentosNumericas(subgrupos, 'recuentos-numericas', gruposActivos());
     if (vistaNumericas === 'graficos') renderizarGraficosNumericos(subgrupos);
     else renderizarTablaNumericas(subgrupos);
 }
 
 function renderizarTablaNumericas(subgrupos) {
-    const columnas = subgrupos[ORDEN_SUBGRUPOS[0]].numericas.map(d => d.columna);
+    const grupos = gruposActivos();
+    const columnas = subgrupos[grupos[0]].numericas.map(d => d.columna);
     let html = '<table id="tabla-numericas"><thead><tr><th rowspan="2">Columna</th>';
-    for (const nombre of ORDEN_SUBGRUPOS) {
+    for (const nombre of grupos) {
         html += `<th colspan="2">${subgrupos[nombre].etiqueta}</th>`;
     }
     html += '</tr><tr>';
-    for (let i = 0; i < ORDEN_SUBGRUPOS.length; i++) html += '<th>Media</th><th>Mediana</th>';
+    for (let i = 0; i < grupos.length; i++) html += '<th>Media</th><th>Mediana</th>';
     html += '</tr></thead><tbody>';
 
     columnas.forEach((nombreCol, i) => {
         html += `<tr><td>${nombreCol}</td>`;
-        for (const nombre of ORDEN_SUBGRUPOS) {
+        for (const nombre of grupos) {
             const s = subgrupos[nombre].numericas[i];
             const destaca = estadisticoDestacado(s.media, s.desviacion);
             const media = destaca === 'media' ? `<b>${fmt(s.media)}</b>` : fmt(s.media);
@@ -1754,18 +2034,20 @@ function renderizarTablaNumericas(subgrupos) {
     document.getElementById('contenedor-numericas').innerHTML = html;
 }
 
-// Un unico estadistico por columna para las 4 barras del mismo mini-grafico -
-// mezclar media en una barra y mediana en la de al lado dentro del mismo grafico
-// hace la comparacion enganosa (alturas no serian comparables). Se elige el que
-// la tabla destaca en mas de los 4 subcolectivos (mayoria); en empate 2-2 gana
-// la mediana (mas robusta frente a outliers).
+// Un unico estadistico por columna para las barras del mismo mini-grafico -
+// mezclar media en una barra y mediana en la de al lado dentro del mismo
+// grafico hace la comparacion enganosa (alturas no serian comparables). Se
+// elige el que la tabla destaca en mas de la mitad de los grupos (mayoria);
+// en empate gana la mediana (mas robusta frente a outliers) - con 1 solo
+// grupo (modo sin filtro), "mayoria" es simplemente lo que diga ese grupo.
 function estadisticoMayoritario(entradas) {
     const votosMedia = entradas.filter(s => estadisticoDestacado(s.media, s.desviacion) === 'media').length;
-    return votosMedia > 2 ? 'media' : 'mediana';
+    return votosMedia > entradas.length / 2 ? 'media' : 'mediana';
 }
 
 function renderizarGraficosNumericos(subgrupos) {
-    const columnas = subgrupos[ORDEN_SUBGRUPOS[0]].numericas.map(d => d.columna);
+    const grupos = gruposActivos();
+    const columnas = subgrupos[grupos[0]].numericas.map(d => d.columna);
     const cont = document.getElementById('contenedor-numericas');
     cont.innerHTML = '';
 
@@ -1777,7 +2059,7 @@ function renderizarGraficosNumericos(subgrupos) {
     cont.appendChild(grid);
 
     columnas.forEach((nombreCol, i) => {
-        const entradas = ORDEN_SUBGRUPOS.map(nombre => subgrupos[nombre].numericas[i]);
+        const entradas = grupos.map(nombre => subgrupos[nombre].numericas[i]);
         const estadistico = estadisticoMayoritario(entradas);
         const valores = entradas.map(s => s[estadistico]);
 
@@ -1789,12 +2071,12 @@ function renderizarGraficosNumericos(subgrupos) {
         // barras son media o mediana.
         caja.innerHTML = `<div class="titulo-grafico">${nombreCol} <span class="subtitulo-grafico">(${estadistico})</span></div><div class="mini-grafico"></div>`;
         grid.appendChild(caja);
-        const colores = ORDEN_SUBGRUPOS.map(nombre => COLOR_SUBGRUPO[nombre]);
-        const hovertext = ORDEN_SUBGRUPOS.map((nombre, idx) => `${subgrupos[nombre].etiqueta}: ${fmt(valores[idx])}`);
+        const colores = grupos.map(nombre => COLOR_SUBGRUPO[nombre]);
+        const hovertext = grupos.map((nombre, idx) => `${subgrupos[nombre].etiqueta}: ${fmt(valores[idx])}`);
 
         Plotly.newPlot(caja.querySelector('.mini-grafico'), [{
             type: 'bar',
-            x: ORDEN_SUBGRUPOS.map((_, idx) => idx),
+            x: grupos.map((_, idx) => idx),
             y: valores,
             width: 0.55,
             marker: { color: colores },
@@ -1817,15 +2099,15 @@ function renderizarGraficosNumericos(subgrupos) {
     });
 }
 
-// Union de los valores vistos en cualquiera de los 4 subgrupos (orden de
-// aparicion, cada subgrupo ya llega ordenado de mas a menos frecuente desde
-// el backend) + un Map por subgrupo valor->entrada para consultarlo directo.
+// Union de los valores vistos en cualquiera de los grupos activos (orden de
+// aparicion, cada grupo ya llega ordenado de mas a menos frecuente desde el
+// backend) + un Map por grupo valor->entrada para consultarlo directo.
 // Compartido entre la tabla y los 4 tipos de grafico para no recalcularlo.
 function _datosColumnaCategorica(subgrupos, idx) {
     const mapas = {};
     const vistos = [];
     const vistosSet = new Set();
-    for (const nombre of ORDEN_SUBGRUPOS) {
+    for (const nombre of gruposActivos()) {
         const entrada = subgrupos[nombre].categoricas[idx];
         mapas[nombre] = new Map(entrada.valores.map(v => [v.valor, v]));
         for (const v of entrada.valores) {
@@ -1842,21 +2124,22 @@ function renderizarCategoricas(subgrupos) {
 }
 
 function renderizarTablaCategoricas(subgrupos) {
-    const columnas = subgrupos[ORDEN_SUBGRUPOS[0]].categoricas.map(d => d.columna);
+    const grupos = gruposActivos();
+    const columnas = subgrupos[grupos[0]].categoricas.map(d => d.columna);
     let html = '';
 
     columnas.forEach((nombreCol, idx) => {
         const { mapas, vistos } = _datosColumnaCategorica(subgrupos, idx);
 
         html += `<table class="tabla-categorica"><thead><tr><th></th>`;
-        for (const nombre of ORDEN_SUBGRUPOS) html += `<th colspan="2">${subgrupos[nombre].etiqueta}</th>`;
+        for (const nombre of grupos) html += `<th colspan="2">${subgrupos[nombre].etiqueta}</th>`;
         html += `</tr><tr><th>${nombreCol}</th>`;
-        for (const _ of ORDEN_SUBGRUPOS) html += '<th>Conteo</th><th>%</th>';
+        for (const _ of grupos) html += '<th>Conteo</th><th>%</th>';
         html += '</tr></thead><tbody>';
 
         for (const valor of vistos) {
             html += `<tr><td>${valor}</td>`;
-            for (const nombre of ORDEN_SUBGRUPOS) {
+            for (const nombre of grupos) {
                 const entrada = mapas[nombre].get(valor);
                 html += entrada ? `<td>${fmtEntero(entrada.conteo)}</td><td>${fmt(entrada.porcentaje)}</td>` : '<td></td><td></td>';
             }
@@ -1869,7 +2152,7 @@ function renderizarTablaCategoricas(subgrupos) {
 }
 
 function renderizarGraficosCategoricos(subgrupos) {
-    const columnas = subgrupos[ORDEN_SUBGRUPOS[0]].categoricas.map(d => d.columna);
+    const columnas = subgrupos[gruposActivos()[0]].categoricas.map(d => d.columna);
     const cont = document.getElementById('contenedor-categoricas');
     cont.innerHTML = '';
 
@@ -1944,7 +2227,7 @@ function dibujarAgrupadas(div, subgrupos, mapas, vistos, nombreCol) {
     // HTML que haya dejado un tipo anterior si ese HTML no lo creo Plotly
     // directamente sobre este div (p.ej. varios sub-paneles propios).
     div.innerHTML = '';
-    const traces = ORDEN_SUBGRUPOS.map(nombre => ({
+    const traces = gruposActivos().map(nombre => ({
         type: 'bar',
         name: subgrupos[nombre].etiqueta,
         x: vistos,
@@ -1995,7 +2278,7 @@ function dibujarAgrupadasHorizontal(div, subgrupos, mapas, vistos) {
     // otros tipos con muchas categorias).
     const ancho = 560;
     div.style.minWidth = ancho + 'px';
-    const traces = ORDEN_SUBGRUPOS.map(nombre => ({
+    const traces = gruposActivos().map(nombre => ({
         type: 'bar',
         orientation: 'h',
         name: subgrupos[nombre].etiqueta,
@@ -2043,21 +2326,22 @@ function dibujarApiladas(div, subgrupos, mapas, vistos) {
     div.innerHTML = '';
     div.style.minWidth = '';
 
+    const grupos = gruposActivos();
     const totalPorValor = new Map(vistos.map(v => [
         v,
-        ORDEN_SUBGRUPOS.reduce((s, n) => s + (mapas[n].get(v)?.conteo || 0), 0),
+        grupos.reduce((s, n) => s + (mapas[n].get(v)?.conteo || 0), 0),
     ]));
     const topCategorias = [...vistos]
         .sort((a, b) => totalPorValor.get(b) - totalPorValor.get(a))
         .slice(0, PALETA_VALOR.length);
 
-    const numeros = ORDEN_SUBGRUPOS.map(n => NUMERO_SUBGRUPO[n]);
+    const numeros = grupos.map(n => NUMERO_SUBGRUPO[n]);
     const traces = topCategorias.map((valor, i) => ({
         type: 'bar',
         orientation: 'h',
         name: valor,
         y: numeros,
-        x: ORDEN_SUBGRUPOS.map(n => mapas[n].get(valor)?.porcentaje ?? 0),
+        x: grupos.map(n => mapas[n].get(valor)?.porcentaje ?? 0),
         marker: { color: PALETA_VALOR[i] },
         hovertemplate: `subcolectivo %{y} — ${valor}: %{x:.1f}%<extra></extra>`,
     }));
@@ -2066,7 +2350,7 @@ function dibujarApiladas(div, subgrupos, mapas, vistos) {
         orientation: 'h',
         name: 'Otros',
         y: numeros,
-        x: ORDEN_SUBGRUPOS.map(n => {
+        x: grupos.map(n => {
             const sumaTop = topCategorias.reduce((s, v) => s + (mapas[n].get(v)?.porcentaje ?? 0), 0);
             return Math.max(0, 100 - sumaTop);
         }),
@@ -2104,9 +2388,10 @@ function dibujarApiladas(div, subgrupos, mapas, vistos) {
 function dibujarMapaCalor(div, subgrupos, mapas, vistos) {
     div.innerHTML = '';
     div.style.minWidth = '';
+    const grupos = gruposActivos();
     const filas = vistos.slice(0, 15);
-    const x = ORDEN_SUBGRUPOS.map(n => NUMERO_SUBGRUPO[n]);
-    const z = filas.map(v => ORDEN_SUBGRUPOS.map(n => mapas[n].get(v)?.porcentaje ?? null));
+    const x = grupos.map(n => NUMERO_SUBGRUPO[n]);
+    const z = filas.map(v => grupos.map(n => mapas[n].get(v)?.porcentaje ?? null));
 
     // Escala fija 0-100% (no al maximo de cada columna): asi el mismo verde
     // significa siempre el mismo porcentaje en cualquier mapa de calor, no
@@ -2160,6 +2445,10 @@ function actualizarBotonExportar() {
     const boton = document.getElementById('boton-exportar');
     if (vistaActiva === 'trayectorias') boton.disabled = !ultimoResultadoTrayectorias;
     else if (vistaActiva === 'cruce') boton.disabled = !ultimoResultadoCruce;
+    // Analisis con filtroColectivoGlobal en No: sin filtro1/filtro2 que
+    // completar, la condicion pasa a ser "ya se calculo algo" (igual que
+    // Trayectorias/Cruce), no filtrosListos().
+    else if (vistaActiva === 'analisis' && !filtroColectivoGlobal) boton.disabled = !ultimoResultado;
     else boton.disabled = !filtrosListos();
 }
 
@@ -2181,6 +2470,13 @@ async function exportarExcel() {
 }
 
 async function exportarExcelAnalisis() {
+    if (!filtroColectivoGlobal) {
+        if (!ultimoResultado) return;
+        const resp = await fetch('/colectivos/exportar-sin-filtro');
+        if (!resp.ok) { mostrarAviso('Error al exportar: ' + (await resp.text()), 'error'); return; }
+        descargarBlob(await resp.blob(), 'colectivos.xlsx');
+        return;
+    }
     if (!filtros[1] || !filtros[2]) return;
     const resp = await fetch('/colectivos/exportar', {
         method: 'POST',
@@ -2256,27 +2552,27 @@ async function exportarExcelCruce() {
 // Mismo dibujo de Gantt que app/templates/trayectoria.html (pagina propia
 // /trayectorias/{ipf}), reutilizado aqui para que se vea integrado como
 // pestana en vez de abrir una pagina aparte - ver [[feedback_ui_pestanas_integradas]].
-// Switch "Aplicar filtro de colectivos" (No/Si, mismo componente .switch-vista
-// que Datos/Graficos): en No (por defecto) IPF aleatorio de toda Personas; en
-// Si, restringido al subgrupo elegido en el selector de al lado - reutiliza
-// filtros/contracolectivo/cuerpoPeticion() ya definidos mas arriba para
-// Analisis/Trayectorias de colectivo (panel-filtros esta oculto en esta
-// pestana, pero su estado ya configurado sigue vivo en esas variables).
-let filtroColectivoIndividual = false;
+// El filtro de colectivos ya no es un switch propio de esta pestana
+// (2026-09-09): lee filtroColectivoGlobal, definido una sola vez en
+// "Seleccion de colectivo" - en No, IPF aleatorio de toda Personas; en Si,
+// restringido al subgrupo elegido en el selector de aqui debajo.
 let subgrupoSeleccionadoIndividual = ORDEN_SUBGRUPOS[0];
 let ultimosSubgruposIndividual = null; // ultimo /colectivos/recuentos recibido, para actualizar el nombre al cambiar de chip
 
-async function cambiarFiltroColectivoIndividual(activo) {
-    filtroColectivoIndividual = activo;
-    document.querySelectorAll('#switch-filtro-individual button').forEach((btn, i) => {
-        btn.classList.toggle('activa', (i === 1) === activo);
-    });
+// Refresca el selector de subgrupo segun el estado ACTUAL de
+// filtroColectivoGlobal - se llama al entrar en la pestana (ver
+// cambiarVista), no al pulsar ningun switch (ya no hay ninguno aqui): el
+// unico switch vive en "Seleccion de colectivo", en otra pestana, asi que
+// el cambio puede haber ocurrido en cualquier momento desde la ultima
+// visita - por eso se recalcula entera cada vez, sin comparar contra un
+// estado anterior.
+async function actualizarSelectorSubgrupoIndividual() {
     const cont = document.getElementById('individual-selector-subgrupo');
     const boton = document.getElementById('boton-ipf-aleatorio');
-    if (!activo) { cont.style.display = 'none'; boton.disabled = false; return; }
+    if (!filtroColectivoGlobal) { cont.style.display = 'none'; boton.disabled = false; return; }
     cont.style.display = 'flex';
     if (!filtrosListos()) {
-        cont.innerHTML = '<p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en "Análisis de colectivos" o "Trayectorias de colectivos" primero.</p>';
+        cont.innerHTML = '<p class="aviso-vacio">Configura Filtro 1 y Filtro 2 en "Selección de colectivo" primero.</p>';
         boton.disabled = true;
         return;
     }
@@ -2341,8 +2637,8 @@ const TIPOS_GRAFICO_CRUCE = {
         { valor: 'boxplot', etiqueta: 'Diagrama de cajas (boxplot)' },
         { valor: 'histograma', etiqueta: 'Histograma agrupado' },
     ],
-    // Modo "3 variables" (switch "Aplicar filtro de colectivos" en No, ver
-    // cambiarFiltroColectivoCruce): Variable 1/2 categoricas + Variable
+    // Modo "3 variables" (filtroColectivoGlobal en No, ver
+    // actualizarModoCruce): Variable 1/2 categoricas + Variable
     // central numerica, agregada por celda (/colectivos/cruce-central). Una
     // sola opcion por ahora, mismo espiritu que el resto de esta lista - el
     // desplegable ya soporta mas si el usuario pide otro tipo despues.
@@ -2360,25 +2656,29 @@ let ultimoResultadoCruce = null;
 // filtros distintos invalidan los puntos ya cacheados).
 let cachePuntosCruce = {};
 
-// Switch "Aplicar filtro de colectivos" propio de esta pestana (2026-09-09,
-// mismo componente que Trayectorias individuales - ver
-// cambiarFiltroColectivoIndividual): en Si (por defecto) el comportamiento es
-// el de siempre - cruza 2 variables cualesquiera sobre el subgrupo elegido
-// con chips, filtro1/filtro2 configurados en Analisis/Trayectorias (panel-
-// filtros esta oculto en esta pestana, igual que en Individuales, pero su
-// estado ya configurado sigue vivo en esas variables). En No, no hay
-// colectivo ninguno (poblacion completa) y aparece una 3a variable
-// ("central", siempre numerica) que se desglosa por Variable 1 x Variable 2
-// (siempre categoricas en este modo) - ver /colectivos/cruce-central.
-let filtroColectivoCruce = true;
+// El filtro de colectivos ya no es un switch propio de esta pestana
+// (2026-09-09): lee filtroColectivoGlobal, definido una sola vez en
+// "Seleccion de colectivo". En Si (por defecto) el comportamiento es el de
+// siempre - cruza 2 variables cualesquiera sobre el subgrupo elegido con
+// chips, filtro1/filtro2 configurados ahi. En No, no hay colectivo ninguno
+// (poblacion completa) y aparece una 3a variable ("central", siempre
+// numerica) que se desglosa por Variable 1 x Variable 2 (siempre
+// categoricas en este modo) - ver /colectivos/cruce-central.
 let variableCentralCruce = null; // nombre de columna (siempre numerica) o null
 let estadisticoCruceCentral = 'media'; // switch Media/Mediana, redibuja sin recalcular (backend ya manda las 2)
+// Que valor de filtroColectivoGlobal estaba activo la ultima vez que se
+// reconstruyo esta pestana entera (actualizarModoCruce) - el switch esta en
+// otra pestana ahora, asi que el modo puede cambiar en cualquier momento
+// sin que Cruce se entere; cambiarVista() compara este valor contra el
+// actual al entrar y solo dispara la reconstruccion completa si difieren
+// (si no cambio desde la ultima visita, no tiene sentido tirar el resultado
+// ya calculado). Arranca en concordancia con el valor inicial de
+// filtroColectivoGlobal para no reconstruir de mas en la primera visita.
+let modoCruceRenderizado = true;
 
-function cambiarFiltroColectivoCruce(activo) {
-    filtroColectivoCruce = activo;
-    document.querySelectorAll('#switch-filtro-cruce button').forEach((btn, i) => {
-        btn.classList.toggle('activa', (i === 1) === activo);
-    });
+function actualizarModoCruce() {
+    const activo = filtroColectivoGlobal;
+    modoCruceRenderizado = activo;
     document.getElementById('panel-variable-central-cruce').style.display = activo ? 'none' : 'block';
 
     // Variable 1/2 solo pueden ser categoricas en modo "3 variables" (decision
@@ -2390,7 +2690,7 @@ function cambiarFiltroColectivoCruce(activo) {
     }
 
     // El resultado anterior (si lo habia) ya no corresponde al modo activo -
-    // se limpia para no dejar un grafico desincronizado con el switch/las
+    // se limpia para no dejar un grafico desincronizado con el modo/las
     // variables visibles ahora.
     ultimoResultadoCruce = null;
     cachePuntosCruce = {};
@@ -2398,7 +2698,7 @@ function cambiarFiltroColectivoCruce(activo) {
     document.getElementById('select-tipo-grafico-cruce').innerHTML = '';
     document.getElementById('switch-estadistico-cruce-central').style.display = 'none';
     document.getElementById('grafico-cruce').innerHTML = `<p class="aviso-vacio">${activo
-        ? 'Configura Filtro 1 y Filtro 2, elige las 2 variables, y pulsa Calcular.'
+        ? 'Configura Filtro 1 y Filtro 2 en "Selección de colectivo", elige las 2 variables, y pulsa Calcular.'
         : 'Elige Variable 1, Variable 2 y Variable central, y pulsa Calcular.'}</p>`;
 
     document.getElementById('cruce-aviso-filtros').style.display = (activo && !filtrosListos()) ? 'block' : 'none';
@@ -2439,7 +2739,7 @@ function poblarVariablesCruce() {
 // checkbox "Numericas" (no tiene sentido dejarlo marcable si no va a hacer
 // nada - ver mas abajo).
 function renderizarListaVariableCruce(n) {
-    const soloCategoricas = !filtroColectivoCruce;
+    const soloCategoricas = !filtroColectivoGlobal;
     document.getElementById(`fila-tipos-var${n}-cruce`).style.display = soloCategoricas ? 'none' : 'flex';
     const verNum = !soloCategoricas && document.getElementById(`mostrar-numericas-var${n}-cruce`).checked;
     const verCat = soloCategoricas || document.getElementById(`mostrar-categoricas-var${n}-cruce`).checked;
@@ -2501,7 +2801,7 @@ function seleccionarVariableCentralCruce(nombre) {
 }
 
 async function sincronizarCruce() {
-    if (filtroColectivoCruce) {
+    if (filtroColectivoGlobal) {
         if (!variable1Cruce || !variable2Cruce) {
             mostrarAviso('Elige las 2 variables a cruzar.', 'error');
             return;
@@ -2910,7 +3210,7 @@ async function cargarIpfAleatorio() {
     document.getElementById('individual-tabla-episodios').innerHTML = '';
     document.getElementById('gantt-individual').innerHTML = '';
     try {
-        const cuerpo = filtroColectivoIndividual
+        const cuerpo = filtroColectivoGlobal
             ? { colectivo: cuerpoPeticion(), subgrupo: subgrupoSeleccionadoIndividual }
             : {};
         const resp = await fetch('/trayectorias/individual/aleatorio', {

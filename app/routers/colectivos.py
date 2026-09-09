@@ -387,22 +387,28 @@ def calcular_condiciones_subgrupos(
     return resultado
 
 
-def _calcular_subgrupos(
-    con,
-    filtro1: Filtro,
-    filtro2: Filtro,
-    filtro3: Filtro | None = None,
-    filtro4: Filtro | None = None,
-) -> dict:
-    """Calcula recuento + estadisticas (numericas y categoricas) de cada uno de
-    los 4 subgrupos. Compartido entre el endpoint JSON y el de exportacion a
-    Excel para no calcular las cosas de dos formas distintas."""
+# "Grupo" unico que representa TODA la tabla `personas`, sin filtrar - modo
+# "Filtro de colectivos = No" del switch global (2026-09-09, pestana
+# "Seleccion de colectivo"). Mismo shape ({where, params, etiqueta}) que cada
+# entrada de calcular_condiciones_subgrupos, para que _calcular_estadisticas
+# (y todo lo que la usa: tablas, graficos, Excel) no necesite saber si esta
+# trabajando con 1 grupo o con 4 - simplemente itera lo que le llega.
+GRUPO_SIN_FILTRO = "toda_mcvl"
+
+
+def condiciones_sin_filtro() -> dict[str, dict]:
+    return {GRUPO_SIN_FILTRO: {"where": "TRUE", "params": [], "etiqueta": "Toda la MCVL"}}
+
+
+def _calcular_estadisticas(con, condiciones: dict) -> dict:
+    """Recuento + estadisticas (numericas y categoricas) de cada grupo de
+    `condiciones` (1 o N, ver GRUPO_SIN_FILTRO/calcular_condiciones_subgrupos).
+    Compartido entre los endpoints JSON y los de exportacion a Excel (con o
+    sin filtro) para no calcular las cosas de dos formas distintas."""
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
     numericas = [c for c in numericas if c not in COLUMNAS_NUMERICAS_EXCLUIDAS]
     categoricas_visibles = _categoricas_visibles(categoricas)
-
-    condiciones = calcular_condiciones_subgrupos(con, filtro1, filtro2, filtro3, filtro4)
 
     resultados = {}
     for nombre, c in condiciones.items():
@@ -415,6 +421,20 @@ def _calcular_subgrupos(
             "categoricas": _stats_categoricas(con, where, params, categoricas_visibles, total),
         }
     return resultados
+
+
+def _calcular_subgrupos(
+    con,
+    filtro1: Filtro,
+    filtro2: Filtro,
+    filtro3: Filtro | None = None,
+    filtro4: Filtro | None = None,
+) -> dict:
+    """Calcula recuento + estadisticas de cada uno de los 4 subgrupos (ver
+    _calcular_estadisticas). Compartido entre el endpoint JSON y el de
+    exportacion a Excel."""
+    condiciones = calcular_condiciones_subgrupos(con, filtro1, filtro2, filtro3, filtro4)
+    return _calcular_estadisticas(con, condiciones)
 
 
 @router.post("/colectivos/recuentos")
@@ -440,6 +460,28 @@ def subgrupos(request: Request, body: SubgruposRequest):
         "filtro2": body.filtro2,
         "subgrupos": _calcular_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4),
     }
+
+
+# "Filtro de colectivos" en No (switch global, pestana "Seleccion de
+# colectivo", 2026-09-09): "Analisis de colectivos" pasa a analizar TODA la
+# MCVL sin filtrar, un unico grupo en vez de 4 subgrupos - sin filtro1/filtro2
+# que mandar, por eso GET sin cuerpo (a diferencia de /colectivos/subgrupos).
+@router.get("/colectivos/subgrupos-sin-filtro")
+def subgrupos_sin_filtro(request: Request):
+    con = request.app.state.con.cursor()
+    return {"subgrupos": _calcular_estadisticas(con, condiciones_sin_filtro())}
+
+
+@router.get("/colectivos/exportar-sin-filtro")
+def exportar_sin_filtro(request: Request):
+    con = request.app.state.con.cursor()
+    resultados = _calcular_estadisticas(con, condiciones_sin_filtro())
+    contenido = _construir_excel(resultados, grupos=[GRUPO_SIN_FILTRO])
+    return StreamingResponse(
+        io.BytesIO(contenido),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=colectivos.xlsx"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1038,15 +1080,20 @@ def exportar_cruce(payload: CruceExportRequest):
     )
 
 
-def _construir_excel(resultados: dict) -> bytes:
-    """Vuelca los mismos datos de _calcular_subgrupos a un .xlsx: una hoja
-    'Colectivos' (nombre + recuento de cada uno de los 4 subgrupos, para saber
-    de que numeros hablan las 2 hojas siguientes sin volver a la app), una
-    hoja 'Numericas' (columna x 4 subgrupos x media/mediana/desviacion) y una
-    hoja 'Categoricas' con una tabla apilada por columna categorica (subgrupo
-    con Conteo/Porcentaje por cada uno), igual que el formato ya usado a mano
-    por el Observatorio - hueco en blanco si una categoria no aparece en algun
-    subgrupo, fila en blanco entre columnas."""
+def _construir_excel(resultados: dict, grupos: list[str] = ORDEN_SUBGRUPOS) -> bytes:
+    """Vuelca los mismos datos de _calcular_estadisticas a un .xlsx: una hoja
+    'Colectivos' (nombre + recuento de cada grupo, para saber de que numeros
+    hablan las 2 hojas siguientes sin volver a la app), una hoja 'Numericas'
+    (columna x grupo x media/mediana/desviacion) y una hoja 'Categoricas' con
+    una tabla apilada por columna categorica (grupo con Conteo/Porcentaje por
+    cada uno), igual que el formato ya usado a mano por el Observatorio -
+    hueco en blanco si una categoria no aparece en algun grupo, fila en
+    blanco entre columnas.
+
+    `grupos` son los 4 subgrupos de siempre (por defecto) o [GRUPO_SIN_FILTRO]
+    (un unico "Toda la MCVL", switch "Filtro de colectivos" en No) - incluso
+    con un unico grupo el formato se queda igual (una "columna de grupo" en
+    vez de 4), no un formato aparte."""
     negrita = Font(bold=True)
     wb = Workbook()
 
@@ -1055,7 +1102,7 @@ def _construir_excel(resultados: dict) -> bytes:
     ws_col.title = "Colectivos"
     ws_col.cell(row=1, column=1, value="Subcolectivo").font = negrita
     ws_col.cell(row=1, column=2, value="Personas").font = negrita
-    for i, nombre in enumerate(ORDEN_SUBGRUPOS):
+    for i, nombre in enumerate(grupos):
         ws_col.cell(row=i + 2, column=1, value=resultados[nombre]["etiqueta"])
         ws_col.cell(row=i + 2, column=2, value=resultados[nombre]["recuento"])
 
@@ -1063,10 +1110,10 @@ def _construir_excel(resultados: dict) -> bytes:
     ws_num = wb.create_sheet("Numericas")
     ws_num.cell(row=1, column=1, value="Columna").font = negrita
 
-    columnas_numericas = [d["columna"] for d in resultados[ORDEN_SUBGRUPOS[0]]["numericas"]]
+    columnas_numericas = [d["columna"] for d in resultados[grupos[0]]["numericas"]]
 
     col = 2
-    for nombre in ORDEN_SUBGRUPOS:
+    for nombre in grupos:
         ws_num.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 2)
         ws_num.cell(row=1, column=col, value=resultados[nombre]["etiqueta"]).font = negrita
         for offset, titulo in enumerate(["Media", "Mediana", "Desv. tipica"]):
@@ -1077,7 +1124,7 @@ def _construir_excel(resultados: dict) -> bytes:
         fila = i + 3
         ws_num.cell(row=fila, column=1, value=nombre_col)
         col = 2
-        for nombre in ORDEN_SUBGRUPOS:
+        for nombre in grupos:
             stats = resultados[nombre]["numericas"][i]
             ws_num.cell(row=fila, column=col, value=stats["media"])
             ws_num.cell(row=fila, column=col + 1, value=stats["mediana"])
@@ -1086,13 +1133,13 @@ def _construir_excel(resultados: dict) -> bytes:
 
     # --- Hoja Categoricas ---
     ws_cat = wb.create_sheet("Categoricas")
-    columnas_categoricas = [d["columna"] for d in resultados[ORDEN_SUBGRUPOS[0]]["categoricas"]]
+    columnas_categoricas = [d["columna"] for d in resultados[grupos[0]]["categoricas"]]
 
     fila = 1
     for idx_col, nombre_col in enumerate(columnas_categoricas):
-        # Union de valores presentes en cualquiera de los 4 subgrupos (orden de aparicion).
+        # Union de valores presentes en cualquiera de los grupos (orden de aparicion).
         mapas, vistos, vistos_set = {}, [], set()
-        for nombre in ORDEN_SUBGRUPOS:
+        for nombre in grupos:
             entrada = resultados[nombre]["categoricas"][idx_col]
             mapas[nombre] = {v["valor"]: v for v in entrada["valores"]}
             for v in entrada["valores"]:
@@ -1101,7 +1148,7 @@ def _construir_excel(resultados: dict) -> bytes:
                     vistos.append(v["valor"])
 
         col = 2
-        for nombre in ORDEN_SUBGRUPOS:
+        for nombre in grupos:
             ws_cat.merge_cells(start_row=fila, start_column=col, end_row=fila, end_column=col + 1)
             ws_cat.cell(row=fila, column=col, value=resultados[nombre]["etiqueta"]).font = negrita
             col += 2
@@ -1109,7 +1156,7 @@ def _construir_excel(resultados: dict) -> bytes:
 
         ws_cat.cell(row=fila, column=1, value=nombre_col).font = negrita
         col = 2
-        for _ in ORDEN_SUBGRUPOS:
+        for _ in grupos:
             ws_cat.cell(row=fila, column=col, value="Conteo").font = negrita
             ws_cat.cell(row=fila, column=col + 1, value="Porcentaje (%)").font = negrita
             col += 2
@@ -1118,7 +1165,7 @@ def _construir_excel(resultados: dict) -> bytes:
         for valor in vistos:
             ws_cat.cell(row=fila, column=1, value=str(valor))
             col = 2
-            for nombre in ORDEN_SUBGRUPOS:
+            for nombre in grupos:
                 entrada = mapas[nombre].get(valor)
                 if entrada is not None:
                     ws_cat.cell(row=fila, column=col, value=entrada["conteo"])

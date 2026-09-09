@@ -19,7 +19,13 @@ from pydantic import BaseModel
 
 from config import FECHA_CORTE as FECHA_CORTE_ISO
 from etl import reg_cotizacion_agrupado, tipo_contrato_claves_sucesoras
-from app.routers.colectivos import ORDEN_SUBGRUPOS, SubgruposRequest, calcular_condiciones_subgrupos
+from app.routers.colectivos import (
+    GRUPO_SIN_FILTRO,
+    ORDEN_SUBGRUPOS,
+    SubgruposRequest,
+    calcular_condiciones_subgrupos,
+    condiciones_sin_filtro,
+)
 
 router = APIRouter()
 # Ver comentario equivalente en colectivos.py: ruta relativa al fichero, no al CWD.
@@ -173,19 +179,16 @@ _CTE_ANIOS_VIGENTES = """
 """
 
 
-@router.post("/trayectorias/colectivo/bases")
-def trayectorias_colectivo_bases(request: Request, body: SubgruposRequest):
-    """Evolucion de 'bases anuales' (CA+CP sumadas por ipf-anyo) de los 4
-    subgrupos de un colectivo, agregada tanto por anyos de vida laboral como
-    por edad - el frontend elige con cual pintar el grafico sin pedir otra
-    vez al backend. N por punto para que el frontend pueda cortar/atenuar la
-    linea donde la muestra es pequenya (< 30)."""
-    con = request.app.state.con.cursor()
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
-
+def _trayectorias_bases(con, condiciones: dict) -> dict:
+    """Evolucion de 'bases anuales' (CA+CP sumadas por ipf-anyo) de cada grupo
+    de `condiciones` (los 4 subgrupos de siempre, o un unico "Toda la MCVL"
+    con filtroColectivoGlobal en No - ver GRUPO_SIN_FILTRO en colectivos.py),
+    agregada tanto por anyos de vida laboral como por edad - el frontend
+    elige con cual pintar el grafico sin pedir otra vez al backend. N por
+    punto para que el frontend pueda cortar/atenuar la linea donde la
+    muestra es pequenya (< 30)."""
     resultado = {}
-    for nombre in ORDEN_SUBGRUPOS:
-        c = condiciones[nombre]
+    for nombre, c in condiciones.items():
         recuento = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
 
         filas = con.execute(
@@ -245,10 +248,26 @@ def trayectorias_colectivo_bases(request: Request, body: SubgruposRequest):
     return resultado
 
 
-@router.post("/trayectorias/colectivo/pensiones")
-def trayectorias_colectivo_pensiones(request: Request, body: SubgruposRequest):
-    """Evolucion de la pension anual (Ingresos_pension_bruto_anual) de los 4
-    subgrupos de un colectivo - mismo patron que /trayectorias/colectivo/bases.
+@router.post("/trayectorias/colectivo/bases")
+def trayectorias_colectivo_bases(request: Request, body: SubgruposRequest):
+    con = request.app.state.con.cursor()
+    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    return _trayectorias_bases(con, condiciones)
+
+
+# "Filtro de colectivos" en No (switch global, pestana "Seleccion de
+# colectivo", 2026-09-09): mismo dato pero sobre TODA la MCVL sin filtrar,
+# un unico grupo en vez de 4 subgrupos - sin filtro1/filtro2 que mandar, por
+# eso GET sin cuerpo (igual patron que /colectivos/subgrupos-sin-filtro).
+@router.get("/trayectorias/colectivo/bases-sin-filtro")
+def trayectorias_colectivo_bases_sin_filtro(request: Request):
+    con = request.app.state.con.cursor()
+    return _trayectorias_bases(con, condiciones_sin_filtro())
+
+
+def _trayectorias_pensiones(con, condiciones: dict) -> dict:
+    """Evolucion de la pension anual (Ingresos_pension_bruto_anual) de cada
+    grupo de `condiciones` (ver _trayectorias_bases) - mismo patron.
     Ingresos_pension_bruto_anual ya viene calculada en el ETL a partir de
     IMPORTE_MES_TOTAL_PRESTACION con su excepcion de 12 pagas (clase de
     prestacion 17, ~0,002% de las filas) en vez de 14 - no se recalcula ese
@@ -256,12 +275,8 @@ def trayectorias_colectivo_pensiones(request: Request, body: SubgruposRequest):
     etl/personas_extendida.py). No hay variable mensual aparte: es la misma
     cifra sin anualizar, redundante con esta. Si una persona cobra mas de una
     pension el mismo anyo (p.ej. viudedad + orfandad), se suman."""
-    con = request.app.state.con.cursor()
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
-
     resultado = {}
-    for nombre in ORDEN_SUBGRUPOS:
-        c = condiciones[nombre]
+    for nombre, c in condiciones.items():
         recuento = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
 
         filas = con.execute(
@@ -307,16 +322,28 @@ def trayectorias_colectivo_pensiones(request: Request, body: SubgruposRequest):
     return resultado
 
 
-@router.post("/trayectorias/colectivo/afiliacion")
-def trayectorias_colectivo_afiliacion(request: Request, body: SubgruposRequest):
-    """Evolucion de NUM_TRABAJS_CC_2 (tamanyo de la empresa) de los 4
-    subgrupos de un colectivo - mismo contrato de salida que
-    /trayectorias/colectivo/bases y /pensiones (series anos_vl/edad con
-    x/media/mediana/n), pero calculado distinto por debajo: Afiliacion es
-    episodica (fecha_alta/baja_modificada), no una fila por anyo, asi que
-    primero se expande a (ipf, anyo) con el episodio vigente a 31 de
-    diciembre (ver _CTE_ANIOS_VIGENTES, mismo criterio que la trayectoria
-    categorica de Afiliacion).
+@router.post("/trayectorias/colectivo/pensiones")
+def trayectorias_colectivo_pensiones(request: Request, body: SubgruposRequest):
+    con = request.app.state.con.cursor()
+    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    return _trayectorias_pensiones(con, condiciones)
+
+
+@router.get("/trayectorias/colectivo/pensiones-sin-filtro")
+def trayectorias_colectivo_pensiones_sin_filtro(request: Request):
+    con = request.app.state.con.cursor()
+    return _trayectorias_pensiones(con, condiciones_sin_filtro())
+
+
+def _trayectorias_afiliacion(con, condiciones: dict) -> dict:
+    """Evolucion de NUM_TRABAJS_CC_2 (tamanyo de la empresa) de cada grupo de
+    `condiciones` (ver _trayectorias_bases) - mismo contrato de salida que
+    _trayectorias_bases/_pensiones (series anos_vl/edad con x/media/mediana/n),
+    pero calculado distinto por debajo: Afiliacion es episodica
+    (fecha_alta/baja_modificada), no una fila por anyo, asi que primero se
+    expande a (ipf, anyo) con el episodio vigente a 31 de diciembre (ver
+    _CTE_ANIOS_VIGENTES, mismo criterio que la trayectoria categorica de
+    Afiliacion).
 
     Cuando hay mas de un episodio vigente a la vez (~1,7% de los pares
     persona-anyo, verificado con datos reales el 2026-08-09), NO se suman
@@ -332,12 +359,8 @@ def trayectorias_colectivo_afiliacion(request: Request, body: SubgruposRequest):
     desempate), CCC_PPAL como ultimo criterio deterministico (mismo espiritu
     que el 'val ASC' que ya usa el ETL en casos similares, p.ej.
     Reg_cotiz_ppal_Agrupado en etl/personas_extendida.py)."""
-    con = request.app.state.con.cursor()
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
-
     resultado = {}
-    for nombre in ORDEN_SUBGRUPOS:
-        c = condiciones[nombre]
+    for nombre, c in condiciones.items():
         recuento = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
 
         filas = con.execute(
@@ -401,6 +424,19 @@ def trayectorias_colectivo_afiliacion(request: Request, body: SubgruposRequest):
     return resultado
 
 
+@router.post("/trayectorias/colectivo/afiliacion")
+def trayectorias_colectivo_afiliacion(request: Request, body: SubgruposRequest):
+    con = request.app.state.con.cursor()
+    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    return _trayectorias_afiliacion(con, condiciones)
+
+
+@router.get("/trayectorias/colectivo/afiliacion-sin-filtro")
+def trayectorias_colectivo_afiliacion_sin_filtro(request: Request):
+    con = request.app.state.con.cursor()
+    return _trayectorias_afiliacion(con, condiciones_sin_filtro())
+
+
 def _empaquetar_categorica(etiqueta: str, recuento: int, filas: list, decodificar=lambda v: v) -> dict:
     """Comun a las 2 rutas de trayectoria categorica (periodica/Afiliacion):
     convierte filas (eje, x, n, categoria_cruda, n_categoria) en el JSON de
@@ -453,6 +489,22 @@ def trayectorias_colectivo_categorica(request: Request, body: TrayectoriaCategor
     return _trayectoria_categorica_periodica(con, condiciones, info)
 
 
+# "Filtro de colectivos" en No: mismo motor pero sobre TODA la MCVL sin
+# filtrar (ver GRUPO_SIN_FILTRO en colectivos.py) - `variable` como query
+# param (no hay cuerpo con filtro1-4 que mandar, GET simple).
+@router.get("/trayectorias/colectivo/categorica-sin-filtro")
+def trayectorias_colectivo_categorica_sin_filtro(request: Request, variable: str):
+    con = request.app.state.con.cursor()
+    if variable not in VARIABLES_CATEGORICAS:
+        raise HTTPException(400, f"Variable categorica desconocida: {variable}")
+    condiciones = condiciones_sin_filtro()
+    info = VARIABLES_CATEGORICAS[variable]
+
+    if info["tabla"] == "afiliacion":
+        return _trayectoria_categorica_afiliacion(con, condiciones, info)
+    return _trayectoria_categorica_periodica(con, condiciones, info)
+
+
 # Exportacion a Excel de "Trayectorias de colectivos" (paso 2 del boton
 # Exportar, tras el de "Analisis de colectivos" - ver conversacion
 # 2026-08-28). A diferencia de ese, aqui NO se recalcula nada: el frontend ya
@@ -483,16 +535,22 @@ def _construir_excel_trayectorias(payload: TrayectoriaExportRequest) -> bytes:
     por punto - o por punto+categoria en categoricas, ver conversacion
     2026-08-28): mas facil de manejar en Excel que un formato ancho cuando la
     variable tiene muchas categorias (Provincia, ~53) sin cambiar de forma
-    segun la variable."""
+    segun la variable.
+
+    `resultado` (WYSIWYG, ver cabecera del fichero) trae las claves de los
+    grupos realmente calculados - los 4 subgrupos de siempre, o un unico
+    GRUPO_SIN_FILTRO con filtroColectivoGlobal en No -, asi que se itera
+    resultado.keys() en vez de asumir ORDEN_SUBGRUPOS fijo."""
     negrita = Font(bold=True)
     wb = Workbook()
     resultado = payload.resultado
+    grupos = list(resultado.keys())
 
     ws_col = wb.active
     ws_col.title = "Colectivos"
     ws_col.cell(row=1, column=1, value="Subcolectivo").font = negrita
     ws_col.cell(row=1, column=2, value="Personas").font = negrita
-    for i, nombre in enumerate(ORDEN_SUBGRUPOS):
+    for i, nombre in enumerate(grupos):
         ws_col.cell(row=i + 2, column=1, value=resultado[nombre]["etiqueta"])
         ws_col.cell(row=i + 2, column=2, value=resultado[nombre]["recuento"])
 
@@ -505,7 +563,7 @@ def _construir_excel_trayectorias(payload: TrayectoriaExportRequest) -> bytes:
             ):
                 ws.cell(row=1, column=col, value=titulo).font = negrita
             fila = 2
-            for nombre in ORDEN_SUBGRUPOS:
+            for nombre in grupos:
                 etiqueta_sub = resultado[nombre]["etiqueta"]
                 for punto in resultado[nombre]["series"][eje]:
                     ws.cell(row=fila, column=1, value=etiqueta_sub)
@@ -522,7 +580,7 @@ def _construir_excel_trayectorias(payload: TrayectoriaExportRequest) -> bytes:
             ):
                 ws.cell(row=1, column=col, value=titulo).font = negrita
             fila = 2
-            for nombre in ORDEN_SUBGRUPOS:
+            for nombre in grupos:
                 etiqueta_sub = resultado[nombre]["etiqueta"]
                 for punto in resultado[nombre]["series"][eje]:
                     for categoria, v in punto["valores"].items():
@@ -553,8 +611,7 @@ def _trayectoria_categorica_periodica(con, condiciones: dict, info: dict) -> dic
     tabla, columna, columna_anio = info["tabla"], info["columna"], info["columna_anio"]
 
     resultado = {}
-    for nombre in ORDEN_SUBGRUPOS:
-        c = condiciones[nombre]
+    for nombre, c in condiciones.items():
         recuento = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
 
         filas = con.execute(
@@ -641,8 +698,7 @@ def _trayectoria_categorica_afiliacion(con, condiciones: dict, info: dict) -> di
         decodificar = decodificar_base
 
     resultado = {}
-    for nombre in ORDEN_SUBGRUPOS:
-        c = condiciones[nombre]
+    for nombre, c in condiciones.items():
         recuento = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
 
         filas = con.execute(
