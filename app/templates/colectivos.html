@@ -502,7 +502,7 @@
             <p>Observatorio de las Ocupaciones · SEPE</p>
         </div>
         <div class="header-badges">
-            <span class="badge">v1.3</span>
+            <span class="badge">v2.0</span>
         </div>
     </header>
 
@@ -1256,6 +1256,19 @@ function actualizarModoAnalisis() {
     document.getElementById('contenedor-categoricas').innerHTML = `<p class="aviso-vacio">${mensaje}</p>`;
     const cont = document.getElementById('recuentos-numericas');
     if (cont) cont.innerHTML = '';
+
+    // Vista "Graficos" de Estadisticas numericas no aporta nada con 1 solo
+    // grupo (una barra suelta no compara nada con nadie, a diferencia de
+    // Categoricas, donde el propio grafico sigue mostrando la composicion
+    // por categorias) - se oculta el switch Datos/Graficos y se fuerza la
+    // tabla, unica vista disponible en este modo (decision explicita del
+    // usuario, 2026-09-09, tras probarlo con datos reales).
+    document.getElementById('switch-vista-numericas').style.display = filtroColectivoGlobal ? 'flex' : 'none';
+    if (!filtroColectivoGlobal && vistaNumericas !== 'datos') {
+        vistaNumericas = 'datos';
+        document.querySelectorAll('#switch-vista-numericas button')
+            .forEach(b => b.classList.toggle('activa', b.dataset.vista === 'datos'));
+    }
     // Al volver a Si, restaura de inmediato la vista previa en vivo de
     // filtro1-4 (si ya estan listos) - contenedoresRecuentosEnVivo() ya
     // incluye recuentos-numericas en este modo, pero solo se rellena la
@@ -3019,6 +3032,25 @@ function dibujarCruceHistograma(div, sub, v1, fuenteComun) {
     }
 }
 
+// "NO CONSTA" (categoria real) y "Resto" (cajon de sastre del backend, ver
+// TOP_N_CATEGORICO) suelen tener un peso muy distinto al resto de
+// categorias "reales" - en un heatmap (escala de color ABSOLUTA, a
+// diferencia de las barras apiladas al 100%, donde esto no pasa) eso estira
+// la escala entera y deja el resto de celdas planas, casi del mismo color.
+// Se quedan fuera SOLO del grafico (categorico x categorico - numerico x
+// numerico no tiene estas categorias, son centros de bin), nunca del Excel
+// exportado (que manda sub.x/y/z sin tocar, ver exportarExcelCruce).
+// Decision explicita del usuario, 2026-09-09, tras verlo con datos reales.
+const CATEGORIAS_FUERA_HEATMAP = new Set(['NO CONSTA', 'Resto']);
+
+function _indicesSinExcluidas(ejes) {
+    return ejes.map((_, i) => i).filter(i => !CATEGORIAS_FUERA_HEATMAP.has(ejes[i]));
+}
+
+function _aplicarFiltroEjes(idxX, idxY, matriz) {
+    return idxY.map(iy => idxX.map(ix => matriz[iy][ix]));
+}
+
 // Mismo trace (heatmap) para numerica x numerica y categorica x categorica:
 // en numerica x numerica x/y son centros de celda de la rejilla de densidad,
 // en categorica x categorica son las categorias de cada variable (tabla de
@@ -3030,8 +3062,16 @@ function dibujarCruceHeatmap(div, sub, v1, v2, esNumNum, fuenteComun) {
     // (histograma, o el aviso "Cargando..." de dispersion), Plotly.newPlot
     // no lo limpia solo y queda superpuesto.
     div.innerHTML = '';
+    let { x, y, z } = sub;
+    if (!esNumNum) {
+        const idxX = _indicesSinExcluidas(x);
+        const idxY = _indicesSinExcluidas(y);
+        x = idxX.map(i => x[i]);
+        y = idxY.map(i => y[i]);
+        z = _aplicarFiltroEjes(idxX, idxY, z);
+    }
     Plotly.newPlot(div, [{
-        type: 'heatmap', x: sub.x, y: sub.y, z: sub.z,
+        type: 'heatmap', x, y, z,
         colorscale: 'YlGnBu',
         hovertemplate: `${v1}: %{x` + (esNumNum ? ':,.2f' : '') + `}<br>${v2}: %{y` + (esNumNum ? ':,.2f' : '') + `}<br>N: %{z:,}<extra></extra>`,
         colorbar: { title: 'N' },
@@ -3056,15 +3096,23 @@ function cambiarEstadisticoCruceCentral(valor) {
 // z_mediana) en la misma respuesta, aqui solo se elige cual dibujar, sin
 // volver a pedir al backend. Celdas sin ninguna persona llegan a null desde
 // el backend - Plotly las pinta como hueco (blanco), no como si el agregado
-// valiera 0.
+// valiera 0. "NO CONSTA"/"Resto" fuera del grafico (ver
+// CATEGORIAS_FUERA_HEATMAP) - siempre categorico x categorico aqui, no hace
+// falta el esNumNum de dibujarCruceHeatmap.
 function dibujarCruceHeatmapCentral(div, resultado, fuenteComun) {
     div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
-    const z = estadisticoCruceCentral === 'media' ? resultado.z_media : resultado.z_mediana;
+    const zCompleto = estadisticoCruceCentral === 'media' ? resultado.z_media : resultado.z_mediana;
     const etiquetaEstadistico = estadisticoCruceCentral === 'media' ? 'Media' : 'Mediana';
+    const idxX = _indicesSinExcluidas(resultado.x);
+    const idxY = _indicesSinExcluidas(resultado.y);
+    const x = idxX.map(i => resultado.x[i]);
+    const y = idxY.map(i => resultado.y[i]);
+    const z = _aplicarFiltroEjes(idxX, idxY, zCompleto);
+    const n = _aplicarFiltroEjes(idxX, idxY, resultado.n);
     Plotly.newPlot(div, [{
-        type: 'heatmap', x: resultado.x, y: resultado.y, z,
+        type: 'heatmap', x, y, z,
         colorscale: 'YlGnBu',
-        customdata: resultado.n,
+        customdata: n,
         hovertemplate: `${resultado.variable1}: %{x}<br>${resultado.variable2}: %{y}<br>` +
             `${etiquetaEstadistico} de ${resultado.variable_central}: %{z:,.2f}<br>N: %{customdata:,}<extra></extra>`,
         colorbar: { title: etiquetaEstadistico },
