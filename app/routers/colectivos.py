@@ -442,6 +442,239 @@ def subgrupos(request: Request, body: SubgruposRequest):
     }
 
 
+# ---------------------------------------------------------------------------
+# Pestana "Cruce de variables" (v1.3, 2026-09-09, decision explicita del
+# usuario): cruza 2 variables cualesquiera de tabla_personas_extendida (mismo
+# universo que /colectivos/columnas - una fila por persona, cruzar es
+# directo). Los 4 subgrupos se calculan de una vez en la misma respuesta
+# (igual patron que la trayectoria categorica de Afiliacion en
+# trayectorias.py): el frontend cambia de subgrupo mostrado con un selector
+# de chips, sin volver a pedir al backend.
+#
+# 3 combinaciones posibles segun el tipo DuckDB de cada variable
+# (_clasificar_columnas, igual criterio que el resto de "Colectivos"):
+# - numerica x numerica: densidad 2D (rejilla de NBINS_DENSIDAD x
+#   NBINS_DENSIDAD, contando personas por celda) en vez de un punto por
+#   persona - con hasta ~1,3M personas un scatter de puntos individuales
+#   bloquearia el navegador (decision explicita del usuario). Los bordes de
+#   la rejilla se calculan sobre el MIN/MAX de toda la tabla (sin filtrar),
+#   no por subgrupo, para que los 4 subgrupos compartan la misma escala de
+#   ejes y sean comparables entre si al cambiar el selector.
+# - categorica x categorica: tabla de contingencia (conteo por cada par de
+#   categorias). Los ejes (lista de categorias) tambien se fijan sobre TODA
+#   la tabla, mismo motivo que arriba. Eje X = la variable con MAS categorias
+#   (decision explicita del usuario, 2026-09-09): el panel es mas ancho que
+#   alto, se lee mejor.
+# - numerica x categorica (en cualquier orden de seleccion): boxplot -
+#   resumen por categoria (n, min, max, cuartiles) calculado en SQL, nunca
+#   se envian los valores individuales al frontend. La categorica va siempre
+#   al eje X (comportamiento normal de un boxplot, confirmado con el
+#   usuario) - no necesita reordenarse como categorica x categorica.
+# - numerica x numerica: sin reordenar - Variable 1 al eje X, Variable 2 al
+#   eje Y, tal cual las elige el usuario (decision explicita, 2026-09-09: no
+#   hay un criterio objetivo tipo "mas categorias" para 2 numericas).
+#
+# TOP_N_CATEGORICO: mismo limite (20) que ya usa "cnae2009_cc" en
+# VARIABLES_CATEGORICAS (app/routers/trayectorias.py) para no desbordar el
+# grafico con una variable de muchas categorias (CNAE, causa de baja...) -
+# aplica tanto a categorica x categorica (cada eje por separado) como al eje
+# categorico de numerica x categorica. Igual que alli, el top-N se calcula
+# sobre TODA la tabla (sin filtrar por subgrupo) para que "Resto" signifique
+# lo mismo pase lo que pase se filtre despues.
+NBINS_DENSIDAD = 20
+TOP_N_CATEGORICO = 20
+
+
+def _top_categorias(con, columna: str, top_n: int = TOP_N_CATEGORICO) -> tuple[list, bool]:
+    """Hasta top_n valores mas frecuentes de `columna` en toda la tabla
+    `personas`. Devuelve (valores, hay_resto) - hay_resto=True si la columna
+    tiene mas de top_n valores distintos y hace falta una categoria "Resto"
+    para el resto."""
+    filas = con.execute(
+        f"SELECT {columna}, COUNT(*) AS n FROM personas WHERE {columna} IS NOT NULL "
+        f"GROUP BY 1 ORDER BY n DESC, {columna} ASC"
+    ).fetchall()
+    valores = [f[0] for f in filas]
+    if len(valores) <= top_n:
+        return valores, False
+    return valores[:top_n], True
+
+
+class CruceRequest(SubgruposRequest):
+    variable1: str
+    variable2: str
+
+
+def _cruce_numerica_numerica(con, condiciones: dict, v1: str, v2: str) -> dict:
+    min1, max1, min2, max2 = con.execute(
+        f"SELECT MIN({v1}), MAX({v1}), MIN({v2}), MAX({v2}) FROM personas "
+        f"WHERE {v1} IS NOT NULL AND {v2} IS NOT NULL"
+    ).fetchone()
+
+    resultado = {}
+    # Si alguna variable no tiene rango (todo NULL, o un unico valor
+    # constante en toda la tabla) no hay rejilla que construir - 4 subgrupos
+    # vacios en vez de dividir por 0.
+    sin_rango = min1 is None or min2 is None or max1 == min1 or max2 == min2
+    ancho1 = None if sin_rango else (max1 - min1) / NBINS_DENSIDAD
+    ancho2 = None if sin_rango else (max2 - min2) / NBINS_DENSIDAD
+    centros_x = [] if sin_rango else [min1 + ancho1 * (i + 0.5) for i in range(NBINS_DENSIDAD)]
+    centros_y = [] if sin_rango else [min2 + ancho2 * (i + 0.5) for i in range(NBINS_DENSIDAD)]
+
+    for nombre, c in condiciones.items():
+        where, params, etiqueta = c["where"], c["params"], c["etiqueta"]
+        total = con.execute(f"SELECT COUNT(*) FROM personas WHERE {where}", params).fetchone()[0]
+        z = [[0] * NBINS_DENSIDAD for _ in range(NBINS_DENSIDAD)]
+        if not sin_rango:
+            filas = con.execute(
+                f"""
+                WITH bineado AS (
+                    SELECT
+                        LEAST({NBINS_DENSIDAD - 1}, GREATEST(0,
+                            CAST(({v1} - {min1}) / {ancho1} AS INTEGER))) AS bin_x,
+                        LEAST({NBINS_DENSIDAD - 1}, GREATEST(0,
+                            CAST(({v2} - {min2}) / {ancho2} AS INTEGER))) AS bin_y
+                    FROM personas
+                    WHERE {where} AND {v1} IS NOT NULL AND {v2} IS NOT NULL
+                )
+                SELECT bin_x, bin_y, COUNT(*) FROM bineado GROUP BY 1, 2
+                """,
+                params,
+            ).fetchall()
+            for bin_x, bin_y, n in filas:
+                z[bin_y][bin_x] = n
+        resultado[nombre] = {"etiqueta": etiqueta, "recuento": total, "x": centros_x, "y": centros_y, "z": z}
+    return resultado
+
+
+def _cruce_categorica_categorica(con, condiciones: dict, v1: str, v2: str) -> tuple[str, str, dict]:
+    cat1, resto1 = _top_categorias(con, v1)
+    cat2, resto2 = _top_categorias(con, v2)
+    etiqueta_resto = "Resto"
+    ejes1 = cat1 + ([etiqueta_resto] if resto1 else [])
+    ejes2 = cat2 + ([etiqueta_resto] if resto2 else [])
+
+    # Eje X = la variable con mas categorias (ver comentario de cabecera) -
+    # se decide DESPUES del top-N, sobre el numero final de categorias
+    # (incluyendo "Resto" si aplica).
+    if len(ejes2) > len(ejes1):
+        v1, v2, cat1, cat2, resto1, resto2, ejes1, ejes2 = v2, v1, cat2, cat1, resto2, resto1, ejes2, ejes1
+
+    set1, set2 = set(cat1), set(cat2)
+    idx1 = {v: i for i, v in enumerate(ejes1)}
+    idx2 = {v: i for i, v in enumerate(ejes2)}
+
+    def _normaliza(valor, categorias_top, hay_resto):
+        return valor if (not hay_resto or valor in categorias_top) else etiqueta_resto
+
+    resultado = {}
+    for nombre, c in condiciones.items():
+        where, params, etiqueta = c["where"], c["params"], c["etiqueta"]
+        total = con.execute(f"SELECT COUNT(*) FROM personas WHERE {where}", params).fetchone()[0]
+        filas = con.execute(
+            f"""
+            SELECT {v1}, {v2}, COUNT(*) FROM personas
+            WHERE {where} AND {v1} IS NOT NULL AND {v2} IS NOT NULL
+            GROUP BY 1, 2
+            """,
+            params,
+        ).fetchall()
+        z = [[0] * len(ejes1) for _ in range(len(ejes2))]
+        for val1, val2, n in filas:
+            i1 = idx1[_normaliza(val1, set1, resto1)]
+            i2 = idx2[_normaliza(val2, set2, resto2)]
+            z[i2][i1] += n
+        resultado[nombre] = {"etiqueta": etiqueta, "recuento": total, "x": ejes1, "y": ejes2, "z": z}
+    return v1, v2, resultado
+
+
+def _cruce_numerica_categorica(con, condiciones: dict, v_num: str, v_cat: str) -> dict:
+    top_cats, hay_resto = _top_categorias(con, v_cat)
+    if hay_resto:
+        # CASE ... IN (?, ?, ...) ELSE 'Resto': el resumen (min/max/cuartiles)
+        # de "Resto" tiene que salir de UN SOLO GROUP BY sobre los valores
+        # crudos agrupados asi, no de combinar a mano los cuartiles ya
+        # calculados de cada categoria sobrante (un cuartil no se puede
+        # promediar entre grupos sin perder precision).
+        placeholders = ", ".join("?" for _ in top_cats)
+        cat_expr = f"CASE WHEN {v_cat} IN ({placeholders}) THEN {v_cat} ELSE 'Resto' END"
+        params_cat = list(top_cats)
+    else:
+        cat_expr = v_cat
+        params_cat = []
+
+    resultado = {}
+    for nombre, c in condiciones.items():
+        where, params, etiqueta = c["where"], c["params"], c["etiqueta"]
+        total = con.execute(f"SELECT COUNT(*) FROM personas WHERE {where}", params).fetchone()[0]
+        filas = con.execute(
+            f"""
+            SELECT {cat_expr} AS categoria, COUNT(*) AS n,
+                   MIN({v_num}) AS minimo, MAX({v_num}) AS maximo,
+                   QUANTILE_CONT({v_num}, 0.25) AS q1,
+                   MEDIAN({v_num}) AS mediana,
+                   QUANTILE_CONT({v_num}, 0.75) AS q3
+            FROM personas
+            WHERE {where} AND {v_cat} IS NOT NULL AND {v_num} IS NOT NULL
+            GROUP BY 1
+            ORDER BY 1
+            """,
+            # cat_expr (con sus placeholders) va en el SELECT, que aparece
+            # ANTES que el WHERE en el texto de la query - los parametros
+            # posicionales tienen que ir en ese mismo orden.
+            params_cat + params,
+        ).fetchall()
+        resultado[nombre] = {
+            "etiqueta": etiqueta,
+            "recuento": total,
+            "cajas": [
+                {"categoria": cat, "n": n, "min": mn, "max": mx, "q1": q1, "mediana": med, "q3": q3}
+                for cat, n, mn, mx, q1, med, q3 in filas
+            ],
+        }
+    return resultado
+
+
+@router.post("/colectivos/cruce")
+def cruce(request: Request, body: CruceRequest):
+    con = request.app.state.con.cursor()
+    columnas_validas = _columnas_personas(con)
+    numericas, categoricas = _clasificar_columnas(columnas_validas)
+    numericas_validas = set(numericas) - {"ipf"}
+    categoricas_validas = set(categoricas)
+
+    v1, v2 = body.variable1, body.variable2
+    if v1 == v2:
+        raise HTTPException(400, "Las 2 variables deben ser distintas")
+
+    def _tipo(v):
+        if v in numericas_validas:
+            return "numerica"
+        if v in categoricas_validas:
+            return "categorica"
+        raise HTTPException(400, f"'{v}' no es una variable valida para cruzar")
+
+    tipo1, tipo2 = _tipo(v1), _tipo(v2)
+    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+
+    if tipo1 == "numerica" and tipo2 == "numerica":
+        return {
+            "tipo": "numerica_numerica", "variable1": v1, "variable2": v2,
+            "subgrupos": _cruce_numerica_numerica(con, condiciones, v1, v2),
+        }
+    if tipo1 == "categorica" and tipo2 == "categorica":
+        v_x, v_y, subgrupos = _cruce_categorica_categorica(con, condiciones, v1, v2)
+        return {"tipo": "categorica_categorica", "variable1": v_x, "variable2": v_y, "subgrupos": subgrupos}
+    # numerica x categorica, en cualquier orden de seleccion: se normaliza a
+    # (v_num, v_cat) para no duplicar la logica del boxplot, y se devuelve
+    # ese orden final en la respuesta para que el frontend sepa cual es cual.
+    v_num, v_cat = (v1, v2) if tipo1 == "numerica" else (v2, v1)
+    return {
+        "tipo": "numerica_categorica", "variable1": v_num, "variable2": v_cat,
+        "subgrupos": _cruce_numerica_categorica(con, condiciones, v_num, v_cat),
+    }
+
+
 def _construir_excel(resultados: dict) -> bytes:
     """Vuelca los mismos datos de _calcular_subgrupos a un .xlsx: una hoja
     'Colectivos' (nombre + recuento de cada uno de los 4 subgrupos, para saber

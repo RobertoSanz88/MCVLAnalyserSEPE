@@ -143,6 +143,23 @@
                               border: 1.5px solid var(--border); border-radius: 5px; background: var(--bg);
                               color: var(--text); margin-left: 0.4rem; }
         #grafico-trayectoria { flex: 1; min-height: 420px; }
+
+        /* --- Pestana "Cruce de variables" (v1.3) --- */
+        /* Mismo ancho que panel-filtros (no tablas-w, mas estrecho): reutiliza
+           .fila-columna para nombres de variable largos (p.ej.
+           "Fecha_inicio_ultima_racha_sin_empleo"), igual que ya hace panel-filtros
+           con las mismas filas. */
+        #panel-variables-cruce { width: var(--sidebar-w); flex: none; background: var(--bg2);
+                                    border-right: 1px solid var(--border); }
+        #panel-cruce { flex: 1; min-width: 320px; background: var(--bg2);
+                         display: flex; flex-direction: column; }
+        #grafico-cruce { flex: 1; min-height: 420px; }
+        /* Misma caja que #lista-columnas (panel-filtros), como clase para poder
+           repetirla en Variable 1 y Variable 2 sin duplicar toda la regla. */
+        .lista-columnas-cruce { max-height: 220px; overflow-y: auto; border: 1.5px solid var(--border);
+                                   border-radius: 7px; background: var(--bg); margin-bottom: 1.1rem; }
+        .fila-columna.fila-deshabilitada { opacity: 0.35; cursor: default; }
+        .fila-columna.fila-deshabilitada:hover { background: none; }
         .nota-trayectoria-categorica { font-size: 0.78rem; color: var(--muted); font-style: italic;
                                           margin: 0 0 0.8rem; flex: none; }
 
@@ -168,9 +185,11 @@
                                           gap: 0.7rem; }
 
         .panel::-webkit-scrollbar, #sidebar::-webkit-scrollbar,
-        #lista-columnas::-webkit-scrollbar, #lista-categorias::-webkit-scrollbar { width: 6px; }
+        #lista-columnas::-webkit-scrollbar, #lista-categorias::-webkit-scrollbar,
+        .lista-columnas-cruce::-webkit-scrollbar { width: 6px; }
         .panel::-webkit-scrollbar-thumb, #sidebar::-webkit-scrollbar-thumb,
-        #lista-columnas::-webkit-scrollbar-thumb, #lista-categorias::-webkit-scrollbar-thumb {
+        #lista-columnas::-webkit-scrollbar-thumb, #lista-categorias::-webkit-scrollbar-thumb,
+        .lista-columnas-cruce::-webkit-scrollbar-thumb {
             background: var(--border); border-radius: 3px; }
 
         h2 { font-size: 0.95rem; font-weight: 800; color: var(--text); margin: 0 0 0.9rem;
@@ -429,7 +448,7 @@
             <p>Observatorio de las Ocupaciones · SEPE</p>
         </div>
         <div class="header-badges">
-            <span class="badge">v1.2</span>
+            <span class="badge">v1.3</span>
         </div>
     </header>
 
@@ -443,6 +462,7 @@
             <div class="pestana activa" id="pestana-analisis" onclick="cambiarVista('analisis')">Análisis de colectivos</div>
             <div class="pestana" id="pestana-trayectorias" onclick="cambiarVista('trayectorias')">Trayectorias de colectivos</div>
             <div class="pestana" id="pestana-individuales" onclick="cambiarVista('individuales')">Trayectorias individuales</div>
+            <div class="pestana" id="pestana-cruce" onclick="cambiarVista('cruce')">Cruce de variables</div>
             <div class="pestana deshabilitada">Cluster
                 <span class="nota-futuro">(próximamente)</span>
             </div>
@@ -606,6 +626,36 @@
                     </div>
                 </div>
             </div>
+
+            <div id="contenido-cruce" class="contenido-vista" style="display:none">
+                <div id="panel-variables-cruce" class="panel">
+                    <h2>Variables a cruzar</h2>
+
+                    <h3>Variable 1</h3>
+                    <div class="tipos-filtro">
+                        <label><input type="checkbox" id="mostrar-numericas-var1-cruce" checked onchange="renderizarListaVariableCruce(1)"> Numéricas</label>
+                        <label><input type="checkbox" id="mostrar-categoricas-var1-cruce" checked onchange="renderizarListaVariableCruce(1)"> Categóricas</label>
+                    </div>
+                    <div id="lista-variable1-cruce" class="lista-columnas-cruce"></div>
+
+                    <h3>Variable 2</h3>
+                    <div class="tipos-filtro">
+                        <label><input type="checkbox" id="mostrar-numericas-var2-cruce" checked onchange="renderizarListaVariableCruce(2)"> Numéricas</label>
+                        <label><input type="checkbox" id="mostrar-categoricas-var2-cruce" checked onchange="renderizarListaVariableCruce(2)"> Categóricas</label>
+                    </div>
+                    <div id="lista-variable2-cruce" class="lista-columnas-cruce"></div>
+                </div>
+
+                <div id="panel-cruce" class="panel">
+                    <div class="controles-trayectorias">
+                        <div id="cruce-selector-subgrupo" class="selector-subgrupo-individual"></div>
+                        <label>Gráfico:
+                            <select id="select-tipo-grafico-cruce" onchange="dibujarGraficoCruce()"></select>
+                        </label>
+                    </div>
+                    <div id="grafico-cruce"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, elige las 2 variables, y pulsa Calcular.</p></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -714,15 +764,18 @@ function cambiarVista(vista) {
     document.getElementById('pestana-analisis').classList.toggle('activa', vista === 'analisis');
     document.getElementById('pestana-trayectorias').classList.toggle('activa', vista === 'trayectorias');
     document.getElementById('pestana-individuales').classList.toggle('activa', vista === 'individuales');
+    document.getElementById('pestana-cruce').classList.toggle('activa', vista === 'cruce');
     document.getElementById('contenido-analisis').style.display = vista === 'analisis' ? 'flex' : 'none';
     document.getElementById('contenido-trayectorias').style.display = vista === 'trayectorias' ? 'flex' : 'none';
     document.getElementById('contenido-individuales').style.display = vista === 'individuales' ? 'flex' : 'none';
+    document.getElementById('contenido-cruce').style.display = vista === 'cruce' ? 'flex' : 'none';
     document.getElementById('panel-filtros').style.display = vista === 'individuales' ? 'none' : 'block';
     document.getElementById('bloque-acciones-sidebar').style.display = vista === 'individuales' ? 'none' : 'block';
     // "Exportar Excel" tiene una exportacion propia por pestana (Analisis:
     // paso 1; Trayectorias: paso 2, ver conversacion 2026-08-28) - se oculta
-    // solo en Individuales, que no tiene ninguna. "Calcular" no se toca aqui.
-    document.getElementById('boton-exportar').style.display = vista === 'individuales' ? 'none' : 'block';
+    // en Individuales (no tiene ninguna) y en Cruce de variables (todavia sin
+    // exportacion propia, v1.3). "Calcular" no se toca aqui.
+    document.getElementById('boton-exportar').style.display = (vista === 'individuales' || vista === 'cruce') ? 'none' : 'block';
     actualizarBotonExportar();
 
     // Trayectorias es navegable desde el principio (el usuario decide en que
@@ -815,6 +868,7 @@ async function cargarColumnas() {
     const resp = await fetch('/colectivos/columnas');
     columnasDisponibles = await resp.json();
     renderizarListaColumnas();
+    poblarVariablesCruce();
 }
 
 function renderizarListaColumnas() {
@@ -999,6 +1053,7 @@ async function alPulsarCalcular() {
     boton.textContent = 'Calculando...';
     try {
         if (vistaActiva === 'analisis') await calcular();
+        else if (vistaActiva === 'cruce') await sincronizarCruce();
         else await sincronizarTrayectorias();
     } finally {
         boton.disabled = false;
@@ -2168,6 +2223,186 @@ function seleccionarSubgrupoIndividual(nombre) {
     });
     if (ultimosSubgruposIndividual) {
         document.getElementById('individual-subgrupo-nombre').textContent = ultimosSubgruposIndividual[nombre].etiqueta;
+    }
+}
+
+// --- Pestana "Cruce de variables" (v1.3) ---
+// Cruza 2 variables cualesquiera de Personas (numerica x numerica, categorica
+// x categorica, o numerica x categorica - ver /colectivos/cruce). Los 4
+// subgrupos llegan de una vez en la misma respuesta; el selector de chips
+// (mismo componente que "Trayectorias individuales", ver
+// renderizarSelectorSubgrupoIndividual) elige cual se dibuja, sin volver a
+// pedir al backend.
+const TIPOS_GRAFICO_CRUCE = {
+    numerica_numerica: [{ valor: 'densidad', etiqueta: 'Mapa de densidad' }],
+    categorica_categorica: [{ valor: 'contingencia', etiqueta: 'Mapa de calor (tabla de contingencia)' }],
+    numerica_categorica: [{ valor: 'boxplot', etiqueta: 'Diagrama de cajas (boxplot)' }],
+};
+
+let subgrupoSeleccionadoCruce = ORDEN_SUBGRUPOS[0];
+let ultimoResultadoCruce = null;
+
+// Variable 1 / Variable 2: mismo componente que la lista de columnas de
+// "Seleccion de colectivo" (checkboxes Numericas/Categoricas + caja con
+// scroll de .fila-columna), no un <select> - decision explicita del usuario.
+// Estado independiente por columna: { nombre, tipo } o null si no hay
+// seleccion todavia.
+let variable1Cruce = null;
+let variable2Cruce = null;
+
+function poblarVariablesCruce() {
+    // Seleccion inicial solo si no habia ninguna todavia (no pisa lo que el
+    // usuario ya haya elegido si esto se vuelve a llamar).
+    if (!variable1Cruce && columnasDisponibles.numericas.length) {
+        variable1Cruce = { nombre: [...columnasDisponibles.numericas].sort()[0], tipo: 'numerica' };
+    }
+    if (!variable2Cruce && columnasDisponibles.categoricas.length) {
+        variable2Cruce = { nombre: [...columnasDisponibles.categoricas].sort()[0], tipo: 'categorica' };
+    }
+    renderizarListaVariableCruce(1);
+    renderizarListaVariableCruce(2);
+}
+
+// n: 1 o 2 (que columna de variable redibujar). Cada columna filtra y
+// selecciona de forma independiente; la fila ya elegida en la OTRA columna
+// aparece deshabilitada (en vez de dejar elegir la misma variable 2 veces).
+function renderizarListaVariableCruce(n) {
+    const verNum = document.getElementById(`mostrar-numericas-var${n}-cruce`).checked;
+    const verCat = document.getElementById(`mostrar-categoricas-var${n}-cruce`).checked;
+    const cont = document.getElementById(`lista-variable${n}-cruce`);
+    cont.innerHTML = '';
+
+    const filas = [];
+    if (verNum) columnasDisponibles.numericas.forEach(c => filas.push({ nombre: c, tipo: 'numerica' }));
+    if (verCat) columnasDisponibles.categoricas.forEach(c => filas.push({ nombre: c, tipo: 'categorica' }));
+    filas.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+    const seleccionPropia = n === 1 ? variable1Cruce : variable2Cruce;
+    const seleccionOtra = n === 1 ? variable2Cruce : variable1Cruce;
+
+    for (const f of filas) {
+        const div = document.createElement('div');
+        div.className = 'fila-columna';
+        const esSeleccionPropia = seleccionPropia && seleccionPropia.nombre === f.nombre;
+        const esSeleccionOtra = seleccionOtra && seleccionOtra.nombre === f.nombre;
+        if (esSeleccionPropia) div.classList.add('seleccionada');
+        div.innerHTML = `<span>${f.nombre}</span><span class="tipo">${f.tipo === 'numerica' ? 'num' : 'cat'}</span>`;
+        if (esSeleccionOtra) {
+            div.classList.add('fila-deshabilitada');
+            div.title = 'Ya elegida como la otra variable';
+        } else {
+            div.onclick = () => seleccionarVariableCruce(n, f.nombre, f.tipo);
+        }
+        cont.appendChild(div);
+    }
+}
+
+function seleccionarVariableCruce(n, nombre, tipo) {
+    if (n === 1) variable1Cruce = { nombre, tipo };
+    else variable2Cruce = { nombre, tipo };
+    renderizarListaVariableCruce(1);
+    renderizarListaVariableCruce(2);
+}
+
+async function sincronizarCruce() {
+    if (!variable1Cruce || !variable2Cruce) {
+        mostrarAviso('Elige las 2 variables a cruzar.', 'error');
+        return;
+    }
+    const cuerpo = { ...cuerpoPeticion(), variable1: variable1Cruce.nombre, variable2: variable2Cruce.nombre };
+    const resp = await fetch('/colectivos/cruce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+    });
+    if (!resp.ok) { mostrarAviso('Error al calcular el cruce: ' + (await resp.text()), 'error'); return; }
+    ultimoResultadoCruce = await resp.json();
+    poblarTipoGraficoCruce();
+    renderizarSelectorSubgrupoCruce();
+    dibujarGraficoCruce();
+}
+
+function poblarTipoGraficoCruce() {
+    const sel = document.getElementById('select-tipo-grafico-cruce');
+    const opciones = TIPOS_GRAFICO_CRUCE[ultimoResultadoCruce.tipo] || [];
+    sel.innerHTML = opciones.map(o => `<option value="${o.valor}">${o.etiqueta}</option>`).join('');
+}
+
+// Mismo patron visual que renderizarSelectorSubgrupoIndividual (chips +
+// nombre del subgrupo elegido a continuacion), adaptado para redibujar el
+// grafico de cruce en vez de cargar un IPF.
+function renderizarSelectorSubgrupoCruce() {
+    const cont = document.getElementById('cruce-selector-subgrupo');
+    if (!ultimoResultadoCruce) { cont.innerHTML = ''; return; }
+    const subs = ultimoResultadoCruce.subgrupos;
+    const chips = ORDEN_SUBGRUPOS.map(nombre => `
+        <div class="fila-subgrupo-individual${nombre === subgrupoSeleccionadoCruce ? ' seleccionado' : ''}"
+             onclick="seleccionarSubgrupoCruce('${nombre}')"
+             title="${subs[nombre].etiqueta} (${fmtEntero(subs[nombre].recuento)})">
+            <span class="numero-subgrupo">${NUMERO_SUBGRUPO[nombre]}</span>
+            <span class="leyenda-swatch" style="background:${COLOR_SUBGRUPO[nombre]}"></span>
+        </div>`).join('');
+    cont.innerHTML = chips +
+        `<span class="individual-subgrupo-nombre">${subs[subgrupoSeleccionadoCruce].etiqueta} (${fmtEntero(subs[subgrupoSeleccionadoCruce].recuento)})</span>`;
+}
+
+function seleccionarSubgrupoCruce(nombre) {
+    subgrupoSeleccionadoCruce = nombre;
+    document.querySelectorAll('#cruce-selector-subgrupo .fila-subgrupo-individual').forEach(el => {
+        el.classList.toggle('seleccionado', el.getAttribute('onclick').includes(`'${nombre}'`));
+    });
+    if (ultimoResultadoCruce) {
+        const sub = ultimoResultadoCruce.subgrupos[nombre];
+        document.querySelector('#cruce-selector-subgrupo .individual-subgrupo-nombre').textContent =
+            `${sub.etiqueta} (${fmtEntero(sub.recuento)})`;
+    }
+    dibujarGraficoCruce();
+}
+
+function dibujarGraficoCruce() {
+    const div = document.getElementById('grafico-cruce');
+    if (!ultimoResultadoCruce) return;
+    const sub = ultimoResultadoCruce.subgrupos[subgrupoSeleccionadoCruce];
+    const v1 = ultimoResultadoCruce.variable1;
+    const v2 = ultimoResultadoCruce.variable2;
+    const fuenteComun = { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26', size: 11 };
+
+    if (ultimoResultadoCruce.tipo === 'numerica_numerica' || ultimoResultadoCruce.tipo === 'categorica_categorica') {
+        // Mismo trace (heatmap) para las 2 combinaciones: en numerica x
+        // numerica x/y son centros de celda de la rejilla de densidad, en
+        // categorica x categorica son las categorias de cada variable (tabla
+        // de contingencia) - visualmente identico, solo cambia el dato.
+        const esNumNum = ultimoResultadoCruce.tipo === 'numerica_numerica';
+        Plotly.newPlot(div, [{
+            type: 'heatmap', x: sub.x, y: sub.y, z: sub.z,
+            colorscale: 'YlGnBu',
+            hovertemplate: `${v1}: %{x` + (esNumNum ? ':,.2f' : '') + `}<br>${v2}: %{y` + (esNumNum ? ':,.2f' : '') + `}<br>N: %{z:,}<extra></extra>`,
+            colorbar: { title: 'N' },
+        }], {
+            margin: { l: esNumNum ? 65 : 140, r: 20, t: 15, b: esNumNum ? 55 : 120 },
+            xaxis: { title: v1 }, yaxis: { title: v2 },
+            font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+        }, { responsive: true, displaylogo: false });
+    } else {
+        // numerica_categorica: boxplot con cuartiles ya calculados en SQL
+        // (Q1/mediana/Q3/min/max por categoria) - nunca se envian valores
+        // individuales al navegador, hasta 1,3M personas por categoria.
+        Plotly.newPlot(div, [{
+            type: 'box',
+            x: sub.cajas.map(c => c.categoria),
+            q1: sub.cajas.map(c => c.q1),
+            median: sub.cajas.map(c => c.mediana),
+            q3: sub.cajas.map(c => c.q3),
+            lowerfence: sub.cajas.map(c => c.min),
+            upperfence: sub.cajas.map(c => c.max),
+            marker: { color: COLOR_SUBGRUPO[subgrupoSeleccionadoCruce] },
+            text: sub.cajas.map(c => `N: ${fmtEntero(c.n)}`),
+            hovertemplate: `${v2}: %{x}<br>${v1}: %{y}<br>%{text}<extra></extra>`,
+        }], {
+            margin: { l: 65, r: 20, t: 15, b: 90 },
+            xaxis: { title: v2, tickangle: -25 }, yaxis: { title: v1 },
+            font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+        }, { responsive: true, displaylogo: false });
     }
 }
 
