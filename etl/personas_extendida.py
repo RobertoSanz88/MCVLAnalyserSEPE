@@ -1218,7 +1218,7 @@ def _tiene_jubilacion(x):
     return False
 
 
-def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_dict_path):
+def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_dict_path, causa_baja_dict_path):
     """Ultimo paso: calculos derivados (edades, tasas anuales, agrupaciones, filtros de
     calidad) y seleccion final de columnas. Todo en pandas: para cuando se llega aqui, la
     tabla ya esta reducida a una fila por persona (~1,36M filas), cabe de sobra en memoria."""
@@ -1551,21 +1551,27 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     # y pandas sube de tipo entero a float en cuanto hay un NaN de por medio. La interfaz
     # clasifica "numerica" vs "categorica" por el tipo DuckDB (ver app/routers/colectivos.py,
     # TIPOS_NUMERICOS/TIPOS_CATEGORICOS), asi que estos codigos identificadores salian mal
-    # clasificados como "numerica". Se convierten a texto (Int64 nullable -> str, preservando
-    # NULL real, no "<NA>" ni "54.0") y luego "NO CONSTA" + category, mismo criterio que el
-    # resto de columnas categoricas de este fichero.
+    # clasificados como "numerica". Se convierten a texto y "NO CONSTA" + category, mismo
+    # criterio que el resto de columnas categoricas de este fichero.
+    # Decodificadas a "codigo descripcion" (2026-09-09, decision explicita del usuario, texto
+    # de la guia MCVL acortado a mano por el usuario - ver etl/metadata/causa_baja_dict.csv,
+    # p.ej. "51 Voluntaria" en vez de "DIMISION/BAJA VOLUNTARIA DEL TRABAJADOR"): mismo patron
+    # que Act_econ_ppal/act_econ_ult_baja (codigo de 2 digitos con zfill, no 3 como CNAE).
     # causas_baja_distintas de-incluida (2026-09-08, revertido): SI es numerica de verdad (un
     # conteo), decision revertida por el usuario - se queda con su dtype natural (float64 con
     # NaN para quien no tiene episodios, igual que cualquier otra columna numerica del fichero).
     # act_econ_ult_baja NO va en este bloque: se decodifica aparte, igual que Act_econ_ppal (ver
-    # mas abajo), no solo se corrige el tipo.
-    def _codigo_a_categoria(serie):
+    # mas arriba).
+    causa_baja_df = pd.read_csv(causa_baja_dict_path, sep=";", encoding="utf-8", dtype={"codigo": str})
+    causa_baja_dict = dict(zip(causa_baja_df["codigo"], causa_baja_df["descripcion"]))
+
+    def _decodificar_causa_baja(serie):
         entero = serie.astype("Int64")
-        texto = entero.astype(str).mask(entero.isna())
-        return texto.fillna("NO CONSTA").astype("category")
+        codigo = entero.astype(str).str.zfill(2).mask(entero.isna())
+        return (codigo + " " + codigo.map(causa_baja_dict)).fillna("NO CONSTA").astype("category")
 
     for columna in ["Causa_Baja_Trab_Ppal", "causa_ult_baja", "causa_baja_mas_comun"]:
-        df[columna] = _codigo_a_categoria(df[columna])
+        df[columna] = _decodificar_causa_baja(df[columna])
 
     # Reordenar y seleccionar las columnas finales
     columnas_presentes = [c for c in NUEVO_ORDEN if c in df.columns]

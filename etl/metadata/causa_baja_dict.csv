@@ -1,0 +1,21 @@
+codigo;descripcion
+00;No consta
+51;Voluntaria
+52;Cese de actividad
+54;No voluntaria
+55;Fusión o absorción de empresa
+56;Fallecimiento
+58;Pase a pensionista
+60;De oficio o revisión (Admón.)
+65;IT y agotamiento de IT
+68;Excedencia por cuidado de hijos
+69;Suspensión temporal por ERE
+73;Excedencia por cuidado de familiares
+74;Suspensión del contrato
+77;Despido colectivo
+85;No superar periodo de prueba
+91;Causas objetivas de la empresa y otras
+92;Causas objetivas del trabajador y otras
+93;Fin de contrato temporal o de duración determinada
+94;Pase a inactividad de fijos discontinuos
+99;Otras causas
