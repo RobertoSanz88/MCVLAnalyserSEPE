@@ -751,6 +751,108 @@ def cruce(request: Request, body: CruceRequest):
     }
 
 
+class CruceCentralRequest(BaseModel):
+    variable1: str
+    variable2: str
+    variable_central: str
+
+
+def _cruce_categorica_categorica_central(con, v1: str, v2: str, v_central: str) -> tuple[str, str, dict]:
+    """Modo "3 variables" de Cruce (switch "Aplicar filtro de colectivos" en
+    No, 2026-09-09): heatmap de la variable central (numerica) agregada por
+    cada combinacion de v1 x v2 (categoricas), sobre TODA la tabla (sin
+    filtro de colectivo - por eso esta funcion no toma `condiciones` como las
+    de mas arriba, solo hay un resultado, no 4 subgrupos). Mismo top-N=20 +
+    "Resto" y regla de eje (X = mas categorias) que _cruce_categorica_categorica.
+
+    Media Y mediana se calculan siempre las dos en la misma consulta (mismo
+    patron que trayectorias.py con AVG/MEDIAN en el mismo SELECT) - el switch
+    Media/Mediana del frontend solo elige que matriz dibujar, sin volver a
+    pedir al backend.
+
+    El "Resto" de cada eje se agrupa con una expresion CASE en el propio
+    GROUP BY (no combinando a mano medias/medianas ya calculadas de cada
+    categoria sobrante despues de la consulta): una mediana no se puede
+    promediar entre grupos sin perder precision, igual que ya se explica en
+    _cruce_numerica_categorica para sus cajas."""
+    cat1, resto1 = _top_categorias(con, v1)
+    cat2, resto2 = _top_categorias(con, v2)
+    etiqueta_resto = "Resto"
+    ejes1 = cat1 + ([etiqueta_resto] if resto1 else [])
+    ejes2 = cat2 + ([etiqueta_resto] if resto2 else [])
+
+    if len(ejes2) > len(ejes1):
+        v1, v2, cat1, cat2, resto1, resto2, ejes1, ejes2 = v2, v1, cat2, cat1, resto2, resto1, ejes2, ejes1
+
+    def _expr(columna, categorias_top, hay_resto):
+        if not hay_resto:
+            return columna, []
+        placeholders = ", ".join("?" for _ in categorias_top)
+        return f"CASE WHEN {columna} IN ({placeholders}) THEN {columna} ELSE 'Resto' END", list(categorias_top)
+
+    expr1, params1 = _expr(v1, cat1, resto1)
+    expr2, params2 = _expr(v2, cat2, resto2)
+    idx1 = {v: i for i, v in enumerate(ejes1)}
+    idx2 = {v: i for i, v in enumerate(ejes2)}
+
+    filas = con.execute(
+        f"""
+        SELECT {expr1} AS cat1, {expr2} AS cat2,
+               AVG({v_central}) AS media, MEDIAN({v_central}) AS mediana, COUNT(*) AS n
+        FROM personas
+        WHERE {v1} IS NOT NULL AND {v2} IS NOT NULL AND {v_central} IS NOT NULL
+        GROUP BY 1, 2
+        """,
+        # cat_expr (con sus placeholders) va en el SELECT, que aparece ANTES
+        # que el WHERE en el texto de la query - los parametros posicionales
+        # tienen que ir en ese mismo orden (igual que _cruce_numerica_categorica).
+        params1 + params2,
+    ).fetchall()
+
+    # Celdas sin ninguna persona quedan a None (no a 0, que se confundiria en
+    # el heatmap con "el agregado vale 0") - Plotly pinta None como hueco.
+    z_media = [[None] * len(ejes1) for _ in range(len(ejes2))]
+    z_mediana = [[None] * len(ejes1) for _ in range(len(ejes2))]
+    n_celda = [[0] * len(ejes1) for _ in range(len(ejes2))]
+    for val1, val2, media, mediana, n in filas:
+        i1, i2 = idx1[val1], idx2[val2]
+        z_media[i2][i1] = media
+        z_mediana[i2][i1] = mediana
+        n_celda[i2][i1] = n
+
+    total = con.execute(
+        f"SELECT COUNT(*) FROM personas WHERE {v1} IS NOT NULL AND {v2} IS NOT NULL AND {v_central} IS NOT NULL"
+    ).fetchone()[0]
+
+    return v1, v2, {
+        "x": ejes1, "y": ejes2, "z_media": z_media, "z_mediana": z_mediana, "n": n_celda, "recuento": total,
+    }
+
+
+@router.post("/colectivos/cruce-central")
+def cruce_central(request: Request, body: CruceCentralRequest):
+    con = request.app.state.con.cursor()
+    columnas_validas = _columnas_personas(con)
+    numericas, categoricas = _clasificar_columnas(columnas_validas)
+    numericas_validas = set(numericas) - {"ipf"}
+    categoricas_validas = set(categoricas)
+
+    v1, v2, v_central = body.variable1, body.variable2, body.variable_central
+    if len({v1, v2, v_central}) < 3:
+        raise HTTPException(400, "Las 3 variables deben ser distintas")
+    if v1 not in categoricas_validas or v2 not in categoricas_validas:
+        raise HTTPException(400, "Variable 1 y Variable 2 deben ser categoricas en el modo de 3 variables")
+    if v_central not in numericas_validas:
+        raise HTTPException(400, "La variable central debe ser numerica")
+
+    v_x, v_y, resultado = _cruce_categorica_categorica_central(con, v1, v2, v_central)
+    return {
+        "tipo": "categorica_categorica_central",
+        "variable1": v_x, "variable2": v_y, "variable_central": v_central,
+        **resultado,
+    }
+
+
 class PuntosRequest(SubgruposRequest):
     variable1: str
     variable2: str

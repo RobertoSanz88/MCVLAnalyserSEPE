@@ -636,24 +636,42 @@
                 <div id="panel-variables-cruce" class="panel">
                     <h2>Variables a cruzar</h2>
 
+                    <div class="fila-switch-individual">
+                        <span class="switch-filtro-label">Aplicar filtro de colectivos</span>
+                        <div class="switch-vista" id="switch-filtro-cruce">
+                            <button type="button" onclick="cambiarFiltroColectivoCruce(false)">No</button>
+                            <button type="button" class="activa" onclick="cambiarFiltroColectivoCruce(true)">Sí</button>
+                        </div>
+                    </div>
+                    <p class="aviso-vacio" id="cruce-aviso-filtros" style="display:none">Configura Filtro 1 y Filtro 2 en "Análisis de colectivos" o "Trayectorias de colectivos" primero.</p>
+
                     <h3>Variable 1</h3>
-                    <div class="tipos-filtro">
+                    <div class="tipos-filtro" id="fila-tipos-var1-cruce">
                         <label><input type="checkbox" id="mostrar-numericas-var1-cruce" checked onchange="renderizarListaVariableCruce(1)"> Numéricas</label>
                         <label><input type="checkbox" id="mostrar-categoricas-var1-cruce" checked onchange="renderizarListaVariableCruce(1)"> Categóricas</label>
                     </div>
                     <div id="lista-variable1-cruce" class="lista-columnas-cruce"></div>
 
                     <h3>Variable 2</h3>
-                    <div class="tipos-filtro">
+                    <div class="tipos-filtro" id="fila-tipos-var2-cruce">
                         <label><input type="checkbox" id="mostrar-numericas-var2-cruce" checked onchange="renderizarListaVariableCruce(2)"> Numéricas</label>
                         <label><input type="checkbox" id="mostrar-categoricas-var2-cruce" checked onchange="renderizarListaVariableCruce(2)"> Categóricas</label>
                     </div>
                     <div id="lista-variable2-cruce" class="lista-columnas-cruce"></div>
+
+                    <div id="panel-variable-central-cruce" style="display:none">
+                        <h3>Variable central</h3>
+                        <div id="lista-variable-central-cruce" class="lista-columnas-cruce"></div>
+                    </div>
                 </div>
 
                 <div id="panel-cruce" class="panel">
                     <div class="controles-trayectorias">
                         <div id="cruce-selector-subgrupo" class="selector-subgrupo-individual"></div>
+                        <div class="switch-vista" id="switch-estadistico-cruce-central" style="display:none">
+                            <button type="button" class="activa" data-valor="media" onclick="cambiarEstadisticoCruceCentral('media')">Media</button>
+                            <button type="button" data-valor="mediana" onclick="cambiarEstadisticoCruceCentral('mediana')">Mediana</button>
+                        </div>
                         <label>Gráfico:
                             <select id="select-tipo-grafico-cruce" onchange="dibujarGraficoCruce()"></select>
                         </label>
@@ -774,7 +792,12 @@ function cambiarVista(vista) {
     document.getElementById('contenido-trayectorias').style.display = vista === 'trayectorias' ? 'flex' : 'none';
     document.getElementById('contenido-individuales').style.display = vista === 'individuales' ? 'flex' : 'none';
     document.getElementById('contenido-cruce').style.display = vista === 'cruce' ? 'flex' : 'none';
-    document.getElementById('panel-filtros').style.display = vista === 'individuales' ? 'none' : 'block';
+    // "Cruce de variables" ya no usa panel-filtros directamente (2026-09-09):
+    // en modo "Aplicar filtro de colectivos = Si" sigue dependiendo del mismo
+    // filtro1/filtro2 configurados en Analisis/Trayectorias (igual que
+    // Individuales, ver mas abajo), pero ya no se ven ni se editan desde
+    // aqui - solo el switch + el aviso propio de esta pestana.
+    document.getElementById('panel-filtros').style.display = (vista === 'individuales' || vista === 'cruce') ? 'none' : 'block';
     document.getElementById('bloque-acciones-sidebar').style.display = vista === 'individuales' ? 'none' : 'block';
     // "Exportar Excel" tiene una exportacion propia por pestana (Analisis:
     // paso 1; Trayectorias: paso 2, ver conversacion 2026-08-28) - se oculta
@@ -799,6 +822,24 @@ function cambiarVista(vista) {
         // selector/boton por si acaso (filtrosListos() puede haber cambiado).
         if (filtroColectivoIndividual) cambiarFiltroColectivoIndividual(true);
     }
+
+    // Cruce de variables, con el switch en "Si": mismo motivo que Individuales
+    // arriba - filtro1/filtro2 pueden haber cambiado (o haberse completado)
+    // en otra pestana desde la ultima vez que se entro aqui.
+    if (vista === 'cruce' && filtroColectivoCruce) {
+        document.getElementById('cruce-aviso-filtros').style.display = filtrosListos() ? 'none' : 'block';
+    }
+    actualizarBotonCalcular();
+}
+
+// boton-calcular es un solo elemento compartido por todas las pestanas (ver
+// #bloque-acciones-sidebar) - su condicion de habilitado depende de CUAL esta
+// activa: en todas salvo "Cruce con el switch en No" (que no necesita ningun
+// filtro de colectivo, ver cambiarFiltroColectivoCruce) sigue siendo
+// filtrosListos(), igual que siempre.
+function actualizarBotonCalcular() {
+    const listo = (vistaActiva === 'cruce' && !filtroColectivoCruce) ? true : filtrosListos();
+    document.getElementById('boton-calcular').disabled = !listo;
 }
 
 // Misma condicion que ya usaba Calcular: cruce de ejes completo -> ya hay una
@@ -844,8 +885,17 @@ function toggleContracolectivo(n) {
 function actualizarEstadoFiltros() {
     const listo = filtrosListos();
 
-    document.getElementById('boton-calcular').disabled = !listo;
+    actualizarBotonCalcular();
     actualizarBotonExportar();
+    // Cruce con el switch en "Si" tambien depende de filtro1/filtro2 - si el
+    // usuario esta en esa pestana y los acaba de completar en otra sesion de
+    // configuracion (cambiarVista ya cubre el caso de "entrar" a la pestana;
+    // esto cubre "cambiar filtros mientras ya se esta viendo", aunque en la
+    // practica no puede pasar a la vez porque panel-filtros esta oculto en
+    // Cruce - se deja por coherencia con el resto de la funcion).
+    if (vistaActiva === 'cruce' && filtroColectivoCruce) {
+        document.getElementById('cruce-aviso-filtros').style.display = listo ? 'none' : 'block';
+    }
 
     actualizarRecuentosEnVivo(listo);
 }
@@ -2253,6 +2303,14 @@ const TIPOS_GRAFICO_CRUCE = {
         { valor: 'boxplot', etiqueta: 'Diagrama de cajas (boxplot)' },
         { valor: 'histograma', etiqueta: 'Histograma agrupado' },
     ],
+    // Modo "3 variables" (switch "Aplicar filtro de colectivos" en No, ver
+    // cambiarFiltroColectivoCruce): Variable 1/2 categoricas + Variable
+    // central numerica, agregada por celda (/colectivos/cruce-central). Una
+    // sola opcion por ahora, mismo espiritu que el resto de esta lista - el
+    // desplegable ya soporta mas si el usuario pide otro tipo despues.
+    categorica_categorica_central: [
+        { valor: 'heatmap_central', etiqueta: 'Mapa de calor (media/mediana)' },
+    ],
 };
 
 let subgrupoSeleccionadoCruce = ORDEN_SUBGRUPOS[0];
@@ -2263,6 +2321,55 @@ let ultimoResultadoCruce = null;
 // aqui; sincronizarCruce() la vacia en cada consulta nueva (variables o
 // filtros distintos invalidan los puntos ya cacheados).
 let cachePuntosCruce = {};
+
+// Switch "Aplicar filtro de colectivos" propio de esta pestana (2026-09-09,
+// mismo componente que Trayectorias individuales - ver
+// cambiarFiltroColectivoIndividual): en Si (por defecto) el comportamiento es
+// el de siempre - cruza 2 variables cualesquiera sobre el subgrupo elegido
+// con chips, filtro1/filtro2 configurados en Analisis/Trayectorias (panel-
+// filtros esta oculto en esta pestana, igual que en Individuales, pero su
+// estado ya configurado sigue vivo en esas variables). En No, no hay
+// colectivo ninguno (poblacion completa) y aparece una 3a variable
+// ("central", siempre numerica) que se desglosa por Variable 1 x Variable 2
+// (siempre categoricas en este modo) - ver /colectivos/cruce-central.
+let filtroColectivoCruce = true;
+let variableCentralCruce = null; // nombre de columna (siempre numerica) o null
+let estadisticoCruceCentral = 'media'; // switch Media/Mediana, redibuja sin recalcular (backend ya manda las 2)
+
+function cambiarFiltroColectivoCruce(activo) {
+    filtroColectivoCruce = activo;
+    document.querySelectorAll('#switch-filtro-cruce button').forEach((btn, i) => {
+        btn.classList.toggle('activa', (i === 1) === activo);
+    });
+    document.getElementById('panel-variable-central-cruce').style.display = activo ? 'none' : 'block';
+
+    // Variable 1/2 solo pueden ser categoricas en modo "3 variables" (decision
+    // explicita del usuario, 2026-09-09) - si alguna era numerica (venia del
+    // modo "Si"), se descarta en vez de dejarla elegida pero invalida.
+    if (!activo) {
+        if (variable1Cruce && variable1Cruce.tipo !== 'categorica') variable1Cruce = null;
+        if (variable2Cruce && variable2Cruce.tipo !== 'categorica') variable2Cruce = null;
+    }
+
+    // El resultado anterior (si lo habia) ya no corresponde al modo activo -
+    // se limpia para no dejar un grafico desincronizado con el switch/las
+    // variables visibles ahora.
+    ultimoResultadoCruce = null;
+    cachePuntosCruce = {};
+    document.getElementById('cruce-selector-subgrupo').innerHTML = '';
+    document.getElementById('select-tipo-grafico-cruce').innerHTML = '';
+    document.getElementById('switch-estadistico-cruce-central').style.display = 'none';
+    document.getElementById('grafico-cruce').innerHTML = `<p class="aviso-vacio">${activo
+        ? 'Configura Filtro 1 y Filtro 2, elige las 2 variables, y pulsa Calcular.'
+        : 'Elige Variable 1, Variable 2 y Variable central, y pulsa Calcular.'}</p>`;
+
+    document.getElementById('cruce-aviso-filtros').style.display = (activo && !filtrosListos()) ? 'block' : 'none';
+
+    renderizarListaVariableCruce(1);
+    renderizarListaVariableCruce(2);
+    renderizarListaVariableCentralCruce();
+    actualizarBotonCalcular();
+}
 
 // Variable 1 / Variable 2: mismo componente que la lista de columnas de
 // "Seleccion de colectivo" (checkboxes Numericas/Categoricas + caja con
@@ -2283,14 +2390,20 @@ function poblarVariablesCruce() {
     }
     renderizarListaVariableCruce(1);
     renderizarListaVariableCruce(2);
+    renderizarListaVariableCentralCruce();
 }
 
 // n: 1 o 2 (que columna de variable redibujar). Cada columna filtra y
 // selecciona de forma independiente; la fila ya elegida en la OTRA columna
 // aparece deshabilitada (en vez de dejar elegir la misma variable 2 veces).
+// Modo "3 variables" (switch en No): fuerza solo categoricas, ocultando el
+// checkbox "Numericas" (no tiene sentido dejarlo marcable si no va a hacer
+// nada - ver mas abajo).
 function renderizarListaVariableCruce(n) {
-    const verNum = document.getElementById(`mostrar-numericas-var${n}-cruce`).checked;
-    const verCat = document.getElementById(`mostrar-categoricas-var${n}-cruce`).checked;
+    const soloCategoricas = !filtroColectivoCruce;
+    document.getElementById(`fila-tipos-var${n}-cruce`).style.display = soloCategoricas ? 'none' : 'flex';
+    const verNum = !soloCategoricas && document.getElementById(`mostrar-numericas-var${n}-cruce`).checked;
+    const verCat = soloCategoricas || document.getElementById(`mostrar-categoricas-var${n}-cruce`).checked;
     const cont = document.getElementById(`lista-variable${n}-cruce`);
     cont.innerHTML = '';
 
@@ -2326,19 +2439,59 @@ function seleccionarVariableCruce(n, nombre, tipo) {
     renderizarListaVariableCruce(2);
 }
 
-async function sincronizarCruce() {
-    if (!variable1Cruce || !variable2Cruce) {
-        mostrarAviso('Elige las 2 variables a cruzar.', 'error');
-        return;
+// Variable central (modo "3 variables", switch en No): siempre numerica, sin
+// checkboxes Numericas/Categoricas (no aplica, solo hay una lista posible) -
+// mismo componente .lista-columnas-cruce/.fila-columna que Variable 1/2.
+function renderizarListaVariableCentralCruce() {
+    const cont = document.getElementById('lista-variable-central-cruce');
+    cont.innerHTML = '';
+    const nombres = [...columnasDisponibles.numericas].sort();
+    for (const nombre of nombres) {
+        const div = document.createElement('div');
+        div.className = 'fila-columna';
+        if (variableCentralCruce === nombre) div.classList.add('seleccionada');
+        div.innerHTML = `<span>${nombre}</span><span class="tipo">num</span>`;
+        div.onclick = () => seleccionarVariableCentralCruce(nombre);
+        cont.appendChild(div);
     }
-    const cuerpo = { ...cuerpoPeticion(), variable1: variable1Cruce.nombre, variable2: variable2Cruce.nombre };
-    const resp = await fetch('/colectivos/cruce', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cuerpo),
-    });
-    if (!resp.ok) { mostrarAviso('Error al calcular el cruce: ' + (await resp.text()), 'error'); return; }
-    ultimoResultadoCruce = await resp.json();
+}
+
+function seleccionarVariableCentralCruce(nombre) {
+    variableCentralCruce = nombre;
+    renderizarListaVariableCentralCruce();
+}
+
+async function sincronizarCruce() {
+    if (filtroColectivoCruce) {
+        if (!variable1Cruce || !variable2Cruce) {
+            mostrarAviso('Elige las 2 variables a cruzar.', 'error');
+            return;
+        }
+        const cuerpo = { ...cuerpoPeticion(), variable1: variable1Cruce.nombre, variable2: variable2Cruce.nombre };
+        const resp = await fetch('/colectivos/cruce', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cuerpo),
+        });
+        if (!resp.ok) { mostrarAviso('Error al calcular el cruce: ' + (await resp.text()), 'error'); return; }
+        ultimoResultadoCruce = await resp.json();
+    } else {
+        if (!variable1Cruce || !variable2Cruce || !variableCentralCruce) {
+            mostrarAviso('Elige Variable 1, Variable 2 y Variable central.', 'error');
+            return;
+        }
+        const cuerpo = {
+            variable1: variable1Cruce.nombre, variable2: variable2Cruce.nombre,
+            variable_central: variableCentralCruce,
+        };
+        const resp = await fetch('/colectivos/cruce-central', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cuerpo),
+        });
+        if (!resp.ok) { mostrarAviso('Error al calcular el cruce: ' + (await resp.text()), 'error'); return; }
+        ultimoResultadoCruce = await resp.json();
+    }
     cachePuntosCruce = {}; // nueva consulta = cache de puntos de dispersion invalida
     poblarTipoGraficoCruce();
     renderizarSelectorSubgrupoCruce();
@@ -2349,14 +2502,22 @@ function poblarTipoGraficoCruce() {
     const sel = document.getElementById('select-tipo-grafico-cruce');
     const opciones = TIPOS_GRAFICO_CRUCE[ultimoResultadoCruce.tipo] || [];
     sel.innerHTML = opciones.map(o => `<option value="${o.valor}">${o.etiqueta}</option>`).join('');
+    document.getElementById('switch-estadistico-cruce-central').style.display =
+        ultimoResultadoCruce.tipo === 'categorica_categorica_central' ? 'flex' : 'none';
 }
 
 // Mismo patron visual que renderizarSelectorSubgrupoIndividual (chips +
 // nombre del subgrupo elegido a continuacion), adaptado para redibujar el
-// grafico de cruce en vez de cargar un IPF.
+// grafico de cruce en vez de cargar un IPF. Modo "3 variables" (switch en
+// No): no hay colectivo ni subgrupos que elegir - una sola etiqueta fija con
+// el recuento de toda la poblacion, sin chips.
 function renderizarSelectorSubgrupoCruce() {
     const cont = document.getElementById('cruce-selector-subgrupo');
     if (!ultimoResultadoCruce) { cont.innerHTML = ''; return; }
+    if (ultimoResultadoCruce.tipo === 'categorica_categorica_central') {
+        cont.innerHTML = `<span class="individual-subgrupo-nombre">Población completa (${fmtEntero(ultimoResultadoCruce.recuento)})</span>`;
+        return;
+    }
     const subs = ultimoResultadoCruce.subgrupos;
     const chips = ORDEN_SUBGRUPOS.map(nombre => `
         <div class="fila-subgrupo-individual${nombre === subgrupoSeleccionadoCruce ? ' seleccionado' : ''}"
@@ -2390,11 +2551,17 @@ function seleccionarSubgrupoCruce(nombre) {
 async function dibujarGraficoCruce() {
     const div = document.getElementById('grafico-cruce');
     if (!ultimoResultadoCruce) return;
+    const fuenteComun = { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26', size: 11 };
+
+    if (ultimoResultadoCruce.tipo === 'categorica_categorica_central') {
+        dibujarCruceHeatmapCentral(div, ultimoResultadoCruce, fuenteComun);
+        return;
+    }
+
     const sub = ultimoResultadoCruce.subgrupos[subgrupoSeleccionadoCruce];
     const v1 = ultimoResultadoCruce.variable1;
     const v2 = ultimoResultadoCruce.variable2;
     const tipoGrafico = document.getElementById('select-tipo-grafico-cruce').value;
-    const fuenteComun = { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26', size: 11 };
 
     if (ultimoResultadoCruce.tipo === 'numerica_numerica') {
         if (tipoGrafico === 'dispersion') {
@@ -2531,6 +2698,39 @@ function dibujarCruceHeatmap(div, sub, v1, v2, esNumNum, fuenteComun) {
     }], {
         margin: { l: esNumNum ? 65 : 140, r: 20, t: 15, b: esNumNum ? 55 : 120 },
         xaxis: { title: v1 }, yaxis: { title: v2 },
+        font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+    }, { responsive: true, displaylogo: false });
+}
+
+function cambiarEstadisticoCruceCentral(valor) {
+    estadisticoCruceCentral = valor;
+    document.querySelectorAll('#switch-estadistico-cruce-central button')
+        .forEach(b => b.classList.toggle('activa', b.dataset.valor === valor));
+    dibujarGraficoCruce();
+}
+
+// Heatmap de agregado (modo "3 variables", switch en No): mismo trace que
+// dibujarCruceHeatmap pero el color de cada celda es la media o mediana de
+// la variable central (switch propio, ver cambiarEstadisticoCruceCentral) en
+// vez de un recuento - el backend ya manda las 2 matrices (z_media,
+// z_mediana) en la misma respuesta, aqui solo se elige cual dibujar, sin
+// volver a pedir al backend. Celdas sin ninguna persona llegan a null desde
+// el backend - Plotly las pinta como hueco (blanco), no como si el agregado
+// valiera 0.
+function dibujarCruceHeatmapCentral(div, resultado, fuenteComun) {
+    div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
+    const z = estadisticoCruceCentral === 'media' ? resultado.z_media : resultado.z_mediana;
+    const etiquetaEstadistico = estadisticoCruceCentral === 'media' ? 'Media' : 'Mediana';
+    Plotly.newPlot(div, [{
+        type: 'heatmap', x: resultado.x, y: resultado.y, z,
+        colorscale: 'YlGnBu',
+        customdata: resultado.n,
+        hovertemplate: `${resultado.variable1}: %{x}<br>${resultado.variable2}: %{y}<br>` +
+            `${etiquetaEstadistico} de ${resultado.variable_central}: %{z:,.2f}<br>N: %{customdata:,}<extra></extra>`,
+        colorbar: { title: etiquetaEstadistico },
+    }], {
+        margin: { l: 140, r: 20, t: 15, b: 120 },
+        xaxis: { title: resultado.variable1 }, yaxis: { title: resultado.variable2 },
         font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
     }, { responsive: true, displaylogo: false });
 }
