@@ -160,6 +160,11 @@
                                    border-radius: 7px; background: var(--bg); margin-bottom: 1.1rem; }
         .fila-columna.fila-deshabilitada { opacity: 0.35; cursor: default; }
         .fila-columna.fila-deshabilitada:hover { background: none; }
+        /* Titulo de cada mini-panel del histograma agrupado (reutiliza
+           .grid-categorias-trayectoria/.subpanel-trayectoria-cat, ver mas
+           arriba - solo falta el titulo, esas dos ya existen). */
+        .titulo-mini-histograma-cruce { font-size: 0.78rem; font-weight: 700; color: var(--text);
+                                           margin-bottom: 0.3rem; }
         .nota-trayectoria-categorica { font-size: 0.78rem; color: var(--muted); font-style: italic;
                                           margin: 0 0 0.8rem; flex: none; }
 
@@ -2234,18 +2239,30 @@ function seleccionarSubgrupoIndividual(nombre) {
 // renderizarSelectorSubgrupoIndividual) elige cual se dibuja, sin volver a
 // pedir al backend.
 const TIPOS_GRAFICO_CRUCE = {
-    numerica_numerica: [{ valor: 'densidad', etiqueta: 'Mapa de densidad' }],
+    numerica_numerica: [
+        { valor: 'densidad', etiqueta: 'Mapa de densidad' },
+        { valor: 'dispersion', etiqueta: 'Diagrama de dispersión' },
+    ],
     categorica_categorica: [
         { valor: 'contingencia', etiqueta: 'Mapa de calor (tabla de contingencia)' },
         { valor: 'apiladas', etiqueta: 'Barras apiladas' },
         { valor: 'apiladas100', etiqueta: 'Barras apiladas 100%' },
         { valor: 'burbujas', etiqueta: 'Gráfico de burbujas' },
     ],
-    numerica_categorica: [{ valor: 'boxplot', etiqueta: 'Diagrama de cajas (boxplot)' }],
+    numerica_categorica: [
+        { valor: 'boxplot', etiqueta: 'Diagrama de cajas (boxplot)' },
+        { valor: 'histograma', etiqueta: 'Histograma agrupado' },
+    ],
 };
 
 let subgrupoSeleccionadoCruce = ORDEN_SUBGRUPOS[0];
 let ultimoResultadoCruce = null;
+// Puntos individuales (x,y) para "Diagrama de dispersion" (numerica x
+// numerica), por subgrupo - se piden solo la primera vez que hace falta ese
+// subgrupo (no los 4 de golpe, ver /colectivos/cruce/puntos) y se cachean
+// aqui; sincronizarCruce() la vacia en cada consulta nueva (variables o
+// filtros distintos invalidan los puntos ya cacheados).
+let cachePuntosCruce = {};
 
 // Variable 1 / Variable 2: mismo componente que la lista de columnas de
 // "Seleccion de colectivo" (checkboxes Numericas/Categoricas + caja con
@@ -2322,6 +2339,7 @@ async function sincronizarCruce() {
     });
     if (!resp.ok) { mostrarAviso('Error al calcular el cruce: ' + (await resp.text()), 'error'); return; }
     ultimoResultadoCruce = await resp.json();
+    cachePuntosCruce = {}; // nueva consulta = cache de puntos de dispersion invalida
     poblarTipoGraficoCruce();
     renderizarSelectorSubgrupoCruce();
     dibujarGraficoCruce();
@@ -2364,7 +2382,12 @@ function seleccionarSubgrupoCruce(nombre) {
     dibujarGraficoCruce();
 }
 
-function dibujarGraficoCruce() {
+// async (a diferencia del resto de dibujarX de esta pestana): el diagrama de
+// dispersion pide los puntos individuales bajo demanda (ver
+// dibujarCruceDispersion) - los llamadores (onclick/onchange) no esperan la
+// promesa, se lanza y ya redibuja sola cuando llega, mismo patron que el
+// resto de peticiones "en vivo" de esta pagina.
+async function dibujarGraficoCruce() {
     const div = document.getElementById('grafico-cruce');
     if (!ultimoResultadoCruce) return;
     const sub = ultimoResultadoCruce.subgrupos[subgrupoSeleccionadoCruce];
@@ -2374,7 +2397,11 @@ function dibujarGraficoCruce() {
     const fuenteComun = { family: 'Nunito Sans, Calibri, sans-serif', color: '#1A2E26', size: 11 };
 
     if (ultimoResultadoCruce.tipo === 'numerica_numerica') {
-        dibujarCruceHeatmap(div, sub, v1, v2, true, fuenteComun);
+        if (tipoGrafico === 'dispersion') {
+            await dibujarCruceDispersion(div, v1, v2, fuenteComun);
+        } else {
+            dibujarCruceHeatmap(div, sub, v1, v2, true, fuenteComun);
+        }
     } else if (ultimoResultadoCruce.tipo === 'categorica_categorica') {
         if (tipoGrafico === 'apiladas' || tipoGrafico === 'apiladas100') {
             dibujarCruceBarrasApiladas(div, sub, v1, v2, tipoGrafico === 'apiladas100', fuenteComun);
@@ -2384,7 +2411,100 @@ function dibujarGraficoCruce() {
             dibujarCruceHeatmap(div, sub, v1, v2, false, fuenteComun);
         }
     } else {
-        dibujarCruceBoxplot(div, sub, v1, v2, fuenteComun);
+        if (tipoGrafico === 'histograma') {
+            dibujarCruceHistograma(div, sub, v1, fuenteComun);
+        } else {
+            dibujarCruceBoxplot(div, sub, v1, v2, fuenteComun);
+        }
+    }
+}
+
+// Diagrama de dispersion (numerica x numerica): puntos individuales de UN
+// subgrupo, pedidos bajo demanda y cacheados por subgrupo (ver
+// cachePuntosCruce) - hasta 1,3M puntos por subgrupo, decision explicita del
+// usuario de verlos todos en vez de solo la densidad agregada. 'scattergl'
+// (WebGL), NO 'scatter' (SVG): SVG no aguanta mas de unos pocos miles de
+// puntos sin congelar el navegador. Marcador pequenyo y semitransparente
+// (size 3, opacity 0.35) para que la nube de puntos solapados siga
+// mostrando donde hay mas densidad, en vez de un borron solido.
+async function dibujarCruceDispersion(div, v1, v2, fuenteComun) {
+    // Capturados al entrar: si mientras se espera la respuesta el usuario
+    // cambia de subgrupo, de par de variables o de filtros, esta llamada ya
+    // no describe el estado actual - se compara al final contra el estado
+    // EN VIVO (no contra estas copias) para decidir si sigue valiendo.
+    const subgrupoObjetivo = subgrupoSeleccionadoCruce;
+    const resultadoEnCurso = ultimoResultadoCruce;
+
+    if (!cachePuntosCruce[subgrupoObjetivo]) {
+        div.innerHTML = '<p class="aviso-vacio">Cargando puntos...</p>';
+        const cuerpo = { ...cuerpoPeticion(), variable1: v1, variable2: v2, subgrupo: subgrupoObjetivo };
+        const resp = await fetch('/colectivos/cruce/puntos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cuerpo),
+        });
+        if (!resp.ok) { mostrarAviso('Error al cargar los puntos: ' + (await resp.text()), 'error'); return; }
+        const datos = await resp.json();
+        // ultimoResultadoCruce cambia de identidad (objeto nuevo) en cada
+        // sincronizarCruce() - si ya no es el mismo objeto que cuando
+        // arranco esta peticion, hay una consulta mas nueva en marcha (o ya
+        // resuelta): no guardar esta respuesta obsoleta en la cache.
+        if (ultimoResultadoCruce !== resultadoEnCurso) return;
+        cachePuntosCruce[subgrupoObjetivo] = datos;
+    }
+    const tipoActual = document.getElementById('select-tipo-grafico-cruce').value;
+    if (tipoActual !== 'dispersion' || subgrupoSeleccionadoCruce !== subgrupoObjetivo || ultimoResultadoCruce !== resultadoEnCurso) {
+        return;
+    }
+
+    const { x, y } = cachePuntosCruce[subgrupoObjetivo];
+    Plotly.newPlot(div, [{
+        type: 'scattergl', mode: 'markers', x, y,
+        marker: { color: COLOR_SUBGRUPO[subgrupoObjetivo], size: 3, opacity: 0.35 },
+        hovertemplate: `${v1}: %{x:,.2f}<br>${v2}: %{y:,.2f}<extra></extra>`,
+    }], {
+        margin: { l: 65, r: 20, t: 15, b: 55 },
+        xaxis: { title: v1 }, yaxis: { title: v2 },
+        font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+    }, { responsive: true, displaylogo: false });
+}
+
+// Histograma agrupado (numerica x categorica): rejilla de mini-histogramas,
+// uno por categoria (mismo patron .grid-categorias-trayectoria que la vista
+// "Categorias" de Trayectorias de colectivos - se adapta sola de 6 a 21
+// categorias). Bordes de bin fijos (histograma_bins, calculados en el
+// backend sobre TODA la tabla) para que las categorias sean comparables
+// entre si de un vistazo.
+function dibujarCruceHistograma(div, sub, v1, fuenteComun) {
+    div.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'grid-categorias-trayectoria';
+    div.appendChild(grid);
+
+    for (const caja of sub.cajas) {
+        const cat = caja.categoria;
+        const conteos = sub.histograma_por_categoria[cat] || [];
+        const panel = document.createElement('div');
+        panel.className = 'subpanel-trayectoria-cat';
+        const titulo = document.createElement('div');
+        titulo.className = 'titulo-mini-histograma-cruce';
+        titulo.textContent = `${cat} (N=${fmtEntero(caja.n)})`;
+        panel.appendChild(titulo);
+        const miniDiv = document.createElement('div');
+        panel.appendChild(miniDiv);
+        grid.appendChild(panel);
+
+        Plotly.newPlot(miniDiv, [{
+            type: 'bar', x: sub.histograma_bins, y: conteos,
+            marker: { color: COLOR_SUBGRUPO[subgrupoSeleccionadoCruce] },
+            hovertemplate: `${v1}: %{x:,.2f}<br>N: %{y:,}<extra></extra>`,
+        }], {
+            margin: { l: 32, r: 8, t: 5, b: 28 },
+            xaxis: { tickfont: { size: 9 } },
+            yaxis: { tickfont: { size: 9 } },
+            font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
+            height: 170,
+        }, { displayModeBar: false, responsive: true });
     }
 }
 

@@ -588,20 +588,36 @@ def _cruce_categorica_categorica(con, condiciones: dict, v1: str, v2: str) -> tu
     return v1, v2, resultado
 
 
+NBINS_HISTOGRAMA = 20
+
+
 def _cruce_numerica_categorica(con, condiciones: dict, v_num: str, v_cat: str) -> dict:
     top_cats, hay_resto = _top_categorias(con, v_cat)
     if hay_resto:
-        # CASE ... IN (?, ?, ...) ELSE 'Resto': el resumen (min/max/cuartiles)
-        # de "Resto" tiene que salir de UN SOLO GROUP BY sobre los valores
-        # crudos agrupados asi, no de combinar a mano los cuartiles ya
+        # CASE ... IN (?, ?, ...) ELSE 'Resto': el resumen (min/max/cuartiles/
+        # histograma) de "Resto" tiene que salir de UN SOLO GROUP BY sobre los
+        # valores crudos agrupados asi, no de combinar a mano los cuartiles ya
         # calculados de cada categoria sobrante (un cuartil no se puede
         # promediar entre grupos sin perder precision).
         placeholders = ", ".join("?" for _ in top_cats)
         cat_expr = f"CASE WHEN {v_cat} IN ({placeholders}) THEN {v_cat} ELSE 'Resto' END"
         params_cat = list(top_cats)
+        categorias_finales = top_cats + ["Resto"]
     else:
         cat_expr = v_cat
         params_cat = []
+        categorias_finales = top_cats
+
+    # Bordes de histograma FIJOS (min/max de TODA la tabla, sin filtrar) para
+    # que todas las categorias y los 4 subgrupos compartan la misma escala de
+    # eje X - mismo criterio que la rejilla de densidad de numerica x
+    # numerica (comparabilidad al cambiar de categoria o de subgrupo).
+    minv, maxv = con.execute(
+        f"SELECT MIN({v_num}), MAX({v_num}) FROM personas WHERE {v_num} IS NOT NULL"
+    ).fetchone()
+    sin_rango = minv is None or maxv == minv
+    ancho = None if sin_rango else (maxv - minv) / NBINS_HISTOGRAMA
+    centros_bin = [] if sin_rango else [minv + ancho * (i + 0.5) for i in range(NBINS_HISTOGRAMA)]
 
     resultado = {}
     for nombre, c in condiciones.items():
@@ -624,6 +640,26 @@ def _cruce_numerica_categorica(con, condiciones: dict, v_num: str, v_cat: str) -
             # posicionales tienen que ir en ese mismo orden.
             params_cat + params,
         ).fetchall()
+
+        histogramas = {cat: [0] * NBINS_HISTOGRAMA for cat in categorias_finales}
+        if not sin_rango:
+            filas_hist = con.execute(
+                f"""
+                WITH bineado AS (
+                    SELECT {cat_expr} AS categoria,
+                        LEAST({NBINS_HISTOGRAMA - 1}, GREATEST(0,
+                            CAST(({v_num} - {minv}) / {ancho} AS INTEGER))) AS bin
+                    FROM personas
+                    WHERE {where} AND {v_cat} IS NOT NULL AND {v_num} IS NOT NULL
+                )
+                SELECT categoria, bin, COUNT(*) FROM bineado GROUP BY 1, 2
+                """,
+                params_cat + params,
+            ).fetchall()
+            for cat, b, n in filas_hist:
+                if cat in histogramas:
+                    histogramas[cat][b] = n
+
         resultado[nombre] = {
             "etiqueta": etiqueta,
             "recuento": total,
@@ -631,6 +667,8 @@ def _cruce_numerica_categorica(con, condiciones: dict, v_num: str, v_cat: str) -
                 {"categoria": cat, "n": n, "min": mn, "max": mx, "q1": q1, "mediana": med, "q3": q3}
                 for cat, n, mn, mx, q1, med, q3 in filas
             ],
+            "histograma_bins": centros_bin,
+            "histograma_por_categoria": histogramas,
         }
     return resultado
 
@@ -673,6 +711,45 @@ def cruce(request: Request, body: CruceRequest):
         "tipo": "numerica_categorica", "variable1": v_num, "variable2": v_cat,
         "subgrupos": _cruce_numerica_categorica(con, condiciones, v_num, v_cat),
     }
+
+
+class PuntosRequest(SubgruposRequest):
+    variable1: str
+    variable2: str
+    subgrupo: str
+
+
+@router.post("/colectivos/cruce/puntos")
+def cruce_puntos(request: Request, body: PuntosRequest):
+    """Puntos individuales (x,y) de UN SOLO subgrupo, para el "Diagrama de
+    dispersion" de numerica x numerica en "Cruce de variables" - decision
+    explicita del usuario (2026-09-09): prefiere ver todos los puntos, aunque
+    sean muchos (hasta ~1,3M), en vez de solo la densidad agregada (que sigue
+    siendo el grafico por defecto, /colectivos/cruce). Va en un endpoint
+    APARTE, a peticion (no dentro de /colectivos/cruce): hasta 1,3M puntos x2
+    coordenadas ya es un payload notable, no tiene sentido mandarlo x4 (uno
+    por subgrupo) si el usuario solo mira un subgrupo cada vez - el frontend
+    lo pide solo la primera vez que se elige "Dispersion" para cada
+    subgrupo, y lo cachea. El frontend dibuja esto con Plotly 'scattergl'
+    (WebGL), no 'scatter' (SVG): SVG no aguanta mas de unos pocos miles de
+    puntos sin congelar el navegador, WebGL si."""
+    con = request.app.state.con.cursor()
+    columnas_validas = _columnas_personas(con)
+    numericas, _ = _clasificar_columnas(columnas_validas)
+    numericas_validas = set(numericas) - {"ipf"}
+    if body.variable1 not in numericas_validas or body.variable2 not in numericas_validas:
+        raise HTTPException(400, "Las 2 variables deben ser numericas")
+    if body.subgrupo not in ORDEN_SUBGRUPOS:
+        raise HTTPException(400, f"Subgrupo desconocido: {body.subgrupo}")
+
+    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    c = condiciones[body.subgrupo]
+    filas = con.execute(
+        f"SELECT {body.variable1}, {body.variable2} FROM personas "
+        f"WHERE {c['where']} AND {body.variable1} IS NOT NULL AND {body.variable2} IS NOT NULL",
+        c["params"],
+    ).fetchall()
+    return {"x": [f[0] for f in filas], "y": [f[1] for f in filas]}
 
 
 def _construir_excel(resultados: dict) -> bytes:
