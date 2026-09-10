@@ -880,6 +880,35 @@ function cambiarFiltroColectivoGlobal(activo) {
     document.querySelectorAll('#switch-filtro-global button').forEach((btn, i) => {
         btn.classList.toggle('activa', (i === 1) === activo);
     });
+    // Apagar el switch vacia Filtro 1-4 (2026-09-10, decision explicita del
+    // usuario, simetrica con el auto-encendido de aplicarFiltro): si se deja
+    // el colectivo configurado por debajo con el switch en No, volver a
+    // encenderlo mas tarde resucitaria un colectivo antiguo sin que el
+    // usuario se de cuenta - mismo tipo de confusion que motivo el
+    // auto-encendido. resetearFiltrosColectivo esta definida mas abajo (se
+    // usa function, no const, asi que el hoisting la deja disponible aqui).
+    if (!activo) resetearFiltrosColectivo();
+}
+
+// Vacia Filtro 1-4 (estado + resumen en pantalla + radios "Asignar a" +
+// checkboxes de contracolectivo automatico), ver comentario en
+// cambiarFiltroColectivoGlobal. No toca columnaSeleccionadaNumerica/
+// Categorica ni la lista de valores mostrada (el usuario puede seguir
+// viendo la columna que tenia abierta, solo se limpia lo YA aplicado a un
+// Filtro N).
+function resetearFiltrosColectivo() {
+    filtros = { 1: null, 2: null, 3: null, 4: null };
+    contracolectivo = { 1: true, 2: true };
+    document.getElementById('contracolectivo-1').checked = true;
+    document.getElementById('contracolectivo-2').checked = true;
+    for (const grupo of GRUPOS_DESTINO) {
+        document.getElementById(`radio-${grupo}-3`).disabled = true;
+        document.getElementById(`radio-${grupo}-4`).disabled = true;
+        const radio1 = document.querySelector(`input[name=${grupo}][value="1"]`);
+        if (radio1) radio1.checked = true;
+    }
+    for (let n = 1; n <= 4; n++) renderizarResumenFiltro(n);
+    actualizarEstadoFiltros();
 }
 
 // Que pestana de #sidebar esta activa ahora mismo. "seleccion" (primera
@@ -1152,6 +1181,14 @@ function aplicarFiltro(tipo) {
     }
 
     filtros[destino] = filtro;
+    // Asignar un filtro solo tiene sentido con "Filtro de colectivos" en Si -
+    // en No nada lee filtros[] (ver filtroColectivoGlobal) y el usuario podia
+    // quedarse sin darse cuenta con Filtro 1/2 configurados pero el switch en
+    // No, viendo luego "toda la MCVL" en Trayectorias/Analisis en vez de su
+    // colectivo (bug real reportado por el usuario, 2026-09-10: se le habia
+    // quedado en No de una sesion anterior probando el modo "3 variables" de
+    // Cruce). Encender el switch aqui mismo evita ese estado inconsistente.
+    if (!filtroColectivoGlobal) cambiarFiltroColectivoGlobal(true);
     renderizarResumenFiltro(destino);
     actualizarEstadoFiltros();
     avanzarDestino();
@@ -3117,8 +3154,20 @@ function dibujarCruceHeatmap(div, sub, v1, v2, esNumNum, fuenteComun) {
     }], {
         margin: { l: esNumNum ? 65 : MARGEN_IZQ_HEATMAP_CATEGORICO, r: 20, t: 15, b: esNumNum ? 55 : 120 },
         xaxis: { title: v1 },
+        // autorange:'reversed' SOLO en el caso categorico (2026-09-10, bug
+        // real reportado por el usuario: "el eje X se ve ordenado, el eje Y
+        // no") - Plotly coloca el indice 0 de un eje categorico ABAJO por
+        // defecto (el eje Y de cartesianas crece hacia arriba), asi que sin
+        // esto la categoria mas frecuente (primera del array `y`, ya
+        // ordenado por el backend) queda en la esquina inferior y la lectura
+        // de arriba a abajo se ve invertida, aunque el X (que si lee
+        // izquierda a derecha en el orden real) se vea bien. Mismo patron ya
+        // establecido en dibujarMapaCalor/dibujarAgrupadasHorizontal
+        // (Analisis de colectivos). No aplica al caso numerico (esNumNum):
+        // ahi el eje Y son centros de bin de una rejilla de densidad, un eje
+        // numerico normal donde SI se espera que crezca hacia arriba.
         yaxis: esNumNum ? { title: v2 } : {
-            title: v2, automargin: true,
+            title: v2, automargin: true, autorange: 'reversed',
             tickvals: y, ticktext: y.map(v => truncarEtiqueta(v, TRUNCADO_ETIQUETA_Y_HEATMAP)),
         },
         font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
@@ -3162,8 +3211,12 @@ function dibujarCruceHeatmapCentral(div, resultado, fuenteComun) {
     }], {
         margin: { l: MARGEN_IZQ_HEATMAP_CATEGORICO, r: 20, t: 15, b: 120 },
         xaxis: { title: resultado.variable1 },
+        // autorange:'reversed' - ver comentario extenso en dibujarCruceHeatmap
+        // (bug real, 2026-09-10): sin esto la categoria mas frecuente del eje
+        // Y queda abajo en vez de arriba, aunque el orden que manda el
+        // backend ya sea correcto.
         yaxis: {
-            title: resultado.variable2, automargin: true,
+            title: resultado.variable2, automargin: true, autorange: 'reversed',
             tickvals: y, ticktext: y.map(v => truncarEtiqueta(v, TRUNCADO_ETIQUETA_Y_HEATMAP)),
         },
         font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',

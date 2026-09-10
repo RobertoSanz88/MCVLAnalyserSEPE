@@ -543,14 +543,33 @@ NBINS_DENSIDAD = 20
 TOP_N_CATEGORICO = 20
 
 
-def _top_categorias(con, columna: str, top_n: int | None = TOP_N_CATEGORICO) -> tuple[list, bool]:
+def _top_categorias(
+    con, columna: str, top_n: int | None = TOP_N_CATEGORICO, requiere_no_nulas: list[str] | None = None
+) -> tuple[list, bool]:
     """Hasta top_n valores mas frecuentes de `columna` en toda la tabla
     `personas`. Devuelve (valores, hay_resto) - hay_resto=True si la columna
     tiene mas de top_n valores distintos y hace falta una categoria "Resto"
     para el resto. top_n=None desactiva el limite (usado en la exportacion a
-    Excel, ver _construir_excel_cruce): todas las categorias, sin "Resto"."""
+    Excel, ver _construir_excel_cruce): todas las categorias, sin "Resto".
+
+    requiere_no_nulas (2026-09-10, bug real reportado por el usuario: en un
+    cruce provincia x actividad economica x ingresos, vio "NO CONSTA" de
+    provincia colocado entre Madrid y Valencia pese a tener muchas menos
+    personas en esa combinacion concreta) - sin esto, el ranking se calculaba
+    solo con `columna IS NOT NULL`, ignorando si la OTRA variable del cruce
+    (o, en el modo "3 variables", tambien la variable central) tenia valor.
+    En esta MCVL la falta de un dato esta correlada entre columnas (quien no
+    tiene provincia, a menudo tampoco tiene actividad economica ni ingresos),
+    asi que una categoria puede ser muy poblada en TODA la tabla y a la vez
+    casi vacia en la rejilla concreta que se esta dibujando - verificado con
+    datos reales: NO CONSTA de provincia tiene 152.290 personas sin
+    condicionar (3er puesto) pero cae fuera del top-10 exigiendo tambien
+    actividad economica e ingresos. Pasar aqui las demas columnas del cruce
+    hace que el orden (y el propio top-N) reflejen la poblacion que REALMENTE
+    aparece en esa rejilla, no la poblacion total de la columna sola."""
+    condiciones_extra = "".join(f" AND {c} IS NOT NULL" for c in (requiere_no_nulas or []))
     filas = con.execute(
-        f"SELECT {columna}, COUNT(*) AS n FROM personas WHERE {columna} IS NOT NULL "
+        f"SELECT {columna}, COUNT(*) AS n FROM personas WHERE {columna} IS NOT NULL{condiciones_extra} "
         f"GROUP BY 1 ORDER BY n DESC, {columna} ASC"
     ).fetchall()
     valores = [f[0] for f in filas]
@@ -641,8 +660,13 @@ def _cruce_categorica_categorica(
     # usuario): sin limite de categorias por eje, sin "Resto" - una hoja de
     # calculo aguanta una rejilla de cientos de filas/columnas sin problema,
     # a diferencia del grafico en pantalla (ver TOP_N_CATEGORICO).
-    cat1, resto1 = _top_categorias(con, v1, top_n)
-    cat2, resto2 = _top_categorias(con, v2, top_n)
+    #
+    # requiere_no_nulas=[la otra variable] (2026-09-10, bug real, ver
+    # cabecera de _top_categorias): el ranking de cada eje exige tambien
+    # valor en el OTRO eje, para que el orden refleje la poblacion real de
+    # esta rejilla 2D, no la poblacion total de cada columna por separado.
+    cat1, resto1 = _top_categorias(con, v1, top_n, requiere_no_nulas=[v2])
+    cat2, resto2 = _top_categorias(con, v2, top_n, requiere_no_nulas=[v1])
     etiqueta_resto = "Resto"
     ejes1 = cat1 + ([etiqueta_resto] if resto1 else [])
     ejes2 = cat2 + ([etiqueta_resto] if resto2 else [])
@@ -682,8 +706,12 @@ def _cruce_numerica_categorica(
     con, condiciones: dict, v_num: str, v_cat: str, top_n: int | None = TOP_N_CATEGORICO
 ) -> dict:
     # top_n=None: ver comentario equivalente en _cruce_categorica_categorica
-    # (exportacion a Excel, 2026-09-10).
-    top_cats, hay_resto = _top_categorias(con, v_cat, top_n)
+    # (exportacion a Excel, 2026-09-10). requiere_no_nulas=[v_num]: ver
+    # cabecera de _top_categorias (bug real, 2026-09-10) - el orden/top-N de
+    # las categorias tiene que reflejar quien REALMENTE tiene tambien un
+    # valor de v_num (la caja/N que se ve por categoria ya exige eso), no la
+    # poblacion total de v_cat sola.
+    top_cats, hay_resto = _top_categorias(con, v_cat, top_n, requiere_no_nulas=[v_num])
     if hay_resto:
         # CASE ... IN (?, ?, ...) ELSE 'Resto': el resumen (min/max/cuartiles/
         # histograma) de "Resto" tiene que salir de UN SOLO GROUP BY sobre los
@@ -863,9 +891,12 @@ def _cruce_categorica_categorica_central(
     promediar entre grupos sin perder precision, igual que ya se explica en
     _cruce_numerica_categorica para sus cajas. top_n=None: ver comentario
     equivalente en _cruce_categorica_categorica (exportacion a Excel,
-    2026-09-10)."""
-    cat1, resto1 = _top_categorias(con, v1, top_n)
-    cat2, resto2 = _top_categorias(con, v2, top_n)
+    2026-09-10). requiere_no_nulas=[las otras 2 variables]: ver cabecera de
+    _top_categorias (bug real, 2026-09-10) - la rejilla exige v1, v2 Y
+    v_central no nulos a la vez, el ranking de cada eje tiene que exigir lo
+    mismo para que el orden refleje esta rejilla concreta."""
+    cat1, resto1 = _top_categorias(con, v1, top_n, requiere_no_nulas=[v2, v_central])
+    cat2, resto2 = _top_categorias(con, v2, top_n, requiere_no_nulas=[v1, v_central])
     etiqueta_resto = "Resto"
     ejes1 = cat1 + ([etiqueta_resto] if resto1 else [])
     ejes2 = cat2 + ([etiqueta_resto] if resto2 else [])
