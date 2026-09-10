@@ -719,14 +719,14 @@
 
                     <p class="aviso-vacio" id="cruce-aviso-filtros" style="display:none">Configura Filtro 1 y Filtro 2 en "Selección de colectivo" primero.</p>
 
-                    <h3>Variable 1</h3>
+                    <h3>Variable eje X</h3>
                     <div class="tipos-filtro" id="fila-tipos-var1-cruce">
                         <label><input type="checkbox" id="mostrar-numericas-var1-cruce" checked onchange="renderizarListaVariableCruce(1)"> Numéricas</label>
                         <label><input type="checkbox" id="mostrar-categoricas-var1-cruce" checked onchange="renderizarListaVariableCruce(1)"> Categóricas</label>
                     </div>
                     <div id="lista-variable1-cruce" class="lista-columnas-cruce"></div>
 
-                    <h3>Variable 2</h3>
+                    <h3>Variable eje Y</h3>
                     <div class="tipos-filtro" id="fila-tipos-var2-cruce">
                         <label><input type="checkbox" id="mostrar-numericas-var2-cruce" checked onchange="renderizarListaVariableCruce(2)"> Numéricas</label>
                         <label><input type="checkbox" id="mostrar-categoricas-var2-cruce" checked onchange="renderizarListaVariableCruce(2)"> Categóricas</label>
@@ -2931,10 +2931,14 @@ async function dibujarGraficoCruce() {
             dibujarCruceHeatmap(div, sub, v1, v2, false, fuenteComun);
         }
     } else {
+        // variable1_numerica: cual de v1(eje X)/v2(eje Y) es la numerica -
+        // ya no se puede asumir "v1 siempre numerica" (2026-09-10, ver
+        // cabecera de dibujarCruceBoxplot), el backend lo manda explicito.
+        const vNum = ultimoResultadoCruce.variable1_numerica ? v1 : v2;
         if (tipoGrafico === 'histograma') {
-            dibujarCruceHistograma(div, sub, v1, fuenteComun);
+            dibujarCruceHistograma(div, sub, vNum, fuenteComun);
         } else {
-            dibujarCruceBoxplot(div, sub, v1, v2, fuenteComun);
+            dibujarCruceBoxplot(div, sub, v1, v2, ultimoResultadoCruce.variable1_numerica, fuenteComun);
         }
     }
 }
@@ -2999,7 +3003,13 @@ async function dibujarCruceDispersion(div, v1, v2, fuenteComun) {
 // categorias). Bordes de bin fijos (histograma_bins, calculados en el
 // backend sobre TODA la tabla) para que las categorias sean comparables
 // entre si de un vistazo.
-function dibujarCruceHistograma(div, sub, v1, fuenteComun) {
+// vNum: nombre de la variable NUMERICA (nunca la categorica, aunque
+// variable1/variable2 ya no la traigan siempre en una posicion fija desde
+// el 2026-09-10 - ver dibujarGraficoCruce, que calcula vNum con
+// variable1_numerica antes de llamar aqui). Grid de mini-histogramas (uno
+// por categoria), sin concepto de eje X/Y propio - vNum solo se usa como
+// etiqueta en el hover.
+function dibujarCruceHistograma(div, sub, vNum, fuenteComun) {
     div.innerHTML = '';
     const grid = document.createElement('div');
     grid.className = 'grid-categorias-trayectoria';
@@ -3021,7 +3031,7 @@ function dibujarCruceHistograma(div, sub, v1, fuenteComun) {
         Plotly.newPlot(miniDiv, [{
             type: 'bar', x: sub.histograma_bins, y: conteos,
             marker: { color: COLOR_SUBGRUPO[subgrupoSeleccionadoCruce] },
-            hovertemplate: `${v1}: %{x:,.2f}<br>N: %{y:,}<extra></extra>`,
+            hovertemplate: `${vNum}: %{x:,.2f}<br>N: %{y:,}<extra></extra>`,
         }], {
             margin: { l: 32, r: 8, t: 5, b: 28 },
             xaxis: { tickfont: { size: 9 } },
@@ -3051,6 +3061,19 @@ function _aplicarFiltroEjes(idxX, idxY, matriz) {
     return idxY.map(iy => idxX.map(ix => matriz[iy][ix]));
 }
 
+// Etiquetas del eje Y truncadas manteniendo el INICIO (codigo + principio
+// del texto) y cortando el FINAL con "…" - sin esto, con una etiqueta larga
+// (act_econ_ppal/CNAE, "561 Restaurantes y puestos de comidas") Plotly la
+// recorta desde la IZQUIERDA por defecto (el eje Y no rota el texto como si
+// hace el eje X, solo le cabe lo que quepa pegado a la linea del eje) - se
+// veia el FINAL del texto, sin el codigo ni el principio, ilegible.
+// truncarEtiqueta ya existe y hace justo esto (mismo patron que
+// dibujarMapaCalor/dibujarAgrupadasHorizontal en Analisis de colectivos) -
+// aqui con mas margen y mas caracteres porque el panel de Cruce es mas
+// ancho. Decision explicita del usuario, 2026-09-10, visto con datos reales.
+const TRUNCADO_ETIQUETA_Y_HEATMAP = 32;
+const MARGEN_IZQ_HEATMAP_CATEGORICO = 220;
+
 // Mismo trace (heatmap) para numerica x numerica y categorica x categorica:
 // en numerica x numerica x/y son centros de celda de la rejilla de densidad,
 // en categorica x categorica son las categorias de cada variable (tabla de
@@ -3076,8 +3099,12 @@ function dibujarCruceHeatmap(div, sub, v1, v2, esNumNum, fuenteComun) {
         hovertemplate: `${v1}: %{x` + (esNumNum ? ':,.2f' : '') + `}<br>${v2}: %{y` + (esNumNum ? ':,.2f' : '') + `}<br>N: %{z:,}<extra></extra>`,
         colorbar: { title: 'N' },
     }], {
-        margin: { l: esNumNum ? 65 : 140, r: 20, t: 15, b: esNumNum ? 55 : 120 },
-        xaxis: { title: v1 }, yaxis: { title: v2 },
+        margin: { l: esNumNum ? 65 : MARGEN_IZQ_HEATMAP_CATEGORICO, r: 20, t: 15, b: esNumNum ? 55 : 120 },
+        xaxis: { title: v1 },
+        yaxis: esNumNum ? { title: v2 } : {
+            title: v2, automargin: true,
+            tickvals: y, ticktext: y.map(v => truncarEtiqueta(v, TRUNCADO_ETIQUETA_Y_HEATMAP)),
+        },
         font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
     }, { responsive: true, displaylogo: false });
 }
@@ -3117,8 +3144,12 @@ function dibujarCruceHeatmapCentral(div, resultado, fuenteComun) {
             `${etiquetaEstadistico} de ${resultado.variable_central}: %{z:,.2f}<br>N: %{customdata:,}<extra></extra>`,
         colorbar: { title: etiquetaEstadistico },
     }], {
-        margin: { l: 140, r: 20, t: 15, b: 120 },
-        xaxis: { title: resultado.variable1 }, yaxis: { title: resultado.variable2 },
+        margin: { l: MARGEN_IZQ_HEATMAP_CATEGORICO, r: 20, t: 15, b: 120 },
+        xaxis: { title: resultado.variable1 },
+        yaxis: {
+            title: resultado.variable2, automargin: true,
+            tickvals: y, ticktext: y.map(v => truncarEtiqueta(v, TRUNCADO_ETIQUETA_Y_HEATMAP)),
+        },
         font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
     }, { responsive: true, displaylogo: false });
 }
@@ -3230,22 +3261,53 @@ function dibujarCruceBurbujas(div, sub, v1, v2, fuenteComun) {
 // c.min/c.max directamente - un valor extremo aislado (ver conversacion,
 // Ingresos_bruto_anual_2024 con un caso de 647.000€) estiraria el eje
 // entero y aplastaria la caja real contra un lado.
-function dibujarCruceBoxplot(div, sub, v1, v2, fuenteComun) {
+// v1EsNumerica: cual de v1 (eje X)/v2 (eje Y) es la variable numerica - el
+// backend ya no fuerza la categorica al eje X (2026-09-10, decision
+// explicita del usuario, ver variable1_numerica en /colectivos/cruce y la
+// cabecera de la seccion "Pestana Cruce de variables" en colectivos.py).
+// Boxplot VERTICAL de siempre si la categorica cae en el eje X (x:
+// categorias, valores en Y); HORIZONTAL (orientation:'h', y: categorias,
+// valores en X) si la categorica cae en el eje Y - Plotly ya soporta ambas
+// orientaciones con los mismos cuartiles precalculados, solo cambia que
+// atributo (x o y) lleva las categorias.
+function dibujarCruceBoxplot(div, sub, v1, v2, v1EsNumerica, fuenteComun) {
     div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
-    Plotly.newPlot(div, [{
-        type: 'box',
-        x: sub.cajas.map(c => c.categoria),
-        q1: sub.cajas.map(c => c.q1),
-        median: sub.cajas.map(c => c.mediana),
-        q3: sub.cajas.map(c => c.q3),
-        lowerfence: sub.cajas.map(c => c.bigote_inf),
-        upperfence: sub.cajas.map(c => c.bigote_sup),
-        marker: { color: COLOR_SUBGRUPO[subgrupoSeleccionadoCruce] },
-        text: sub.cajas.map(c => `N: ${fmtEntero(c.n)}`),
-        hovertemplate: `${v2}: %{x}<br>${v1}: %{y}<br>%{text}<extra></extra>`,
-    }], {
-        margin: { l: 65, r: 20, t: 15, b: 90 },
-        xaxis: { title: v2, tickangle: -25 }, yaxis: { title: v1 },
+    const categorias = sub.cajas.map(c => c.categoria);
+    const q1 = sub.cajas.map(c => c.q1);
+    const median = sub.cajas.map(c => c.mediana);
+    const q3 = sub.cajas.map(c => c.q3);
+    const lowerfence = sub.cajas.map(c => c.bigote_inf);
+    const upperfence = sub.cajas.map(c => c.bigote_sup);
+    const text = sub.cajas.map(c => `N: ${fmtEntero(c.n)}`);
+    const marker = { color: COLOR_SUBGRUPO[subgrupoSeleccionadoCruce] };
+
+    const trace = v1EsNumerica
+        ? { // numerica en eje X, categorica en eje Y: horizontal
+            type: 'box', orientation: 'h', y: categorias, q1, median, q3, lowerfence, upperfence,
+            marker, text, hovertemplate: `${v2}: %{y}<br>${v1}: %{x}<br>%{text}<extra></extra>`,
+          }
+        : { // categorica en eje X, numerica en eje Y: vertical (como hasta ahora)
+            type: 'box', x: categorias, q1, median, q3, lowerfence, upperfence,
+            marker, text, hovertemplate: `${v1}: %{x}<br>${v2}: %{y}<br>%{text}<extra></extra>`,
+          };
+
+    // El eje CATEGORICO lleva rotacion (tickangle) cuando cae en el eje X,
+    // igual que siempre; cuando cae en el eje Y (boxplot horizontal) lleva
+    // el mismo truncado "inicio + …" que los heatmaps (ver
+    // TRUNCADO_ETIQUETA_Y_HEATMAP) porque el eje Y no rota el texto solo.
+    const ejeXConf = v1EsNumerica ? { title: v1 } : { title: v1, tickangle: -25 };
+    const ejeYConf = v1EsNumerica
+        ? {
+            title: v2, automargin: true,
+            tickvals: categorias, ticktext: categorias.map(c => truncarEtiqueta(c, TRUNCADO_ETIQUETA_Y_HEATMAP)),
+          }
+        : { title: v2 };
+
+    Plotly.newPlot(div, [trace], {
+        margin: v1EsNumerica
+            ? { l: MARGEN_IZQ_HEATMAP_CATEGORICO, r: 20, t: 15, b: 55 }
+            : { l: 65, r: 20, t: 15, b: 90 },
+        xaxis: ejeXConf, yaxis: ejeYConf,
         font: fuenteComun, paper_bgcolor: '#FFFFFF', plot_bgcolor: '#FFFFFF',
     }, { responsive: true, displaylogo: false });
 }
@@ -3258,7 +3320,14 @@ async function cargarIpfAleatorio() {
     document.getElementById('individual-tabla-episodios').innerHTML = '';
     document.getElementById('gantt-individual').innerHTML = '';
     try {
-        const cuerpo = filtroColectivoGlobal
+        // filtrosListos() tambien, no solo filtroColectivoGlobal (bug real
+        // 2026-09-10: con el switch unico ahora por defecto en "Si", la
+        // primera visita a esta pestana - sin filtro1/filtro2 configurados
+        // todavia - intentaba mandar filtro1:null al backend y el POST
+        // fallaba con 422. Mismo guard que ya usa
+        // actualizarSelectorSubgrupoIndividual(): sin filtros listos, IPF
+        // aleatorio de toda Personas, igual que si el switch estuviera en No.
+        const cuerpo = (filtroColectivoGlobal && filtrosListos())
             ? { colectivo: cuerpoPeticion(), subgrupo: subgrupoSeleccionadoIndividual }
             : {};
         const resp = await fetch('/trayectorias/individual/aleatorio', {

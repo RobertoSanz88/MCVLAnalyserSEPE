@@ -494,27 +494,34 @@ def exportar_sin_filtro(request: Request):
 # de chips, sin volver a pedir al backend.
 #
 # 3 combinaciones posibles segun el tipo DuckDB de cada variable
-# (_clasificar_columnas, igual criterio que el resto de "Colectivos"):
-# - numerica x numerica: densidad 2D (rejilla de NBINS_DENSIDAD x
-#   NBINS_DENSIDAD, contando personas por celda) en vez de un punto por
-#   persona - con hasta ~1,3M personas un scatter de puntos individuales
-#   bloquearia el navegador (decision explicita del usuario). Los bordes de
-#   la rejilla se calculan sobre el MIN/MAX de toda la tabla (sin filtrar),
-#   no por subgrupo, para que los 4 subgrupos compartan la misma escala de
-#   ejes y sean comparables entre si al cambiar el selector.
+# (_clasificar_columnas, igual criterio que el resto de "Colectivos"). NINGUNA
+# reordena ejes (2026-09-10, decision explicita del usuario: revierte reglas
+# de eje anteriores de este mismo dia 09 - "Variable eje X"/"Variable eje Y"
+# en el frontend, antes "Variable 1"/"Variable 2", mapean SIEMPRE directo a
+# su eje, la elija el usuario en el orden que la elija):
+# - numerica x numerica: Variable eje X al eje X, Variable eje Y al eje Y -
+#   esto nunca cambio, no habia reordenacion desde el principio (no hay un
+#   criterio objetivo tipo "mas categorias" para 2 numericas). Densidad 2D
+#   (rejilla de NBINS_DENSIDAD x NBINS_DENSIDAD, contando personas por celda)
+#   en vez de un punto por persona - con hasta ~1,3M personas un scatter de
+#   puntos individuales bloquearia el navegador (decision explicita del
+#   usuario). Los bordes de la rejilla se calculan sobre el MIN/MAX de toda
+#   la tabla (sin filtrar), no por subgrupo, para que los 4 subgrupos
+#   compartan la misma escala de ejes y sean comparables entre si al cambiar
+#   el selector.
 # - categorica x categorica: tabla de contingencia (conteo por cada par de
 #   categorias). Los ejes (lista de categorias) tambien se fijan sobre TODA
-#   la tabla, mismo motivo que arriba. Eje X = la variable con MAS categorias
-#   (decision explicita del usuario, 2026-09-09): el panel es mas ancho que
-#   alto, se lee mejor.
-# - numerica x categorica (en cualquier orden de seleccion): boxplot -
-#   resumen por categoria (n, min, max, cuartiles) calculado en SQL, nunca
-#   se envian los valores individuales al frontend. La categorica va siempre
-#   al eje X (comportamiento normal de un boxplot, confirmado con el
-#   usuario) - no necesita reordenarse como categorica x categorica.
-# - numerica x numerica: sin reordenar - Variable 1 al eje X, Variable 2 al
-#   eje Y, tal cual las elige el usuario (decision explicita, 2026-09-09: no
-#   hay un criterio objetivo tipo "mas categorias" para 2 numericas).
+#   la tabla, mismo motivo que arriba. Eje X = Variable eje X, eje Y =
+#   Variable eje Y, sin excepcion (hasta el 2026-09-10 el eje X era la
+#   variable con MAS categorias, revertido a peticion del usuario).
+# - numerica x categorica: boxplot - resumen por categoria (n, min, max,
+#   cuartiles) calculado en SQL, nunca se envian los valores individuales al
+#   frontend. El eje que le toque a cada variable (numerica o categorica) lo
+#   decide el usuario con Variable eje X/Y, no un criterio fijo - el frontend
+#   dibuja el boxplot VERTICAL (categorica en X) u HORIZONTAL (categorica en
+#   Y) segun toque, ver variable1_numerica en la respuesta y
+#   dibujarCruceBoxplot en colectivos.html (hasta el 2026-09-10 la categorica
+#   iba siempre al eje X, revertido a peticion del usuario).
 #
 # TOP_N_CATEGORICO: mismo limite (20) que ya usa "cnae2009_cc" en
 # VARIABLES_CATEGORICAS (app/routers/trayectorias.py) para no desbordar el
@@ -611,17 +618,17 @@ def _cruce_numerica_numerica(con, condiciones: dict, v1: str, v2: str) -> dict:
 
 
 def _cruce_categorica_categorica(con, condiciones: dict, v1: str, v2: str) -> tuple[str, str, dict]:
+    # Eje X = v1, eje Y = v2, SIEMPRE (2026-09-10, decision explicita del
+    # usuario: revierte la regla anterior "eje X = la variable con mas
+    # categorias" - ahora "Variable eje X"/"Variable eje Y" en el frontend
+    # mapean directo a su eje, sin reordenar). v1/v2 se siguen devolviendo
+    # en la tupla de salida por compatibilidad con el resto de la funcion,
+    # pero ya nunca cambian de valor aqui dentro.
     cat1, resto1 = _top_categorias(con, v1)
     cat2, resto2 = _top_categorias(con, v2)
     etiqueta_resto = "Resto"
     ejes1 = cat1 + ([etiqueta_resto] if resto1 else [])
     ejes2 = cat2 + ([etiqueta_resto] if resto2 else [])
-
-    # Eje X = la variable con mas categorias (ver comentario de cabecera) -
-    # se decide DESPUES del top-N, sobre el numero final de categorias
-    # (incluyendo "Resto" si aplica).
-    if len(ejes2) > len(ejes1):
-        v1, v2, cat1, cat2, resto1, resto2, ejes1, ejes2 = v2, v1, cat2, cat1, resto2, resto1, ejes2, ejes1
 
     set1, set2 = set(cat1), set(cat2)
     idx1 = {v: i for i, v in enumerate(ejes1)}
@@ -783,12 +790,23 @@ def cruce(request: Request, body: CruceRequest):
     if tipo1 == "categorica" and tipo2 == "categorica":
         v_x, v_y, subgrupos = _cruce_categorica_categorica(con, condiciones, v1, v2)
         return {"tipo": "categorica_categorica", "variable1": v_x, "variable2": v_y, "subgrupos": subgrupos}
-    # numerica x categorica, en cualquier orden de seleccion: se normaliza a
-    # (v_num, v_cat) para no duplicar la logica del boxplot, y se devuelve
-    # ese orden final en la respuesta para que el frontend sepa cual es cual.
+    # numerica x categorica: variable1/variable2 se devuelven en el MISMO
+    # orden que las eligio el usuario (eje X/eje Y), nunca reordenadas - hasta
+    # el 2026-09-10 aqui se normalizaba siempre a (v_num, v_cat) para que la
+    # categorica cayera en el eje X del boxplot, revertido a peticion
+    # explicita del usuario. v_num/v_cat internamente SI hace falta saber
+    # cual es cual (para la consulta SQL de _cruce_numerica_categorica, que
+    # no cambia), por eso se calculan aparte de lo que se devuelve.
+    # variable1_numerica le dice al frontend si el eje X (variable1) es la
+    # numerica o la categorica, para elegir boxplot vertical u horizontal
+    # (ver dibujarCruceBoxplot en colectivos.html) sin tener que inferirlo de
+    # otro sitio (nunca de columnasDisponibles.numericas en el propio
+    # request, que podria no coincidir si el usuario cambio de seleccion
+    # entre pedir y dibujar).
     v_num, v_cat = (v1, v2) if tipo1 == "numerica" else (v2, v1)
     return {
-        "tipo": "numerica_categorica", "variable1": v_num, "variable2": v_cat,
+        "tipo": "numerica_categorica", "variable1": v1, "variable2": v2,
+        "variable1_numerica": tipo1 == "numerica",
         "subgrupos": _cruce_numerica_categorica(con, condiciones, v_num, v_cat),
     }
 
@@ -805,7 +823,11 @@ def _cruce_categorica_categorica_central(con, v1: str, v2: str, v_central: str) 
     cada combinacion de v1 x v2 (categoricas), sobre TODA la tabla (sin
     filtro de colectivo - por eso esta funcion no toma `condiciones` como las
     de mas arriba, solo hay un resultado, no 4 subgrupos). Mismo top-N=20 +
-    "Resto" y regla de eje (X = mas categorias) que _cruce_categorica_categorica.
+    "Resto" que _cruce_categorica_categorica. Eje X = v1, eje Y = v2,
+    SIEMPRE (2026-09-10, decision explicita del usuario: revierte la regla
+    anterior "eje X = la variable con mas categorias" que si tenia esta
+    funcion al principio - "Variable eje X"/"Variable eje Y" en el frontend
+    mapean directo a su eje).
 
     Media Y mediana se calculan siempre las dos en la misma consulta (mismo
     patron que trayectorias.py con AVG/MEDIAN en el mismo SELECT) - el switch
@@ -822,9 +844,6 @@ def _cruce_categorica_categorica_central(con, v1: str, v2: str, v_central: str) 
     etiqueta_resto = "Resto"
     ejes1 = cat1 + ([etiqueta_resto] if resto1 else [])
     ejes2 = cat2 + ([etiqueta_resto] if resto2 else [])
-
-    if len(ejes2) > len(ejes1):
-        v1, v2, cat1, cat2, resto1, resto2, ejes1, ejes2 = v2, v1, cat2, cat1, resto2, resto1, ejes2, ejes1
 
     def _expr(columna, categorias_top, hay_resto):
         if not hay_resto:
