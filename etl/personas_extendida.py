@@ -1209,15 +1209,6 @@ NUEVO_ORDEN = [
 ]
 
 
-def _tiene_jubilacion(x):
-    if x is None:
-        return False
-    if isinstance(x, (list, np.ndarray)):
-        lista = list(x) if isinstance(x, np.ndarray) else x
-        return "Jubilación" in lista
-    return False
-
-
 def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_dict_path, causa_baja_dict_path):
     """Ultimo paso: calculos derivados (edades, tasas anuales, agrupaciones, filtros de
     calidad) y seleccion final de columnas. Todo en pandas: para cuando se llega aqui, la
@@ -1351,15 +1342,13 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     # Situacion_Paro_Ocupacion: Ocupado / Parado / Pensionista
     # Vectorizado (no df.apply(axis=1), que construye una Series de ~50 columnas por cada una
     # de las 1,36M filas y revienta por memoria en esta maquina - MemoryError comprobado).
-    tiene_jubilacion = df["Pension_actual"].apply(_tiene_jubilacion)
     df["Situacion_Paro_Ocupacion"] = np.select(
         [
             df["Situacion_actual_afiliacion"] == "Alta_ocupado",
             df["Situacion_actual_afiliacion"] == "Nunca_ha_cotizado",
             df["Situacion_actual_afiliacion"] == "Baja_para_pension",
-            tiene_jubilacion,
         ],
-        ["Ocupado", "Pensionista", "Pensionista", "Pensionista"],
+        ["Ocupado", "Pensionista", "Pensionista"],
         default="Parado",
     )
 
@@ -1411,6 +1400,34 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     es_ld = es_parado & duracion_actual_sin_empleo.notna() & (duracion_actual_sin_empleo > umbral_ld)
     df.loc[es_parado & es_ld, "Situacion_Paro_Ocupacion"] = "Parado_LD"
     df.loc[es_parado & ~es_ld, "Situacion_Paro_Ocupacion"] = "Parado_NoLD"
+
+    # Categoria compuesta "<situacion>_y_pensionista" (2026-09-10, decision
+    # explicita del usuario tras un bug real que reporto: en "Trayectorias de
+    # colectivos", el CONTRACOLECTIVO de "Pensionista" (situacion_paro_ocupacion)
+    # mostraba gente con cuantia de pension - porque el criterio de arriba
+    # daba prioridad absoluta a "esta Ocupado ahora" (o a estar Parado) sobre
+    # "tambien cobra pension" y la silenciaba sin mas. Verificado con datos
+    # reales: 589 personas no-"Pensionista" con pension activa el ultimo anyo
+    # (241 Ocupado, 348 Parado_LD/NoLD), de las cuales solo 147 eran de
+    # Jubilacion (unico tipo que el codigo viejo comprobaba via
+    # _tiene_jubilacion, ya eliminada) - el resto son Incapacidad/Viudedad/
+    # Orfandad/a favor de familiares, compatibles con trabajar o estar en
+    # paro segun la normativa real. Cobra_pension_2024/5 (SI/NO, ya calculado
+    # en el Grupo E - ver extraer_grupo_e) cubre CUALQUIER tipo de pension, no
+    # solo Jubilacion, a peticion explicita del usuario.
+    # Solo se combina con Ocupado/Parado_LD/Parado_NoLD - quien ya es
+    # "Pensionista" puro (Baja_para_pension/Nunca_ha_cotizado, arriba) no
+    # necesita el sufijo, ya representa "cobra pension" por si mismo. Esto es
+    # solo un RELABEL de filas que ya tenian exactamente una categoria cada
+    # una (nunca anyade ni quita filas), asi que las categorias resultantes
+    # siguen siendo mutuamente excluyentes y su suma sigue dando el total
+    # exacto de personas - condicion explicita del usuario.
+    cobra_pension = df["Cobra_pension_2024/5"] == "SI"
+    combinable_con_pension = df["Situacion_Paro_Ocupacion"].isin(["Ocupado", "Parado_LD", "Parado_NoLD"])
+    mask_pension = combinable_con_pension & cobra_pension
+    df.loc[mask_pension, "Situacion_Paro_Ocupacion"] = (
+        df.loc[mask_pension, "Situacion_Paro_Ocupacion"] + "_y_pensionista"
+    )
 
     # T_total_NO_EMPLEO (PASO 3, 2026-09-08, decision explicita del usuario - materializada como
     # columna el mismo dia, a peticion expresa del usuario): residuo, no suma directa -
