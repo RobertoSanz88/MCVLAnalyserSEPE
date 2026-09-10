@@ -400,15 +400,23 @@ def condiciones_sin_filtro() -> dict[str, dict]:
     return {GRUPO_SIN_FILTRO: {"where": "TRUE", "params": [], "etiqueta": "Toda la MCVL"}}
 
 
-def _calcular_estadisticas(con, condiciones: dict) -> dict:
+def _calcular_estadisticas(con, condiciones: dict, sin_limite_categorico: bool = False) -> dict:
     """Recuento + estadisticas (numericas y categoricas) de cada grupo de
     `condiciones` (1 o N, ver GRUPO_SIN_FILTRO/calcular_condiciones_subgrupos).
     Compartido entre los endpoints JSON y los de exportacion a Excel (con o
-    sin filtro) para no calcular las cosas de dos formas distintas."""
+    sin filtro) para no calcular las cosas de dos formas distintas.
+
+    sin_limite_categorico=True (solo lo usan los endpoints de exportacion,
+    2026-09-10, decision explicita del usuario) ignora el "limite" de
+    CATEGORICAS_COLECTIVOS (config.py, hoy 15 para prov_trabajo_ppal y
+    act_econ_ppal): el grafico/tabla en pantalla se sigue limitando para no
+    desbordar, pero el Excel exportado lleva siempre todas las categorias."""
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
     numericas = [c for c in numericas if c not in COLUMNAS_NUMERICAS_EXCLUIDAS]
     categoricas_visibles = _categoricas_visibles(categoricas)
+    if sin_limite_categorico:
+        categoricas_visibles = [(c, None) for c, _ in categoricas_visibles]
 
     resultados = {}
     for nombre, c in condiciones.items():
@@ -429,12 +437,13 @@ def _calcular_subgrupos(
     filtro2: Filtro,
     filtro3: Filtro | None = None,
     filtro4: Filtro | None = None,
+    sin_limite_categorico: bool = False,
 ) -> dict:
     """Calcula recuento + estadisticas de cada uno de los 4 subgrupos (ver
     _calcular_estadisticas). Compartido entre el endpoint JSON y el de
     exportacion a Excel."""
     condiciones = calcular_condiciones_subgrupos(con, filtro1, filtro2, filtro3, filtro4)
-    return _calcular_estadisticas(con, condiciones)
+    return _calcular_estadisticas(con, condiciones, sin_limite_categorico)
 
 
 @router.post("/colectivos/recuentos")
@@ -475,7 +484,7 @@ def subgrupos_sin_filtro(request: Request):
 @router.get("/colectivos/exportar-sin-filtro")
 def exportar_sin_filtro(request: Request):
     con = request.app.state.con.cursor()
-    resultados = _calcular_estadisticas(con, condiciones_sin_filtro())
+    resultados = _calcular_estadisticas(con, condiciones_sin_filtro(), sin_limite_categorico=True)
     contenido = _construir_excel(resultados, grupos=[GRUPO_SIN_FILTRO])
     return StreamingResponse(
         io.BytesIO(contenido),
@@ -534,17 +543,18 @@ NBINS_DENSIDAD = 20
 TOP_N_CATEGORICO = 20
 
 
-def _top_categorias(con, columna: str, top_n: int = TOP_N_CATEGORICO) -> tuple[list, bool]:
+def _top_categorias(con, columna: str, top_n: int | None = TOP_N_CATEGORICO) -> tuple[list, bool]:
     """Hasta top_n valores mas frecuentes de `columna` en toda la tabla
     `personas`. Devuelve (valores, hay_resto) - hay_resto=True si la columna
     tiene mas de top_n valores distintos y hace falta una categoria "Resto"
-    para el resto."""
+    para el resto. top_n=None desactiva el limite (usado en la exportacion a
+    Excel, ver _construir_excel_cruce): todas las categorias, sin "Resto"."""
     filas = con.execute(
         f"SELECT {columna}, COUNT(*) AS n FROM personas WHERE {columna} IS NOT NULL "
         f"GROUP BY 1 ORDER BY n DESC, {columna} ASC"
     ).fetchall()
     valores = [f[0] for f in filas]
-    if len(valores) <= top_n:
+    if top_n is None or len(valores) <= top_n:
         return valores, False
     return valores[:top_n], True
 
@@ -617,15 +627,22 @@ def _cruce_numerica_numerica(con, condiciones: dict, v1: str, v2: str) -> dict:
     return resultado
 
 
-def _cruce_categorica_categorica(con, condiciones: dict, v1: str, v2: str) -> tuple[str, str, dict]:
+def _cruce_categorica_categorica(
+    con, condiciones: dict, v1: str, v2: str, top_n: int | None = TOP_N_CATEGORICO
+) -> tuple[str, str, dict]:
     # Eje X = v1, eje Y = v2, SIEMPRE (2026-09-10, decision explicita del
     # usuario: revierte la regla anterior "eje X = la variable con mas
     # categorias" - ahora "Variable eje X"/"Variable eje Y" en el frontend
     # mapean directo a su eje, sin reordenar). v1/v2 se siguen devolviendo
     # en la tupla de salida por compatibilidad con el resto de la funcion,
     # pero ya nunca cambian de valor aqui dentro.
-    cat1, resto1 = _top_categorias(con, v1)
-    cat2, resto2 = _top_categorias(con, v2)
+    #
+    # top_n=None (exportacion a Excel, 2026-09-10, decision explicita del
+    # usuario): sin limite de categorias por eje, sin "Resto" - una hoja de
+    # calculo aguanta una rejilla de cientos de filas/columnas sin problema,
+    # a diferencia del grafico en pantalla (ver TOP_N_CATEGORICO).
+    cat1, resto1 = _top_categorias(con, v1, top_n)
+    cat2, resto2 = _top_categorias(con, v2, top_n)
     etiqueta_resto = "Resto"
     ejes1 = cat1 + ([etiqueta_resto] if resto1 else [])
     ejes2 = cat2 + ([etiqueta_resto] if resto2 else [])
@@ -661,8 +678,12 @@ def _cruce_categorica_categorica(con, condiciones: dict, v1: str, v2: str) -> tu
 NBINS_HISTOGRAMA = 20
 
 
-def _cruce_numerica_categorica(con, condiciones: dict, v_num: str, v_cat: str) -> dict:
-    top_cats, hay_resto = _top_categorias(con, v_cat)
+def _cruce_numerica_categorica(
+    con, condiciones: dict, v_num: str, v_cat: str, top_n: int | None = TOP_N_CATEGORICO
+) -> dict:
+    # top_n=None: ver comentario equivalente en _cruce_categorica_categorica
+    # (exportacion a Excel, 2026-09-10).
+    top_cats, hay_resto = _top_categorias(con, v_cat, top_n)
     if hay_resto:
         # CASE ... IN (?, ?, ...) ELSE 'Resto': el resumen (min/max/cuartiles/
         # histograma) de "Resto" tiene que salir de UN SOLO GROUP BY sobre los
@@ -817,7 +838,9 @@ class CruceCentralRequest(BaseModel):
     variable_central: str
 
 
-def _cruce_categorica_categorica_central(con, v1: str, v2: str, v_central: str) -> tuple[str, str, dict]:
+def _cruce_categorica_categorica_central(
+    con, v1: str, v2: str, v_central: str, top_n: int | None = TOP_N_CATEGORICO
+) -> tuple[str, str, dict]:
     """Modo "3 variables" de Cruce (switch "Aplicar filtro de colectivos" en
     No, 2026-09-09): heatmap de la variable central (numerica) agregada por
     cada combinacion de v1 x v2 (categoricas), sobre TODA la tabla (sin
@@ -838,9 +861,11 @@ def _cruce_categorica_categorica_central(con, v1: str, v2: str, v_central: str) 
     GROUP BY (no combinando a mano medias/medianas ya calculadas de cada
     categoria sobrante despues de la consulta): una mediana no se puede
     promediar entre grupos sin perder precision, igual que ya se explica en
-    _cruce_numerica_categorica para sus cajas."""
-    cat1, resto1 = _top_categorias(con, v1)
-    cat2, resto2 = _top_categorias(con, v2)
+    _cruce_numerica_categorica para sus cajas. top_n=None: ver comentario
+    equivalente en _cruce_categorica_categorica (exportacion a Excel,
+    2026-09-10)."""
+    cat1, resto1 = _top_categorias(con, v1, top_n)
+    cat2, resto2 = _top_categorias(con, v2, top_n)
     etiqueta_resto = "Resto"
     ejes1 = cat1 + ([etiqueta_resto] if resto1 else [])
     ejes2 = cat2 + ([etiqueta_resto] if resto2 else [])
@@ -953,13 +978,22 @@ def cruce_puntos(request: Request, body: PuntosRequest):
     return {"x": [f[0] for f in filas], "y": [f[1] for f in filas]}
 
 
-# Exportacion a Excel de "Cruce de variables" (2026-09-09): igual que
-# /trayectorias/colectivo/exportar, NO se recalcula nada - el frontend ya
-# tiene en JS el resultado del cruce activo (ultimoResultadoCruce, de
-# /colectivos/cruce o /colectivos/cruce-central) y manda tal cual. Con
-# filtro de colectivo (3 tipos "normales"), UNA HOJA POR SUBGRUPO, los 4 de
-# un tiron (decision explicita del usuario, 2026-09-09: la primera version
-# solo exportaba el subgrupo marcado en pantalla - "de un tiron los cuatro
+# Exportacion a Excel de "Cruce de variables" (2026-09-09, RECALCULO parcial
+# anyadido 2026-09-10): igual que /trayectorias/colectivo/exportar para
+# numerica_numerica - el frontend manda tal cual el resultado del cruce
+# activo (ultimoResultadoCruce), NO se recalcula nada. Pero
+# categorica_categorica, numerica_categorica y categorica_categorica_central
+# YA NO son WYSIWYG (decision explicita del usuario, 2026-09-10): el grafico
+# en pantalla se sigue truncando a TOP_N_CATEGORICO para no desbordar, pero
+# el Excel exportado tiene que llevar TODAS las categorias reales sin
+# truncar (p.ej. actividad economica x provincia completas, no el top-20+
+# "Resto" del heatmap en pantalla) - por eso esas 3 se recalculan aqui mismo
+# con top_n=None (ver _construir_excel_cruce), y el frontend manda ademas
+# filtro1-4 (para categorica_categorica/numerica_categorica; el modo "3
+# variables" no filtra por colectivo, no hace falta). Con filtro de
+# colectivo (3 tipos "normales"), UNA HOJA POR SUBGRUPO, los 4 de un tiron
+# (decision explicita del usuario, 2026-09-09: la primera version solo
+# exportaba el subgrupo marcado en pantalla - "de un tiron los cuatro
 # subcolectivos, uno en cada pestaña"); sin filtro (modo "3 variables") no
 # hay subgrupos, es poblacion completa. Excepcion deliberada: "Diagrama de
 # dispersion" (numerica x numerica) no manda sus puntos individuales (hasta
@@ -967,8 +1001,8 @@ def cruce_puntos(request: Request, body: PuntosRequest):
 # frontend manda siempre la rejilla de densidad para ese tipo, aunque el
 # grafico en pantalla sea de puntos. Otra excepcion: el modo "3 variables"
 # exporta Media Y Mediana en 2 hojas siempre, aunque el switch del grafico
-# solo muestre una de las 2 a la vez - ambas ya vienen calculadas juntas en
-# la misma respuesta del backend, no tiene sentido limitarse a la activa.
+# solo muestre una de las 2 a la vez - ambas ya salen calculadas juntas en
+# la misma consulta, no tiene sentido limitarse a la activa.
 #
 # Formato REJILLA (matriz: una fila por valor de un eje, una columna por
 # valor del otro) para todo lo que ya es conceptualmente una tabla de 2 ejes
@@ -980,6 +1014,18 @@ def cruce_puntos(request: Request, body: PuntosRequest):
 # numerica_categorica es la unica excepcion real: no es una tabla de 2 ejes
 # (cada fila ya es una categoria distinta con varias estadisticas), se queda
 # en su forma natural de una fila por categoria.
+# Sin limite de categorias en la exportacion a Excel (2026-09-10, decision
+# explicita del usuario): el grafico en pantalla se sigue truncando a
+# TOP_N_CATEGORICO para no desbordar (p.ej. un heatmap de actividad
+# economica x provincia, 20x20 celdas visibles), pero el Excel exportado
+# lleva SIEMPRE todas las categorias reales (p.ej. esa misma tabla completa,
+# cientos de filas x 52 provincias), sin "Resto". Por eso categorica_categorica
+# y numerica_categorica ya NO son WYSIWYG del grafico (dejan de mandar
+# "datos", el backend RECALCULA sin top-N a partir de los filtros de
+# colectivo) - numerica_numerica es la unica que se queda igual que antes
+# (la rejilla de densidad nunca tuvo top-N que quitar) y
+# categorica_categorica_central tampoco necesita filtros (poblacion
+# completa, sin filtro de colectivo).
 class CruceExportRequest(BaseModel):
     tipo: Literal[
         "numerica_numerica", "categorica_categorica", "numerica_categorica", "categorica_categorica_central",
@@ -988,11 +1034,17 @@ class CruceExportRequest(BaseModel):
     variable2: str
     variable_central: str | None = None
     tipo_grafico: str
-    # 3 tipos "normales": los 4 subgrupos tal cual (mismo dict que
-    # ultimoResultadoCruce.subgrupos en el frontend, clave = nombre de
-    # ORDEN_SUBGRUPOS). categorica_categorica_central: el resultado entero
-    # (x/y/z_media/z_mediana/n), no hay subgrupos.
-    datos: dict
+    # Solo hace falta para numerica_numerica (unico tipo que sigue siendo
+    # WYSIWYG, ver comentario de arriba) - mismo dict que
+    # ultimoResultadoCruce.subgrupos en el frontend.
+    datos: dict | None = None
+    # Filtros de colectivo, misma forma que SubgruposRequest - solo hacen
+    # falta para recalcular categorica_categorica/numerica_categorica sin
+    # limite (categorica_categorica_central no filtra por colectivo).
+    filtro1: Filtro | None = None
+    filtro2: Filtro | None = None
+    filtro3: Filtro | None = None
+    filtro4: Filtro | None = None
 
 
 def _escribir_grid_cruce(ws, fila_inicio: int, titulo_esquina: str, x: list, y: list, valores: list, negrita: Font):
@@ -1052,37 +1104,77 @@ def _escribir_hoja_cruce_subgrupo(ws, sub: dict, variable1: str, variable2: str,
         _escribir_grid_cruce(ws, fila_cabecera, f"{variable2} \\ {variable1}", sub["x"], sub["y"], sub["z"], negrita)
 
 
-def _construir_excel_cruce(payload: CruceExportRequest) -> bytes:
+def _construir_excel_cruce(payload: CruceExportRequest, con) -> bytes:
     negrita = Font(bold=True)
     wb = Workbook()
     ws = wb.active
-    datos = payload.datos
 
     if payload.tipo == "categorica_categorica_central":
-        # 3 hojas (Media/Mediana/N), no solo la que estaba activa en el
-        # switch del grafico - Media y Mediana ya vienen calculadas de golpe
-        # en la misma respuesta del backend (ver
+        # Recalculada sin limite de categorias (top_n=None, ver cabecera del
+        # fichero) - poblacion completa, sin filtro de colectivo, por eso no
+        # hace falta leer payload.filtro1-4 aqui. 3 hojas (Media/Mediana/N),
+        # no solo la que estaba activa en el switch del grafico - Media y
+        # Mediana ya salen calculadas de golpe en la misma consulta (ver
         # _cruce_categorica_categorica_central), y N (cuantas personas hay
         # detras de cada celda) es necesario para interpretar si una
         # media/mediana es fiable o son 3 personas sueltas.
-        titulo_esquina = f"{payload.variable2} \\ {payload.variable1}"
+        if payload.variable_central is None:
+            raise HTTPException(400, "Falta variable_central para el modo '3 variables'")
+        v_x, v_y, resultado = _cruce_categorica_categorica_central(
+            con, payload.variable1, payload.variable2, payload.variable_central, top_n=None
+        )
+        titulo_esquina = f"{v_y} \\ {v_x}"
         for i, (clave, etiqueta_valor) in enumerate((("z_media", "Media"), ("z_mediana", "Mediana"), ("n", "N"))):
             hoja = ws if i == 0 else wb.create_sheet(etiqueta_valor)
             hoja.title = etiqueta_valor
-            _escribir_grid_cruce(hoja, 1, titulo_esquina, datos["x"], datos["y"], datos[clave], negrita)
+            _escribir_grid_cruce(hoja, 1, titulo_esquina, resultado["x"], resultado["y"], resultado[clave], negrita)
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        return buffer.getvalue()
+
+    if payload.tipo == "numerica_numerica":
+        # Unica combinacion que sigue siendo WYSIWYG del grafico (ver
+        # cabecera del fichero): la rejilla de densidad nunca tuvo top-N de
+        # categorias que quitar, no hace falta recalcular nada.
+        if payload.datos is None:
+            raise HTTPException(400, "Falta 'datos' para exportar numerica_numerica")
+        datos = payload.datos
     else:
-        # Los 3 tipos "normales": una hoja por cada uno de los 4 subgrupos,
-        # de un tiron. "Subgrupo N" (no la etiqueta completa, p.ej. "sexo
-        # Hombre + nacionalidad Espana") porque Excel limita el nombre de
-        # hoja a 31 caracteres y no admite ciertos caracteres - la etiqueta
-        # completa va dentro de la propia hoja (fila 1), no hace falta
-        # acortarla ahi.
-        for i, nombre in enumerate(ORDEN_SUBGRUPOS):
-            hoja = ws if i == 0 else wb.create_sheet()
-            hoja.title = f"Subgrupo {i + 1}"
-            _escribir_hoja_cruce_subgrupo(
-                hoja, datos[nombre], payload.variable1, payload.variable2, payload.tipo, payload.tipo_grafico, negrita,
+        # categorica_categorica / numerica_categorica: RECALCULADAS sin
+        # limite de categorias a partir de los filtros de colectivo que
+        # manda el frontend (ya no son WYSIWYG del grafico en pantalla, que
+        # sigue truncado a TOP_N_CATEGORICO - ver cabecera del fichero).
+        if payload.filtro1 is None or payload.filtro2 is None:
+            raise HTTPException(400, "Faltan los filtros de colectivo para recalcular la exportacion")
+        condiciones = calcular_condiciones_subgrupos(
+            con, payload.filtro1, payload.filtro2, payload.filtro3, payload.filtro4
+        )
+        if payload.tipo == "categorica_categorica":
+            _, _, datos = _cruce_categorica_categorica(
+                con, condiciones, payload.variable1, payload.variable2, top_n=None
             )
+        else:
+            columnas_validas = _columnas_personas(con)
+            numericas, _ = _clasificar_columnas(columnas_validas)
+            numericas_validas = set(numericas) - {"ipf"}
+            v_num, v_cat = (
+                (payload.variable1, payload.variable2)
+                if payload.variable1 in numericas_validas
+                else (payload.variable2, payload.variable1)
+            )
+            datos = _cruce_numerica_categorica(con, condiciones, v_num, v_cat, top_n=None)
+
+    # Los 3 tipos "normales": una hoja por cada uno de los 4 subgrupos, de un
+    # tiron. "Subgrupo N" (no la etiqueta completa, p.ej. "sexo Hombre +
+    # nacionalidad Espana") porque Excel limita el nombre de hoja a 31
+    # caracteres y no admite ciertos caracteres - la etiqueta completa va
+    # dentro de la propia hoja (fila 1), no hace falta acortarla ahi.
+    for i, nombre in enumerate(ORDEN_SUBGRUPOS):
+        hoja = ws if i == 0 else wb.create_sheet()
+        hoja.title = f"Subgrupo {i + 1}"
+        _escribir_hoja_cruce_subgrupo(
+            hoja, datos[nombre], payload.variable1, payload.variable2, payload.tipo, payload.tipo_grafico, negrita,
+        )
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -1090,8 +1182,9 @@ def _construir_excel_cruce(payload: CruceExportRequest) -> bytes:
 
 
 @router.post("/colectivos/cruce/exportar")
-def exportar_cruce(payload: CruceExportRequest):
-    contenido = _construir_excel_cruce(payload)
+def exportar_cruce(request: Request, payload: CruceExportRequest):
+    con = request.app.state.con.cursor()
+    contenido = _construir_excel_cruce(payload, con)
     return StreamingResponse(
         io.BytesIO(contenido),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1202,7 +1295,7 @@ def _construir_excel(resultados: dict, grupos: list[str] = ORDEN_SUBGRUPOS) -> b
 @router.post("/colectivos/exportar")
 def exportar(request: Request, body: SubgruposRequest):
     con = request.app.state.con.cursor()
-    resultados = _calcular_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    resultados = _calcular_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4, sin_limite_categorico=True)
     contenido = _construir_excel(resultados)
     return StreamingResponse(
         io.BytesIO(contenido),

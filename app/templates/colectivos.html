@@ -2526,20 +2526,30 @@ async function exportarExcelTrayectorias() {
     descargarBlob(await resp.blob(), 'trayectorias.xlsx');
 }
 
-// Exporta el cruce activo de "Cruce de variables" tal cual esta calculado
-// (mismo criterio WYSIWYG que exportarExcelTrayectorias) - NO se vuelve a
-// pedir al backend salvo la propia exportacion, que solo reordena a .xlsx
-// el JSON ya recibido en ultimoResultadoCruce (ver /colectivos/cruce/exportar).
-// Con filtro de colectivo, se mandan los 4 subgrupos de una vez (decision
-// explicita del usuario, 2026-09-09: "de un tiron los cuatro subcolectivos,
-// uno en cada pestaña" - no solo el marcado en pantalla como en la primera
-// version), el backend hace una hoja por cada uno. "Diagrama de dispersion"
-// es la unica excepcion real: cada subgrupo manda su rejilla de densidad
-// (ya viene en la respuesta aunque el grafico en pantalla sea de puntos),
-// nunca los puntos individuales cacheados en cachePuntosCruce - no caben en
-// una hoja de Excel. En el modo "3 variables" no hay subgrupos (poblacion
-// completa) - se manda el resultado entero, y el backend exporta Media,
-// Mediana y N en 3 hojas siempre (ya vienen calculadas juntas).
+// Exporta el cruce activo de "Cruce de variables" - para numerica_numerica,
+// tal cual esta calculado en pantalla (mismo criterio WYSIWYG que
+// exportarExcelTrayectorias, NO se vuelve a pedir nada mas que la propia
+// exportacion). Para categorica_categorica y numerica_categorica YA NO es
+// WYSIWYG (2026-09-10, decision explicita del usuario): el grafico en
+// pantalla sigue truncado a top-20+"Resto" por variable (ver
+// TOP_N_CATEGORICO en colectivos.py) para no desbordar un heatmap/boxplot,
+// pero el Excel tiene que llevar TODAS las categorias reales sin truncar
+// (p.ej. actividad economica x provincia completas, no el top-20 visible) -
+// por eso se mandan tambien los filtros de colectivo (cuerpoPeticion(),
+// igual que al pedir el cruce) y el backend RECALCULA sin limite en
+// /colectivos/cruce/exportar, en vez de reordenar a .xlsx lo que ya habia
+// en ultimoResultadoCruce. Con filtro de colectivo, se mandan los 4
+// subgrupos de una vez (decision explicita del usuario, 2026-09-09: "de un
+// tiron los cuatro subcolectivos, uno en cada pestaña" - no solo el marcado
+// en pantalla como en la primera version), el backend hace una hoja por
+// cada uno. "Diagrama de dispersion" es la unica excepcion real: cada
+// subgrupo manda su rejilla de densidad (ya viene en la respuesta aunque el
+// grafico en pantalla sea de puntos), nunca los puntos individuales
+// cacheados en cachePuntosCruce - no caben en una hoja de Excel. En el modo
+// "3 variables" no hay subgrupos ni filtro de colectivo (poblacion
+// completa) - el backend recalcula el heatmap central sin limite el solo, y
+// exporta Media, Mediana y N en 3 hojas siempre (ya salen calculadas
+// juntas).
 async function exportarExcelCruce() {
     if (!ultimoResultadoCruce) return;
     const cuerpo = {
@@ -2548,10 +2558,16 @@ async function exportarExcelCruce() {
         variable2: ultimoResultadoCruce.variable2,
         variable_central: ultimoResultadoCruce.variable_central ?? null,
         tipo_grafico: document.getElementById('select-tipo-grafico-cruce').value,
-        datos: ultimoResultadoCruce.tipo === 'categorica_categorica_central'
-            ? ultimoResultadoCruce
-            : ultimoResultadoCruce.subgrupos,
     };
+    if (ultimoResultadoCruce.tipo === 'numerica_numerica') {
+        cuerpo.datos = ultimoResultadoCruce.subgrupos;
+    } else if (ultimoResultadoCruce.tipo !== 'categorica_categorica_central') {
+        // categorica_categorica / numerica_categorica: el backend recalcula
+        // sin limite, necesita los mismos filtros que ya se usaron para
+        // pedir el cruce (filtroColectivoGlobal siempre es true aqui - el
+        // modo "3 variables" es el unico tipo sin filtro de colectivo).
+        Object.assign(cuerpo, cuerpoPeticion());
+    }
     const resp = await fetch('/colectivos/cruce/exportar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
