@@ -3070,6 +3070,7 @@ function dibujarCruceHistograma(div, sub, vNum, fuenteComun) {
 
     for (const caja of sub.cajas) {
         const cat = caja.categoria;
+        if (CATEGORIAS_EXCLUIDAS_CRUCE.has(cat)) continue; // ver CATEGORIAS_EXCLUIDAS_CRUCE
         const conteos = sub.histograma_por_categoria[cat] || [];
         const panel = document.createElement('div');
         panel.className = 'subpanel-trayectoria-cat';
@@ -3095,19 +3096,27 @@ function dibujarCruceHistograma(div, sub, vNum, fuenteComun) {
     }
 }
 
-// "NO CONSTA" (categoria real) y "Resto" (cajon de sastre del backend, ver
-// TOP_N_CATEGORICO) suelen tener un peso muy distinto al resto de
-// categorias "reales" - en un heatmap (escala de color ABSOLUTA, a
+// "NO CONSTA"/"0 NO CONSTA" (categorias reales de "sin dato", ver
+// GRUPOS_COTIZ_DICT en personas_extendida.py) y "Resto" (cajon de sastre del
+// backend, ver TOP_N_CATEGORICO) suelen tener un peso muy distinto al resto
+// de categorias "reales" - en un heatmap (escala de color ABSOLUTA, a
 // diferencia de las barras apiladas al 100%, donde esto no pasa) eso estira
 // la escala entera y deja el resto de celdas planas, casi del mismo color.
-// Se quedan fuera SOLO del grafico (categorico x categorico - numerico x
-// numerico no tiene estas categorias, son centros de bin), nunca del Excel
-// exportado (que manda sub.x/y/z sin tocar, ver exportarExcelCruce).
-// Decision explicita del usuario, 2026-09-09, tras verlo con datos reales.
-const CATEGORIAS_FUERA_HEATMAP = new Set(['NO CONSTA', 'Resto']);
+// Se quedan fuera de TODOS los tipos de grafico de categorico x categorico Y
+// numerico x categorico (heatmap, burbujas, barras apiladas, boxplot,
+// histograma - numerico x numerico no tiene estas categorias, son centros de
+// bin), nunca del Excel exportado (que manda sub.x/y/z o sub.cajas sin
+// tocar, ver exportarExcelCruce). Decision explicita del usuario:
+// originalmente solo "NO CONSTA"/"Resto" y solo en el heatmap (2026-09-09);
+// extendido a todos los tipos de grafico el 2026-09-10 tras ver "0 NO
+// CONSTA"/"NO CONSTA"/"Resto" sueltos en Barras apiladas, y el mismo dia
+// "0 NO CONSTA" se anyadio tambien a la exclusion (antes se dejaba visible a
+// proposito por ser un codigo real de la guia MCVL - el usuario pidio
+// explicitamente excluirlo tambien).
+const CATEGORIAS_EXCLUIDAS_CRUCE = new Set(['NO CONSTA', '0 NO CONSTA', 'Resto']);
 
 function _indicesSinExcluidas(ejes) {
-    return ejes.map((_, i) => i).filter(i => !CATEGORIAS_FUERA_HEATMAP.has(ejes[i]));
+    return ejes.map((_, i) => i).filter(i => !CATEGORIAS_EXCLUIDAS_CRUCE.has(ejes[i]));
 }
 
 function _aplicarFiltroEjes(idxX, idxY, matriz) {
@@ -3189,7 +3198,7 @@ function cambiarEstadisticoCruceCentral(valor) {
 // volver a pedir al backend. Celdas sin ninguna persona llegan a null desde
 // el backend - Plotly las pinta como hueco (blanco), no como si el agregado
 // valiera 0. "NO CONSTA"/"Resto" fuera del grafico (ver
-// CATEGORIAS_FUERA_HEATMAP) - siempre categorico x categorico aqui, no hace
+// CATEGORIAS_EXCLUIDAS_CRUCE) - siempre categorico x categorico aqui, no hace
 // falta el esNumNum de dibujarCruceHeatmap.
 function dibujarCruceHeatmapCentral(div, resultado, fuenteComun) {
     div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
@@ -3229,26 +3238,24 @@ function dibujarCruceHeatmapCentral(div, resultado, fuenteComun) {
 // solo hay 7 colores de identidad distinguibles (PALETA_VALOR), asi que
 // aqui se pliega ADEMAS a las 7 categorias de v2 con mas peso en ESTE
 // subgrupo + "Otros" para el resto, mismo patron que dibujarApiladas() en
-// "Analisis de colectivos". "Resto" (si lo trae v2 desde el backend) NUNCA
-// compite por uno de los 7 colores - se pliega siempre dentro de "Otros"
-// (decision explicita del usuario, 2026-09-09: confuso ver "Resto" y
-// "Otros" a la vez en el mismo grafico, dos cajones de sastre con nombre
-// distinto que casi significan lo mismo).
+// "Analisis de colectivos". NO CONSTA/Resto de v1 y v2 se excluyen del todo
+// (ver CATEGORIAS_EXCLUIDAS_CRUCE) antes de nada - ni entran en el eje X ni
+// compiten por un color en el apilado de v2, igual que en el heatmap.
 function dibujarCruceBarrasApiladas(div, sub, v1, v2, pct100, fuenteComun) {
     div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
-    const totalesPorX = sub.x.map((_, ix) => sub.z.reduce((s, fila) => s + fila[ix], 0));
+    const idxX = _indicesSinExcluidas(sub.x);
+    const idxY = _indicesSinExcluidas(sub.y);
+    const x = idxX.map(i => sub.x[i]);
+    const y = idxY.map(i => sub.y[i]);
+    const z = _aplicarFiltroEjes(idxX, idxY, sub.z);
 
-    const candidatosY = sub.y
-        .map((cat, iy) => ({ cat, iy, total: sub.z[iy].reduce((s, n) => s + n, 0) }))
-        .filter(({ cat }) => cat !== 'Resto')
+    const totalesPorX = x.map((_, ix) => z.reduce((s, fila) => s + fila[ix], 0));
+
+    const candidatosY = y
+        .map((cat, iy) => ({ cat, iy, total: z[iy].reduce((s, n) => s + n, 0) }))
         .sort((a, b) => b.total - a.total);
     const topY = candidatosY.slice(0, PALETA_VALOR.length);
-    // hayOtros tambien si "Resto" existe en v2, aunque los candidatos
-    // "reales" quepan en los 7 colores - "Resto" siempre va a Otros, nunca
-    // se pierde silenciosamente. totalesPorX ya suma TODAS las filas de
-    // sub.z (Resto incluido), asi que el residuo total-topY de mas abajo lo
-    // absorbe solo, sin tratamiento aparte.
-    const hayOtros = candidatosY.length > PALETA_VALOR.length || sub.y.includes('Resto');
+    const hayOtros = candidatosY.length > PALETA_VALOR.length;
 
     const aValores = (fila) => pct100
         ? fila.map((n, ix) => totalesPorX[ix] ? 100 * n / totalesPorX[ix] : 0)
@@ -3256,17 +3263,17 @@ function dibujarCruceBarrasApiladas(div, sub, v1, v2, pct100, fuenteComun) {
     const formatoY = pct100 ? '%{y:.1f}%' : 'N: %{y:,}';
 
     const traces = topY.map(({ cat, iy }, i) => ({
-        type: 'bar', name: cat, x: sub.x, y: aValores(sub.z[iy]),
+        type: 'bar', name: cat, x, y: aValores(z[iy]),
         marker: { color: PALETA_VALOR[i] },
         hovertemplate: `${v1}: %{x}<br>${v2}: ${cat}<br>${formatoY}<extra></extra>`,
     }));
     if (hayOtros) {
-        const filaOtros = sub.x.map((_, ix) => {
-            const sumaTop = topY.reduce((s, { iy }) => s + sub.z[iy][ix], 0);
+        const filaOtros = x.map((_, ix) => {
+            const sumaTop = topY.reduce((s, { iy }) => s + z[iy][ix], 0);
             return Math.max(0, totalesPorX[ix] - sumaTop);
         });
         traces.push({
-            type: 'bar', name: 'Otros', x: sub.x, y: aValores(filaOtros),
+            type: 'bar', name: 'Otros', x, y: aValores(filaOtros),
             marker: { color: COLOR_OTROS },
             hovertemplate: `${v1}: %{x}<br>${v2}: Otros<br>${formatoY}<extra></extra>`,
         });
@@ -3287,21 +3294,28 @@ function dibujarCruceBarrasApiladas(div, sub, v1, v2, pct100, fuenteComun) {
 // (no radio) proporcional a N, tope de 45px de diametro - el ojo percibe
 // area, no radio (convencion estandar de dataviz). Sin burbuja donde N=0
 // (celda vacia), en vez de una burbuja de tamanyo 0 invisible pero presente.
+// NO CONSTA/Resto excluidos igual que en el heatmap (ver CATEGORIAS_EXCLUIDAS_CRUCE).
 function dibujarCruceBurbujas(div, sub, v1, v2, fuenteComun) {
     div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
+    const idxX = _indicesSinExcluidas(sub.x);
+    const idxY = _indicesSinExcluidas(sub.y);
+    const x = idxX.map(i => sub.x[i]);
+    const y = idxY.map(i => sub.y[i]);
+    const z = _aplicarFiltroEjes(idxX, idxY, sub.z);
+
     const xs = [], ys = [], ns = [];
     let maxN = 0;
-    for (let iy = 0; iy < sub.y.length; iy++) {
-        for (let ix = 0; ix < sub.x.length; ix++) {
-            const n = sub.z[iy][ix];
+    for (let iy = 0; iy < y.length; iy++) {
+        for (let ix = 0; ix < x.length; ix++) {
+            const n = z[iy][ix];
             if (n > 0) maxN = Math.max(maxN, n);
         }
     }
-    for (let iy = 0; iy < sub.y.length; iy++) {
-        for (let ix = 0; ix < sub.x.length; ix++) {
-            const n = sub.z[iy][ix];
+    for (let iy = 0; iy < y.length; iy++) {
+        for (let ix = 0; ix < x.length; ix++) {
+            const n = z[iy][ix];
             if (n <= 0) continue;
-            xs.push(sub.x[ix]); ys.push(sub.y[iy]); ns.push(n);
+            xs.push(x[ix]); ys.push(y[iy]); ns.push(n);
         }
     }
     const TAM_MAX_PX = 45;
@@ -3341,13 +3355,15 @@ function dibujarCruceBurbujas(div, sub, v1, v2, fuenteComun) {
 // atributo (x o y) lleva las categorias.
 function dibujarCruceBoxplot(div, sub, v1, v2, v1EsNumerica, fuenteComun) {
     div.innerHTML = ''; // ver [[feedback_plotly_reusar_div]]
-    const categorias = sub.cajas.map(c => c.categoria);
-    const q1 = sub.cajas.map(c => c.q1);
-    const median = sub.cajas.map(c => c.mediana);
-    const q3 = sub.cajas.map(c => c.q3);
-    const lowerfence = sub.cajas.map(c => c.bigote_inf);
-    const upperfence = sub.cajas.map(c => c.bigote_sup);
-    const text = sub.cajas.map(c => `N: ${fmtEntero(c.n)}`);
+    // NO CONSTA/Resto excluidos igual que en el heatmap (ver CATEGORIAS_EXCLUIDAS_CRUCE).
+    const cajas = sub.cajas.filter(c => !CATEGORIAS_EXCLUIDAS_CRUCE.has(c.categoria));
+    const categorias = cajas.map(c => c.categoria);
+    const q1 = cajas.map(c => c.q1);
+    const median = cajas.map(c => c.mediana);
+    const q3 = cajas.map(c => c.q3);
+    const lowerfence = cajas.map(c => c.bigote_inf);
+    const upperfence = cajas.map(c => c.bigote_sup);
+    const text = cajas.map(c => `N: ${fmtEntero(c.n)}`);
     const marker = { color: COLOR_SUBGRUPO[subgrupoSeleccionadoCruce] };
 
     const trace = v1EsNumerica
