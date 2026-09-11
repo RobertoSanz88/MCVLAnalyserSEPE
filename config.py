@@ -1,34 +1,83 @@
 """Configuracion de usuario: ruta local a la carpeta de Parquet de la MCVL.
 
-Primer arranque: no existe %APPDATA%\\MCVLAnalyserSEPE\\config.json, se abre
-un selector de carpeta nativo de Windows para pedirla y se guarda ahi.
-Arranques siguientes: se lee directamente del JSON, sin preguntar de nuevo.
+Primer arranque de ESTA instalacion: no existe config.json junto al propio
+.exe (o junto a config.py en modo dev), se abre un selector de carpeta
+nativo de Windows para pedirla y se guarda ahi. Arranques siguientes: se lee
+directamente del JSON, sin preguntar de nuevo - salvo que la carpeta guardada
+ya no sea valida (ver get_parquet_dir), en cuyo caso se vuelve a preguntar.
+
+config.json vive JUNTO al propio ejecutable/instalacion (2026-09-11, decision
+explicita del usuario), NO en una ubicacion compartida como %APPDATA%: asi
+cada copia del .exe recuerda su propia carpeta de Parquet de forma
+independiente - p.ej. una version antigua en una carpeta apuntando a tablas
+antiguas, y una version nueva en otra carpeta apuntando a tablas nuevas, sin
+que una pise la configuracion de la otra. Antes vivia en
+%APPDATA%\\MCVLAnalyserSEPE\\, una UNICA ubicacion compartida por CUALQUIER
+copia del .exe en el PC sin importar en que carpeta estuviera cada una - un
+companyero con una version anterior instalada heredaba en silencio, al
+probar la v2.0, la carpeta que hubiera dejado guardada esa version anterior
+(bug real reportado por el usuario: la v2.0 "no funcionaba" y no preguntaba
+la carpeta).
 """
 
 import json
-import os
+import sys
 from pathlib import Path
 
-CONFIG_DIR = Path(os.environ["APPDATA"]) / "MCVLAnalyserSEPE"
-CONFIG_FILE = CONFIG_DIR / "config.json"
+
+def _archivo_config() -> Path:
+    # sys.frozen=True solo dentro del .exe empaquetado por PyInstaller (ver
+    # run.py) - sys.executable es entonces mcvlanalyser.exe, y su carpeta es
+    # la propia instalacion (build/dist/mcvlanalyser/ o donde sea que un
+    # companyero haya copiado esa carpeta entera - onedir es portable, el
+    # config.json viaja con ella). En modo dev (sys.frozen no existe,
+    # sys.executable es python.exe) no hay "instalacion" que valga como
+    # referencia, se usa la carpeta de este propio fichero (raiz del repo).
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent / "config.json"
+    return Path(__file__).resolve().parent / "config.json"
+
+
+CONFIG_FILE = _archivo_config()
+
+# Fichero clave para validar una carpeta de Parquet (ver get_parquet_dir) -
+# la tabla maestra de la que dependen todas las rutas de la app (app/db.py).
+# No se comprueban las demas tablas (Pensiones, Bases...): esta ya es una
+# senyal suficiente de "es una carpeta de Parquet real de esta MCVL" sin
+# complicar la validacion.
+_FICHERO_CLAVE_PARQUET = "tabla_personas_extendida.parquet"
 
 
 def _pedir_carpeta_parquet() -> Path:
     import tkinter as tk
-    from tkinter import filedialog
+    from tkinter import filedialog, messagebox
 
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
-    carpeta = filedialog.askdirectory(
-        title="Selecciona la carpeta con los Parquet de la MCVL"
-    )
-    root.destroy()
 
-    if not carpeta:
-        raise RuntimeError("No se selecciono ninguna carpeta de Parquet.")
+    # Bucle: si la carpeta elegida no tiene el fichero clave, se avisa y se
+    # vuelve a preguntar en vez de aceptarla a ciegas (mismo motivo que la
+    # validacion de la carpeta ya guardada en get_parquet_dir - una carpeta
+    # equivocada aqui llevaria al mismo fallo silencioso al arrancar).
+    while True:
+        carpeta = filedialog.askdirectory(
+            title="Selecciona la carpeta con los Parquet de la MCVL"
+        )
+        if not carpeta:
+            root.destroy()
+            raise RuntimeError("No se selecciono ninguna carpeta de Parquet.")
 
-    return Path(carpeta)
+        ruta = Path(carpeta)
+        if (ruta / _FICHERO_CLAVE_PARQUET).exists():
+            root.destroy()
+            return ruta
+
+        messagebox.showerror(
+            "Carpeta no válida",
+            f"Esa carpeta no tiene {_FICHERO_CLAVE_PARQUET}.\n\n"
+            "Selecciona la carpeta correcta con los Parquet de la MCVL.",
+        )
 
 
 # Fecha de corte de la MCVL procesada (edicion 2024): fecha de extraccion de
@@ -92,15 +141,25 @@ def puerto_libre(preferido: int, intentos: int = 20) -> int:
 
 
 def get_parquet_dir() -> Path:
-    """Devuelve la carpeta de Parquet del usuario, pidiendola la primera vez."""
+    """Devuelve la carpeta de Parquet de esta instalacion, pidiendola si hace
+    falta: en el primer arranque, o si la carpeta guardada ya no es valida
+    (se borro/movio, o le falta _FICHERO_CLAVE_PARQUET - p.ej. apunta a una
+    carpeta de otra MCVL sin regenerar). Sin esta validacion, una carpeta
+    guardada que dejo de existir se reutilizaba en silencio y la app fallaba
+    al arrancar sin decir por que (bug real reportado por el usuario,
+    2026-09-11)."""
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return Path(data["parquet_dir"])
+        parquet_dir = Path(data["parquet_dir"])
+        if (parquet_dir / _FICHERO_CLAVE_PARQUET).exists():
+            return parquet_dir
+        # Carpeta guardada invalida - se trata como un primer arranque de
+        # esta instalacion, cae al bloque de abajo y vuelve a preguntar.
 
     parquet_dir = _pedir_carpeta_parquet()
 
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump({"parquet_dir": str(parquet_dir)}, f, ensure_ascii=False, indent=2)
 
