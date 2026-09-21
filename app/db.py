@@ -138,8 +138,6 @@ TABLES = {
             "Baja_modificada": "baja_modificada",
             "DURACION_EMPLEO": "duracion_empleo",
             "DURACION_DESEMPLEO": "duracion_desempleo",
-            "Alta_desplazada": "alta_desplazada",
-            "DURACION_NO_EMPLEO": "duracion_no_empleo",
             "Empleo_publico": "empleo_publico",
         },
     ),

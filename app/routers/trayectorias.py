@@ -164,7 +164,7 @@ class TrayectoriaCategoricaRequest(SubgruposRequest):
 # diciembre (fecha_alta_real_afil <= 31/12/anyo Y baja_modificada >=
 # 31/12/anyo). Se usa Baja_modificada, no 07 FECHA_BAJA_REAL_AFIL: ya trae
 # resuelto el placeholder 2099 de episodios todavia activos (Fase 1,
-# Alta_desplazada/Baja_modificada en etl/personas_extendida.py). anio_fin se
+# Baja_modificada en etl/personas_extendida.py). anio_fin se
 # calcula en vez de recorrer todos los anyos posibles (union con una tabla de
 # anyos) para que la expansion sea lineal en anyos-por-episodio, no en
 # anyos-totales-del-dataset x episodios - mucho mas barato. Si un anyo no

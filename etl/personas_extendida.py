@@ -39,7 +39,7 @@ def _ruta(parquet_folder, nombre_parquet):
 
 def fase1_afiliacion_extendida(parquet_folder, output_name="tabla_afiliacion_extendida.parquet"):
     """Lee tabla_afiliacion_optimizada.parquet y anyade Baja_modificada, DURACION_EMPLEO,
-    DURACION_DESEMPLEO, Alta_desplazada y DURACION_NO_EMPLEO. Guarda el resultado en
+    y DURACION_DESEMPLEO. Guarda el resultado en
     `output_name` dentro de parquet_folder (parametrizable para no pisar un fichero de
     referencia existente durante la verificacion) y devuelve el DataFrame."""
     df = pd.read_parquet(_ruta(parquet_folder, "tabla_afiliacion_optimizada.parquet"))
@@ -69,20 +69,6 @@ def fase1_afiliacion_extendida(parquet_folder, output_name="tabla_afiliacion_ext
     condicion_desempleo_negativa = df["DURACION_DESEMPLEO"] < CERO_DIAS
     df.loc[condicion_desempleo_negativa, "DURACION_DESEMPLEO"] = pd.NaT
 
-    # Alta_desplazada y DURACION_NO_EMPLEO
-    df.sort_values(by=["01 IPF", "06 FECHA_ALTA_REAL_AFIL"], inplace=True)
-    df.reset_index(drop=True, inplace=True)
-
-    df["Alta_desplazada"] = df["06 FECHA_ALTA_REAL_AFIL"].shift(-1)
-    df["DURACION_NO_EMPLEO"] = df["Alta_desplazada"] - df["Baja_modificada"] - UN_DIA
-    df.loc[condicion_trl_700, "DURACION_NO_EMPLEO"] = CERO_DIAS
-
-    # Para el ultimo episodio de cada persona no hay "alta siguiente": el hueco llega hasta FECHA_CORTE
-    indices_ultimo_empleo = df.groupby("01 IPF")["Baja_modificada"].idxmax()
-    df.loc[indices_ultimo_empleo, "DURACION_NO_EMPLEO"] = (
-        FECHA_CORTE - df.loc[indices_ultimo_empleo, "Baja_modificada"]
-    )
-
     df.to_parquet(_ruta(parquet_folder, output_name), index=False)
     return df
 
@@ -98,17 +84,13 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
     Afiliacion (33M filas) ni siquiera la version ya optimizada cabe entera en la RAM de esta
     maquina (comprobado: pyarrow.lib.ArrowMemoryError al cargarla completa en pandas).
 
-    DIFERENCIA DELIBERADA frente al cuaderno (acordada con el usuario tras 4 intentos fallidos
-    por falta de disco): el cuaderno calcula Alta_desplazada con un shift(-1) GLOBAL (no por
-    persona) sobre el DataFrame ordenado por (01 IPF, 06 FECHA_ALTA_REAL_AFIL), asi que en la
-    ultima fila de cada IPF "roba" la fecha de alta de la primera fila del IPF siguiente.
-    Replicar ese comportamiento exacto exige un ORDER BY global sobre 33M filas, que agotaba el
-    disco disponible (~6-7 GB) en varios intentos. Aqui se usa LEAD particionado por 01 IPF (mas
-    barato: no necesita el sort global), que da NULL en el ultimo episodio real de cada persona
-    en vez de heredar el dato de otra persona. Solo puede diferir del cuaderno en las filas que
-    sean a la vez "ultimo episodio por fecha" de su IPF y NO la fila de Baja_modificada maxima
-    (la fila de Baja_modificada maxima siempre se sobreescribe con FECHA_CORTE, en ambos casos
-    por igual). Verificar cuantas filas reales se ven afectadas al comparar contra la referencia.
+    DIFERENCIA DELIBERADA frente al cuaderno (2026-09-21, decision explicita del usuario): ya no
+    se genera ni Alta_desplazada ni DURACION_NO_EMPLEO. DURACION_NO_EMPLEO era el hueco entre el
+    fin de un episodio y el alta siguiente por orden de fecha de alta, sin tener en cuenta los
+    solapes (pluriempleo): el 11 % de lo que se contaba como "baja" eran solapes (hueco negativo)
+    y el 57 % huecos de un mes o menos. T_total_NO_EMPLEO ya es un residuo (Grupo H) y
+    num_episodios_baja pasa a contar bajas reales (ver extraer_grupo_c), asi que nada la usa.
+    Como efecto, el Fase 1 ya no necesita las ventanas LEAD/ROW_NUMBER sobre 33M filas.
     """
     optimizada = _ruta(parquet_folder, "tabla_afiliacion_optimizada.parquet")
     output_path = _ruta(parquet_folder, output_name)
@@ -134,7 +116,7 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
             CASE WHEN UPPER("18 EMPLEADOR_LETRA_NIF") IN ('P', 'Q', 'S') THEN 'SI' ELSE 'NO' END
                 AS "Empleo_publico"
         FROM read_parquet('{}')
-    """.format(optimizada))
+    """.replace("__FECHA_CORTE__", _FECHA_CORTE_ISO).format(optimizada))
 
     con.execute(f"""
         CREATE OR REPLACE VIEW _fase1_duraciones AS
@@ -149,37 +131,12 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
                  ELSE (date_diff('day', "06 FECHA_ALTA_REAL_AFIL", "Baja_modificada") + 1) * {US_POR_DIA}
             END AS "DURACION_DESEMPLEO"
         FROM _fase1_base
-    """.replace("__FECHA_CORTE__", _FECHA_CORTE_ISO))
-
-    # LEAD y ROW_NUMBER comparten la misma particion (por 01 IPF): DuckDB solo necesita agrupar
-    # una vez por IPF y ordenar dentro de cada grupo pequenyo, no un sort global de 33M filas.
-    con.execute(f"""
-        CREATE OR REPLACE VIEW _fase1_lead AS
-        SELECT *,
-            LEAD("06 FECHA_ALTA_REAL_AFIL") OVER (
-                PARTITION BY "01 IPF" ORDER BY "06 FECHA_ALTA_REAL_AFIL"
-            ) AS "Alta_desplazada",
-            CASE WHEN _trl700 THEN 0
-                 ELSE (date_diff('day', "Baja_modificada",
-                     LEAD("06 FECHA_ALTA_REAL_AFIL") OVER (
-                         PARTITION BY "01 IPF" ORDER BY "06 FECHA_ALTA_REAL_AFIL"
-                     )) - 1) * {US_POR_DIA}
-            END AS "DURACION_NO_EMPLEO",
-            ROW_NUMBER() OVER (
-                PARTITION BY "01 IPF" ORDER BY "Baja_modificada" DESC, "06 FECHA_ALTA_REAL_AFIL" ASC
-            ) AS _rn_ultimo
-        FROM _fase1_duraciones
     """)
 
     con.execute(f"""
         COPY (
-            SELECT
-                * EXCLUDE (_trl700, _no_empleo, _dias_bruto, _rn_ultimo, "DURACION_NO_EMPLEO"),
-                CASE WHEN _rn_ultimo = 1
-                     THEN date_diff('day', "Baja_modificada", TIMESTAMP '{_FECHA_CORTE_ISO}') * {US_POR_DIA}
-                     ELSE "DURACION_NO_EMPLEO"
-                END AS "DURACION_NO_EMPLEO"
-            FROM _fase1_lead
+            SELECT * EXCLUDE (_trl700, _no_empleo, _dias_bruto)
+            FROM _fase1_duraciones
         ) TO '{output_path}' (FORMAT PARQUET)
     """)
     return output_path
@@ -668,13 +625,17 @@ def extraer_grupo_c(con, parquet_folder):
         GROUP BY 1
     """).fetchdf()
 
-    # num_episodios_baja / duracion_promedio_NO EMPLEO (esta ultima no sobrevive a la tabla
-    # final, pero num_episodios_baja hace falta para num_bajas_anual_promedio en el Grupo H)
+    # num_episodios_baja (2026-09-21, decision explicita del usuario, opcion A): bajas REALES =
+    # los mismos episodios de empleo que cuentan como alta (DURACION_EMPLEO != 0 y no nula: sin
+    # TRL 700-799 ni 400) cuya fecha de baja real no es el placeholder 2099 (episodio aun activo).
+    # Antes se contaban los episodios con DURACION_NO_EMPLEO != 0 (hueco hasta el alta siguiente
+    # ignorando solapes): incluia solapes de pluriempleo (11 %) y huecos de dias dentro de otro
+    # empleo. Asi bajas <= altas siempre. Hace falta para num_bajas_anual_promedio en el Grupo H.
     df_promediobaja = con.execute(f"""
-        SELECT "01 IPF" AS "01 IPF", COUNT(*) AS num_episodios_baja,
-               AVG("DURACION_NO_EMPLEO") AS "duracion_promedio_NO EMPLEO"
+        SELECT "01 IPF" AS "01 IPF", COUNT(*) AS num_episodios_baja
         FROM read_parquet('{afiliacion}')
-        WHERE "DURACION_NO_EMPLEO" != 0 AND "DURACION_NO_EMPLEO" IS NOT NULL
+        WHERE "DURACION_EMPLEO" != 0 AND "DURACION_EMPLEO" IS NOT NULL
+          AND date_part('year', "07 FECHA_BAJA_REAL_AFIL") <> 2099
         GROUP BY 1
     """).fetchdf()
 
@@ -738,7 +699,6 @@ def extraer_grupo_c(con, parquet_folder):
 
     for df, col in [
         (df_promedioalta, "duracion_promedio_EMPLEO"),
-        (df_promediobaja, "duracion_promedio_NO EMPLEO"),
         (df_totales, "T_total_EMPLEO"),
         (df_prov, "t_tot_prov_ppal"),
         (df_actecon, "t_tot_act_econ_ppal"),

@@ -26,6 +26,12 @@
   mismo (suma de todas las percepciones dinerarias de los datos fiscales, incluidas pensiones,
   prestaciones y rentas exentas); solo cambia el nombre. **Cualquier análisis que use el nombre
   antiguo hay que actualizarlo.**
+- **`num_bajas_anual_promedio` se calcula con bajas reales.** Antes contaba huecos entre
+  episodios sin tener en cuenta los solapes (pluriempleo), con lo que un 11 % de lo contado
+  no eran bajas y no se contaban las altas encadenadas al día siguiente. Ahora cuenta los
+  episodios de empleo con fecha de baja (los mismos que cuentan en `num_altas_anual_promedio`,
+  pero ya terminados), así que nunca hay más bajas que altas. **Los valores cambian**: la
+  media de bajas por persona pasa de 13,5 a 18,8.
 - **Ingresos por tipo de percepción** (nuevas columnas, en euros; suman exactamente
   `ingresos_bruto_total_2024`). Valen 0 si la persona tiene datos fiscales pero no cobra de ese
   tipo, y quedan vacías si no aparece en la tabla fiscal:
