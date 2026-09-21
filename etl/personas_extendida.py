@@ -123,7 +123,7 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
             -- esa es especificamente prestacion/subsidio de desempleo, 400 no encaja ahi.
             COALESCE("15 TRL" >= 700 AND "15 TRL" < 800, FALSE) OR COALESCE("15 TRL" = 400, FALSE) AS _no_empleo,
             CASE WHEN date_part('year', "07 FECHA_BAJA_REAL_AFIL") = 2099
-                 THEN TIMESTAMP '2025-06-01'
+                 THEN TIMESTAMP '__FECHA_CORTE__'
                  ELSE "07 FECHA_BAJA_REAL_AFIL"
             END AS "Baja_modificada",
             -- Empleo_publico (2026-09-08, decision explicita del usuario, confirmada por
@@ -149,7 +149,7 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
                  ELSE (date_diff('day', "06 FECHA_ALTA_REAL_AFIL", "Baja_modificada") + 1) * {US_POR_DIA}
             END AS "DURACION_DESEMPLEO"
         FROM _fase1_base
-    """)
+    """.replace("__FECHA_CORTE__", _FECHA_CORTE_ISO))
 
     # LEAD y ROW_NUMBER comparten la misma particion (por 01 IPF): DuckDB solo necesita agrupar
     # una vez por IPF y ordenar dentro de cada grupo pequenyo, no un sort global de 33M filas.
@@ -176,7 +176,7 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
             SELECT
                 * EXCLUDE (_trl700, _no_empleo, _dias_bruto, _rn_ultimo, "DURACION_NO_EMPLEO"),
                 CASE WHEN _rn_ultimo = 1
-                     THEN date_diff('day', "Baja_modificada", TIMESTAMP '2025-06-01') * {US_POR_DIA}
+                     THEN date_diff('day', "Baja_modificada", TIMESTAMP '{_FECHA_CORTE_ISO}') * {US_POR_DIA}
                      ELSE "DURACION_NO_EMPLEO"
                 END AS "DURACION_NO_EMPLEO"
             FROM _fase1_lead

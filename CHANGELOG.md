@@ -18,6 +18,10 @@
 - **`fecha_fallecimiento` deja de mostrarse en la aplicación.** Era un número `aaaamm` con el
   que no se podía filtrar con `>` o `<`. Sigue existiendo en el fichero Parquet, pero se usan
   `edad_fallecimiento` y `ha_fallecido` en su lugar.
+- **La fecha de corte de la muestra pasa del 1-6-2025 al 1-5-2025.** La última baja real de la
+  muestra es del 30-4-2025, así que se extrajo el 1-5. Cambian las columnas calculadas a esa fecha:
+  `edad_actual_fecha_corte` (un mes menos), `tiempo_total_desde_inicio_vl`,
+  `duracion_actual_sin_empleo` y los episodios de afiliación todavía abiertos.
 - **`Ingresos_bruto_anual_2024` pasa a llamarse `ingresos_bruto_total_2024`.** El valor es el
   mismo (suma de todas las percepciones dinerarias de los datos fiscales, incluidas pensiones,
   prestaciones y rentas exentas); solo cambia el nombre. **Cualquier análisis que use el nombre

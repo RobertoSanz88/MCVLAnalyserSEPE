@@ -90,7 +90,9 @@ def _pedir_carpeta_parquet() -> Path:
 # usuario: unificarlas en una sola, aqui, para que etl/ y app/ lean siempre
 # el mismo valor. Cambiar esto exige regenerar personas_extendida.parquet
 # (afecta a columnas ya calculadas por el ETL, no solo a la app).
-FECHA_CORTE = "2025-06-01"
+# 2026-09-21 (decision explicita del usuario): 2025-06-01 -> 2025-05-01. La ultima
+# baja real de la muestra es del 30-04-2025, luego se extrajo el 1-05.
+FECHA_CORTE = "2025-05-01"
 
 PUERTO_POR_DEFECTO = 8000
 
