@@ -517,11 +517,14 @@ def extraer_grupo_b(con, parquet_folder):
         WITH filtrado AS (
             SELECT "01 IPF" AS ipf, "03 GRU_COTIZACION" AS val, "07 FECHA_BAJA_REAL_AFIL" AS fecha_baja,
                    "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta, "08 CAUSA_BAJA_AFIL" AS causa_baja,
-                   ({tipo_ult_cubeta_sql}) AS tipo_contr_cubeta, "12 CNAE2009_CC" AS cnae
+                   ({tipo_ult_cubeta_sql}) AS tipo_contr_cubeta, "12 CNAE2009_CC" AS cnae,
+                   "15 TRL" AS trl
             FROM read_parquet('{afiliacion}') WHERE "07 FECHA_BAJA_REAL_AFIL" IS NOT NULL
         ), ranked AS (
             SELECT ipf, val, causa_baja, tipo_contr_cubeta, cnae,
-                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY fecha_baja DESC, fecha_alta DESC) AS rn
+                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY fecha_baja DESC, fecha_alta DESC,
+                                    {_orden_desempate_ultimo_episodio("trl", "causa_baja")},
+                                    val ASC, tipo_contr_cubeta ASC, cnae ASC) AS rn
             FROM filtrado
         )
         SELECT ipf AS "01 IPF", val AS "Grupo_Ultimo_Empleo",
@@ -726,6 +729,17 @@ def extraer_grupo_c(con, parquet_folder):
 TRL_COBRO_SEPE = (751, 752, 753, 754, 755, 756)
 
 
+def _orden_desempate_ultimo_episodio(trl='"15 TRL"', causa='"08 CAUSA_BAJA_AFIL"'):
+    """Desempate (2026-09-21, decision explicita del usuario) cuando dos episodios de una persona
+    empatan en fecha de baja Y de alta al elegir "el ultimo episodio": gana el de prestacion o
+    subsidio (TRL 751-756), y despues TRL ASC y causa de baja ASC para que el resultado no dependa
+    del orden fisico del fichero. Sin esto (solo baja DESC, alta DESC) ganaba una fila arbitraria
+    en ~9.900 personas: situacion, racha sin empleo y causa/contrato/actividad del ultimo episodio
+    dependian de como saliera ordenado el Parquet de Afiliacion. Se anyade tras "alta DESC"."""
+    cobro = ", ".join(str(t) for t in TRL_COBRO_SEPE)
+    return f"({trl} IN ({cobro})) DESC, {trl} ASC, {causa} ASC"
+
+
 def extraer_grupo_d(con, parquet_folder):
     afiliacion = _ruta(parquet_folder, "tabla_afiliacion_extendida.parquet")
 
@@ -757,7 +771,8 @@ def extraer_grupo_d(con, parquet_folder):
                    "08 CAUSA_BAJA_AFIL" AS causa, "15 TRL" AS trl,
                    ROW_NUMBER() OVER (
                        PARTITION BY "01 IPF"
-                       ORDER BY "07 FECHA_BAJA_REAL_AFIL" DESC, "06 FECHA_ALTA_REAL_AFIL" DESC
+                       ORDER BY "07 FECHA_BAJA_REAL_AFIL" DESC, "06 FECHA_ALTA_REAL_AFIL" DESC,
+                                {_orden_desempate_ultimo_episodio()}
                    ) AS rn
             FROM read_parquet('{afiliacion}')
         )
@@ -826,7 +841,8 @@ def extraer_grupo_d(con, parquet_folder):
                    "15 TRL" IN ({trl_sql}) AS coincide,
                    ROW_NUMBER() OVER (
                        PARTITION BY "01 IPF"
-                       ORDER BY "07 FECHA_BAJA_REAL_AFIL" DESC, "06 FECHA_ALTA_REAL_AFIL" DESC
+                       ORDER BY "07 FECHA_BAJA_REAL_AFIL" DESC, "06 FECHA_ALTA_REAL_AFIL" DESC,
+                                {_orden_desempate_ultimo_episodio()}
                    ) AS rn
             FROM read_parquet('{afiliacion}')
         ), top5 AS (

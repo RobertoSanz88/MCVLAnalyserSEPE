@@ -32,6 +32,12 @@
   episodios de empleo con fecha de baja (los mismos que cuentan en `num_altas_anual_promedio`,
   pero ya terminados), así que nunca hay más bajas que altas. **Los valores cambian**: la
   media de bajas por persona pasa de 13,5 a 18,8.
+- **El último episodio de afiliación ya no depende del orden del fichero.** Cuando una persona
+  tiene dos episodios con las mismas fechas de alta y baja al final de su vida laboral (unas
+  9.900 personas), la situación de afiliación, la racha sin empleo y la causa, el grupo, el
+  contrato y la actividad del último episodio salían de una fila elegida al azar. Ahora gana el
+  episodio de prestación o subsidio (TRL 751-756) y, después, un criterio fijo, así que el
+  resultado es siempre el mismo. Cambian algunos valores de esas columnas en esas personas.
 - **Ingresos por tipo de percepción** (nuevas columnas, en euros; suman exactamente
   `ingresos_bruto_total_2024`). Valen 0 si la persona tiene datos fiscales pero no cobra de ese
   tipo, y quedan vacías si no aparece en la tabla fiscal:
