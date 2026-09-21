@@ -1183,7 +1183,8 @@ GRUPOS_COTIZ_DICT = {
 # Columnas finales de tabla_personas_extendida, mismo orden que el cuaderno (nuevo_orden)
 NUEVO_ORDEN = [
     "01 IPF", "02 FECHA_NACIMIENTO", "03 SEXO", "04 NACIONALIDAD", "05 PROV_NACIMIENTO",
-    "06 PROV_1a_AFILIACION", "07 DOMIC_RESID_HABITUAL", "08 FECHA_FALLECIMIENTO", "09 PAIS_NACIMIENTO",
+    "06 PROV_1a_AFILIACION", "07 DOMIC_RESID_HABITUAL", "prov_resid_habitual",
+    "08 FECHA_FALLECIMIENTO", "edad_fallecimiento", "ha_fallecido", "09 PAIS_NACIMIENTO",
     "Nacionalidad_agrupado", "Pais_nacim_agrupado",
     "Edad_Actual_Fecha_Corte",
     "Edad_Primer_Empleo_Signif", "Duracion_1er_Empleo_Signif", "Grupo_cotiz_1er_Empleo_Signif",
@@ -1207,6 +1208,39 @@ NUEVO_ORDEN = [
     "Fecha_inicio_ultima_racha_sin_empleo", "duracion_actual_sin_empleo",
     "causa_baja_mas_comun", "causas_baja_distintas",
 ]
+
+
+def _codificar_domicilio(codigo, provincias_dict):
+    """07 DOMIC_RESID_HABITUAL (v2.2, decision explicita del usuario): pasa de numerica a
+    categorica y se deriva la provincia. Segun la guia MCVL (1.007) el codigo es el del INE,
+    5 digitos = 2 de provincia + 3 de municipio; solo los municipios de mas de 40.000
+    habitantes llevan su codigo, el resto de cada provincia se agrupa como 'PP000'; '00000' =
+    sin dato (no residente en Espanya) y una provincia superior a 52 es un dato erroneo. Aqui
+    ambos casos ('00000' y provincia fuera de 1-52) quedan como 'NO CONSTA', igual que el
+    resto de categoricas del fichero. Devuelve (domicilio, provincia): el domicilio como
+    texto de 5 digitos ('28079') y la provincia con la misma etiqueta que Prov_trabajo_ppal
+    ('28 MADRID')."""
+    codigo = codigo.astype("Int64")
+    provincia = codigo // 1000
+    valido = provincia.between(1, 52).fillna(False).astype(bool)
+    domicilio = codigo.astype(str).str.zfill(5).where(valido, "NO CONSTA")
+    nombre_provincia = provincia.map(provincias_dict).where(valido).fillna("NO CONSTA")
+    return domicilio.astype("category"), nombre_provincia.astype("category")
+
+
+def _columnas_fallecimiento(codigo, nacimiento):
+    """edad_fallecimiento / ha_fallecido (v2.2, decision explicita del usuario): 08
+    FECHA_FALLECIMIENTO es un entero aaaamm (0 = no ha fallecido, guia 1.008) que no sirve para
+    filtrar con > o < en la interfaz. edad_fallecimiento = edad en anyos al fallecer, con
+    precision de mes (tanto el fallecimiento como 02 FECHA_NACIMIENTO solo traen anyo y mes),
+    NULL si no ha fallecido; ha_fallecido = 'SI'/'NO' (mismo formato que Cobra_pension_*).
+    No se corrige un fallecimiento anterior al nacimiento (dato erroneo de origen): sale una
+    edad negativa, para que se pueda detectar."""
+    codigo = codigo.fillna(0).astype("int64")
+    ha_fallecido = codigo != 0
+    meses = (codigo // 100 - nacimiento.dt.year) * 12 + (codigo % 100 - nacimiento.dt.month)
+    edad = (meses / 12).where(ha_fallecido)
+    return edad, ha_fallecido.map({True: "SI", False: "NO"}).astype("category")
 
 
 def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_dict_path, causa_baja_dict_path):
@@ -1518,6 +1552,16 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
         df["06 PROV_1a_AFILIACION"].map(provincias_dict).fillna("NO CONSTA").astype("category")
     )
     df["Prov_fiscal_actual"] = df["Prov_fiscal_actual"].map(provincias_dict).fillna("NO CONSTA").astype("category")
+
+    # v2.2: 07 DOMIC_RESID_HABITUAL pasa a categorica (codigo INE de municipio) y se anyade
+    # prov_resid_habitual; edad_fallecimiento y ha_fallecido derivan de 08 FECHA_FALLECIMIENTO,
+    # que se conserva tal cual (ver _codificar_domicilio y _columnas_fallecimiento).
+    df["07 DOMIC_RESID_HABITUAL"], df["prov_resid_habitual"] = _codificar_domicilio(
+        df["07 DOMIC_RESID_HABITUAL"], provincias_dict
+    )
+    df["edad_fallecimiento"], df["ha_fallecido"] = _columnas_fallecimiento(
+        df["08 FECHA_FALLECIMIENTO"], df["02 FECHA_NACIMIENTO"]
+    )
 
     # A diferencia de provincias_dict.csv (el nombre YA lleva el codigo, "01 ÁLAVA"),
     # cnae_3d_dict.csv trae codigo y descripcion en columnas separadas: hay que concatenarlos a

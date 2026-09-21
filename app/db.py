@@ -24,7 +24,10 @@ TABLES = {
             "05 PROV_NACIMIENTO": "prov_nacimiento",
             "06 PROV_1a_AFILIACION": "prov_1a_afiliacion",
             "07 DOMIC_RESID_HABITUAL": "domic_resid_habitual",
+            "prov_resid_habitual": "prov_resid_habitual",
             "08 FECHA_FALLECIMIENTO": "fecha_fallecimiento",
+            "edad_fallecimiento": "edad_fallecimiento",
+            "ha_fallecido": "ha_fallecido",
             "09 PAIS_NACIMIENTO": "pais_nacimiento",
             "Reg_cotiz_ppal_Agrupado": "reg_cotiz_ppal_agrupado",
             "T_tot_reg_ppal": "t_tot_reg_ppal",
@@ -174,6 +177,13 @@ def _quote(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+# Columnas anyadidas en la v2.2 (ver CHANGELOG.md): un Parquet generado con el ETL anterior no
+# las trae. Si faltan se omiten de la vista en vez de impedir que la app arranque (las
+# consultas que las usen solo fallaran si alguien las selecciona). El resto de columnas siguen
+# siendo obligatorias: si faltan, el error debe verse.
+COLUMNAS_OPCIONALES = {"prov_resid_habitual", "edad_fallecimiento", "ha_fallecido"}
+
+
 def get_connection() -> duckdb.DuckDBPyConnection:
     """Abre una conexion DuckDB en memoria y registra una vista por tabla MCVL,
     con columnas ya renombradas a snake_case."""
@@ -190,6 +200,14 @@ def get_connection() -> duckdb.DuckDBPyConnection:
         # 1.5.5 de este entorno de desarrollo (que no lo reproduce). Requiere
         # duckdb>=1.5.5 (ver requirements.txt) para evitarlo aunque alguien
         # quite esta cualificacion sin darse cuenta.
+        if COLUMNAS_OPCIONALES & columns.keys():
+            existentes = {
+                fila[0] for fila in con.execute(
+                    f"DESCRIBE SELECT * FROM read_parquet('{parquet_path.as_posix()}')"
+                ).fetchall()
+            }
+            columns = {raw: clean for raw, clean in columns.items()
+                       if raw in existentes or raw not in COLUMNAS_OPCIONALES}
         select_list = ", ".join(
             f"src.{_quote(raw)} AS {clean}" for raw, clean in columns.items()
         )

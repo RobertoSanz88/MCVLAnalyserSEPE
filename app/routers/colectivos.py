@@ -70,10 +70,14 @@ ORDEN_SUBGRUPOS = [
 ]
 
 # Columnas numericas (por tipo DuckDB) que se excluyen de "Estadisticas
-# numericas": no son caracteristicas calculadas, sino el identificador o
-# columnas originales de Personas (anteriores a las fases 1-3 del ETL) que
-# resultan ser numericas por tipo pero no tienen sentido como media (un
-# codigo de provincia o una fecha guardada como entero).
+# numericas" Y de los selectores de columna numerica (filtros y Cruce): no son
+# caracteristicas calculadas, sino el identificador o columnas originales de
+# Personas (anteriores a las fases 1-3 del ETL) que resultan ser numericas por
+# tipo pero no tienen sentido como numero (un codigo de municipio o una fecha
+# guardada como entero aaaamm: no se puede filtrar con > o <). Desde la v2.2
+# (ver CHANGELOG.md) fecha_fallecimiento se sustituye en la interfaz por
+# edad_fallecimiento y ha_fallecido, y domic_resid_habitual pasa a categorica
+# en el ETL; con un Parquet antiguo (todavia numerica) sigue oculta aqui.
 COLUMNAS_NUMERICAS_EXCLUIDAS = {"ipf", "domic_resid_habitual", "fecha_fallecimiento"}
 
 # Clasificacion de columnas de personas para las estadisticas por subgrupo.
@@ -214,11 +218,13 @@ def columnas(request: Request):
     """Columnas disponibles para usar como filtro, separadas por tipo (para el
     selector de atributos del panel izquierdo). "ipf" es el identificador de
     persona (clave de union entre tablas), no un atributo por el que tenga
-    sentido filtrar o construir un colectivo."""
+    sentido filtrar o construir un colectivo; el resto de
+    COLUMNAS_NUMERICAS_EXCLUIDAS tampoco (codigos/fechas guardados como
+    entero)."""
     con = request.app.state.con.cursor()
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
-    numericas = [c for c in numericas if c != "ipf"]
+    numericas = [c for c in numericas if c not in COLUMNAS_NUMERICAS_EXCLUIDAS]
     return {"numericas": sorted(numericas), "categoricas": sorted(categoricas)}
 
 
@@ -814,7 +820,7 @@ def cruce(request: Request, body: CruceRequest):
     con = request.app.state.con.cursor()
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
-    numericas_validas = set(numericas) - {"ipf"}
+    numericas_validas = set(numericas) - COLUMNAS_NUMERICAS_EXCLUIDAS
     categoricas_validas = set(categoricas)
 
     v1, v2 = body.variable1, body.variable2
@@ -951,7 +957,7 @@ def cruce_central(request: Request, body: CruceCentralRequest):
     con = request.app.state.con.cursor()
     columnas_validas = _columnas_personas(con)
     numericas, categoricas = _clasificar_columnas(columnas_validas)
-    numericas_validas = set(numericas) - {"ipf"}
+    numericas_validas = set(numericas) - COLUMNAS_NUMERICAS_EXCLUIDAS
     categoricas_validas = set(categoricas)
 
     v1, v2, v_central = body.variable1, body.variable2, body.variable_central
@@ -993,7 +999,7 @@ def cruce_puntos(request: Request, body: PuntosRequest):
     con = request.app.state.con.cursor()
     columnas_validas = _columnas_personas(con)
     numericas, _ = _clasificar_columnas(columnas_validas)
-    numericas_validas = set(numericas) - {"ipf"}
+    numericas_validas = set(numericas) - COLUMNAS_NUMERICAS_EXCLUIDAS
     if body.variable1 not in numericas_validas or body.variable2 not in numericas_validas:
         raise HTTPException(400, "Las 2 variables deben ser numericas")
     if body.subgrupo not in ORDEN_SUBGRUPOS:
@@ -1187,7 +1193,7 @@ def _construir_excel_cruce(payload: CruceExportRequest, con) -> bytes:
         else:
             columnas_validas = _columnas_personas(con)
             numericas, _ = _clasificar_columnas(columnas_validas)
-            numericas_validas = set(numericas) - {"ipf"}
+            numericas_validas = set(numericas) - COLUMNAS_NUMERICAS_EXCLUIDAS
             v_num, v_cat = (
                 (payload.variable1, payload.variable2)
                 if payload.variable1 in numericas_validas
