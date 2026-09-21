@@ -200,6 +200,7 @@ CATEGORICAS_COLECTIVOS = [
     {"columna": "grupo_cotiz_ppal", "limite": None},
     {"columna": "tipo_contr_ppal_agrupado", "limite": None},
     {"columna": "prov_trabajo_ppal", "limite": 15},
+    {"columna": "prov_fiscal_actual", "limite": 15},
     {"columna": "act_econ_ppal", "limite": 15},
     {"columna": "cobra_pension_*", "limite": None},
     {"columna": "discap_fiscal", "limite": None},
