@@ -870,10 +870,16 @@ def _persona_resumen(con, ipf: int) -> dict:
     """Sexo/edad/nacionalidad de la cabecera de "Trayectorias individuales" -
     a diferencia de los episodios, son datos de la PERSONA (constantes, no
     cambian entre episodios), asi que se muestran una sola vez."""
-    sexo, edad, nacionalidad = con.execute(
+    fila = con.execute(
         "SELECT sexo, edad_actual_fecha_corte, nacionalidad FROM personas WHERE ipf = ?",
         [ipf],
     ).fetchone()
+    if fila is None:
+        # IPF inexistente (p.ej. /trayectorias/999999999 escrito a mano): antes
+        # esto desempaquetaba None y daba un 500 (encontrado en la prueba de
+        # humo del 2026-09-21).
+        raise HTTPException(404, f"No existe el IPF {ipf}")
+    sexo, edad, nacionalidad = fila
     return {"sexo": sexo, "edad": edad, "nacionalidad": nacionalidad}
 
 
