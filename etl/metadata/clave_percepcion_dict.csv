@@ -1,0 +1,21 @@
+codigo;descripcion
+A00;Sueldo
+B01;Pensión SS / Clases Pasivas
+B03;Mutualidad de funcionarios
+C00;Prestación o subsidio de desempleo
+F01;Premio literario/artístico
+F02;Cursos y conferencias
+FXX;Obras y propiedad intelectual
+G01;Actividad profesional (general)
+G03;Actividad profesional (inicio)
+GXX;Actividad profesional (otras)
+H01;Actividad agraria/forestal
+H02;Ganadería de engorde y avicultura
+H04;Estimación objetiva
+L01;Dietas
+L05;Indemnización por despido
+L06;IPA / gran invalidez exentas
+L07;Incapacidad Clases Pasivas
+L08;Orfandad y prest. familiares exentas
+L16;Sepelio
+L27;Maternidad/paternidad exentas

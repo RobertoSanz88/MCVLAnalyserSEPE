@@ -60,7 +60,19 @@ TABLES = {
             "Cobra_pension_2024/5": "cobra_pension_2024_5",
             "Pension_todas_cobradas": "pension_todas_cobradas",
             "Discap_pension": "discap_pension",
-            "Ingresos_bruto_anual_2024": "ingresos_bruto_anual_2024",
+            # v2.2: Ingresos_bruto_anual_2024 pasa a llamarse ingresos_bruto_total_2024 (mismo
+            # valor). Se mapean los dos nombres crudos al mismo nombre limpio: cada Parquet trae
+            # solo uno de los dos, asi que la app funciona con el ETL nuevo y con el anterior.
+            "Ingresos_bruto_anual_2024": "ingresos_bruto_total_2024",
+            "ingresos_bruto_total_2024": "ingresos_bruto_total_2024",
+            "ingresos_sueldo_2024": "ingresos_sueldo_2024",
+            "ingresos_pension_2024": "ingresos_pension_2024",
+            "ingresos_prestacion_2024": "ingresos_prestacion_2024",
+            "ingresos_actividad_2024": "ingresos_actividad_2024",
+            "ingresos_otras_exentas_2024": "ingresos_otras_exentas_2024",
+            "retenciones_irpf_2024": "retenciones_irpf_2024",
+            "clave_subclave_ppal": "clave_subclave_ppal",
+            "clave_subclave_todas_cobradas": "clave_subclave_todas_cobradas",
             "Prov_fiscal_actual": "prov_fiscal_actual",
             "Discap_fiscal": "discap_fiscal",
             "Fecha_ini_Primer_Empleo": "fecha_ini_primer_empleo",
@@ -181,7 +193,12 @@ def _quote(identifier: str) -> str:
 # las trae. Si faltan se omiten de la vista en vez de impedir que la app arranque (las
 # consultas que las usen solo fallaran si alguien las selecciona). El resto de columnas siguen
 # siendo obligatorias: si faltan, el error debe verse.
-COLUMNAS_OPCIONALES = {"prov_resid_habitual", "edad_fallecimiento", "ha_fallecido"}
+COLUMNAS_OPCIONALES = {
+    "prov_resid_habitual", "edad_fallecimiento", "ha_fallecido",
+    "Ingresos_bruto_anual_2024", "ingresos_bruto_total_2024", "ingresos_sueldo_2024", "ingresos_pension_2024",
+    "ingresos_prestacion_2024", "ingresos_actividad_2024", "ingresos_otras_exentas_2024",
+    "retenciones_irpf_2024", "clave_subclave_ppal", "clave_subclave_todas_cobradas",
+}
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:

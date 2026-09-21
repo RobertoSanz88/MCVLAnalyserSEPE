@@ -209,7 +209,7 @@ def b_cruce_extra():
     call("cruce var inyeccion", "POST", "/colectivos/cruce", expect=400, json={**F0, "variable1": "sexo", "variable2": "sexo;DROP"})
     call("cruce ipf", "POST", "/colectivos/cruce", expect=400, json={**F0, "variable1": "ipf", "variable2": EDAD})
     for a, b in [("prov_trabajo_ppal", "act_econ_ppal"), ("sexo", "grupo_cotiz_ppal"), ("act_econ_ppal", "prov_fiscal_actual")]:
-        for v in ["ingresos_bruto_anual_2024", EDAD, "duracion_promedio_empleo"]:
+        for v in ["ingresos_bruto_total_2024", EDAD, "duracion_promedio_empleo"]:
             name = f"central {a} x {b} -> {v}"
             rr = call(name, "POST", "/colectivos/cruce-central", json=dict(variable1=a, variable2=b, variable_central=v))
             if rr:
@@ -226,7 +226,7 @@ def b_cruce_extra():
                                 bad(name, f"celda ({i},{j}) n={d['n'][i][j]} media={d['z_media'][i][j]}")
                                 break
     call("central var no numerica", "POST", "/colectivos/cruce-central", expect=400, json=dict(variable1="sexo", variable2="act_econ_ppal", variable_central="sexo"))
-    call("central var1 numerica", "POST", "/colectivos/cruce-central", expect=400, json=dict(variable1=EDAD, variable2="act_econ_ppal", variable_central="ingresos_bruto_anual_2024"))
+    call("central var1 numerica", "POST", "/colectivos/cruce-central", expect=400, json=dict(variable1=EDAD, variable2="act_econ_ppal", variable_central="ingresos_bruto_total_2024"))
     call("central repetidas", "POST", "/colectivos/cruce-central", expect=400, json=dict(variable1="sexo", variable2="sexo", variable_central=EDAD))
     call("puntos", "POST", "/colectivos/cruce/puntos", json={**F0, "variable1": EDAD, "variable2": "duracion_promedio_empleo", "subgrupo": "filtro1_si__filtro2_no"})
     call("puntos subgrupo malo", "POST", "/colectivos/cruce/puntos", expect=400, json={**F0, "variable1": EDAD, "variable2": "duracion_promedio_empleo", "subgrupo": "xx"})
@@ -240,8 +240,8 @@ def b_cruce_extra():
     for tg in ["contingencia", "apiladas", "apiladas100", "burbujas"]:
         exp(f"exp catcat {tg}", {"tipo": "categorica_categorica", "variable1": "grupo_cotiz_ppal", "variable2": "act_econ_ppal", "tipo_grafico": tg, **F0})
     for tg in ["boxplot", "histograma"]:
-        exp(f"exp numcat {tg}", {"tipo": "numerica_categorica", "variable1": "ingresos_bruto_anual_2024", "variable2": "grupo_cotiz_ppal", "tipo_grafico": tg, **F0})
-        exp(f"exp catnum {tg}", {"tipo": "numerica_categorica", "variable1": "grupo_cotiz_ppal", "variable2": "ingresos_bruto_anual_2024", "tipo_grafico": tg, **F0})
+        exp(f"exp numcat {tg}", {"tipo": "numerica_categorica", "variable1": "ingresos_bruto_total_2024", "variable2": "grupo_cotiz_ppal", "tipo_grafico": tg, **F0})
+        exp(f"exp catnum {tg}", {"tipo": "numerica_categorica", "variable1": "grupo_cotiz_ppal", "variable2": "ingresos_bruto_total_2024", "tipo_grafico": tg, **F0})
     d = cruce("cruce para exportar numnum", F0, EDAD, "duracion_promedio_empleo")
     if d:
         exp("exp numnum", {"tipo": "numerica_numerica", "variable1": EDAD, "variable2": "duracion_promedio_empleo", "tipo_grafico": "densidad", "datos": d["subgrupos"]})

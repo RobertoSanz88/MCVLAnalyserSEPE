@@ -1037,8 +1037,24 @@ def fusionar_grupo_e(parquet_folder, df_pensiones, anio_datos):
 # GRUPO F - Extracciones desde Datos fiscales
 # ---------------------------------------------------------------------------
 
+# Tipos de percepcion del modelo 190 (v2.2, decision explicita del usuario). "05 CLAVE_PERCEPCION" es
+# una letra que identifica el tipo de ingreso y "06 SUBCLAVE_PERCEPCION" un codigo de 2 digitos que
+# lo detalla (la subclave sola no significa nada: 01 es una pension en la clave B, una actividad
+# profesional en la G y unas dietas en la L). Claves que llegan a la MCVL: A trabajo por cuenta
+# ajena, B pensiones, C prestaciones/subsidios de desempleo, F cursos y obras, G actividades
+# profesionales, H actividades agrarias y de estimacion objetiva, L rentas exentas. El resto (E
+# consejeros, I, J, K premios, pagos unicos de desempleo...) la MCVL las excluye (guia, Tabla 6).
+CLAVES_PERCEPCION_PREVISTAS = ["A", "B", "C", "F", "G", "H", "L"]
+# Pensiones exentas de IRPF que van en clave L pero son pensiones: L06 incapacidad permanente
+# absoluta y gran invalidez, L07 incapacidad de Clases Pasivas, L08 pensiones de orfandad y
+# prestaciones familiares exentas (art. 7.h de la Ley del IRPF).
+TIPOS_PENSION_EXENTA = ["L06", "L07", "L08"]
+_CLAVE_PERCEPCION_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "metadata", "clave_percepcion_dict.csv")
+
+
 def extraer_grupo_f(parquet_folder, anio_datos):
-    """Lee tabla_datos_fiscales_optimizada.parquet y calcula las 2 extracciones del Grupo F.
+    """Lee tabla_datos_fiscales_optimizada.parquet y calcula las extracciones del Grupo F
+    (ingresos por tipo, retenciones, discapacidad, provincia y tipo de percepcion principal).
     Devuelve (lista_de_extracciones, nombre_columna_ingresos_brutos)."""
     df = pd.read_parquet(_ruta(parquet_folder, "tabla_datos_fiscales_optimizada.parquet"))
 
@@ -1060,9 +1076,59 @@ def extraer_grupo_f(parquet_folder, anio_datos):
     df["_ingreso_bruto_total"] = (
         df["07 PERC_INTEGRA_DIN_NO_DERIVADA_IL"].fillna(0) + df["08 PERC_INTEGRA_DIN_DERIVADA_IL"].fillna(0)
     )
-    df_sumado = (df.groupby("01 IPF")["_ingreso_bruto_total"].sum() / 100).reset_index()
-    nombre_col_ingresos_brutos = f"Ingresos_bruto_anual_{anio_datos}"
-    df_estudio_ingresosbrutos = df_sumado.rename(columns={"_ingreso_bruto_total": nombre_col_ingresos_brutos})
+    # v2.2 (decision explicita del usuario): ingresos_bruto_total_{anio} es el antiguo
+    # Ingresos_bruto_anual_{anio} (mismo valor, solo cambia el nombre, incluye TODAS las claves)
+    # y se reparte ademas en 5 columnas por tipo de percepcion que suman exactamente el total:
+    # sueldo (clave A), pension (clave B + pensiones exentas L06/L07/L08), prestacion por
+    # desempleo (C), actividad economica y profesional (F+G+H) y otras rentas exentas (resto de
+    # L: dietas, indemnizaciones por despido, maternidad/paternidad, sepelio...). Cada tipo vale 0
+    # para quien tiene datos fiscales pero no cobra de ese tipo; quien no aparece en la tabla
+    # fiscal queda vacio (NULL) al fusionar, como ya pasaba con el total.
+    # retenciones_irpf_{anio}: 09 + 10 (retencion sobre la percepcion dineraria no derivada y
+    # derivada de IL), tambien en centimos.
+    df["_retenciones"] = (
+        df["09 RETENC_SOBRE_P_DINER_NO_DERIV_IL"].fillna(0) + df["10 RETENC_SOBRE_P_DINER_DERIV_IL"].fillna(0)
+    )
+    clave = df["05 CLAVE_PERCEPCION"].fillna("").astype(str).str.strip()
+    tipo = clave + df["06 SUBCLAVE_PERCEPCION"].fillna("").astype(str).str.strip()
+    grupos = {
+        f"ingresos_sueldo_{anio_datos}": clave == "A",
+        f"ingresos_pension_{anio_datos}": (clave == "B") | tipo.isin(TIPOS_PENSION_EXENTA),
+        f"ingresos_prestacion_{anio_datos}": clave == "C",
+        f"ingresos_actividad_{anio_datos}": clave.isin(["F", "G", "H"]),
+        f"ingresos_otras_exentas_{anio_datos}": (clave == "L") & ~tipo.isin(TIPOS_PENSION_EXENTA),
+    }
+    fuera = ~clave.isin(CLAVES_PERCEPCION_PREVISTAS)
+    if fuera.any():
+        print(f"AVISO Grupo F: {int(fuera.sum())} filas fiscales con una clave de percepcion no prevista "
+              f"({sorted(clave[fuera].unique())}): entran en el total pero en ninguna de las 5 columnas por tipo")
+    for nombre, mascara in grupos.items():
+        df["_" + nombre] = df["_ingreso_bruto_total"].where(mascara, 0)
+    nombre_col_ingresos_brutos = f"ingresos_bruto_total_{anio_datos}"
+    renombrar = {"_ingreso_bruto_total": nombre_col_ingresos_brutos, "_retenciones": f"retenciones_irpf_{anio_datos}"}
+    renombrar.update({"_" + n: n for n in grupos})
+    df_estudio_ingresosbrutos = (df.groupby("01 IPF")[list(renombrar)].sum() / 100).reset_index().rename(columns=renombrar)
+
+    # clave_subclave_ppal / clave_subclave_todas_cobradas (v2.2, decision explicita del usuario):
+    # tipo de percepcion (clave + subclave, p.ej. "B01") con MAYOR importe total sumado de la
+    # persona - no la fila individual mas grande: quien cobra 3 sueldos de 6.000 EUR y una pension
+    # de 10.000 EUR es principalmente "sueldo" (18.000). Desempate por codigo. La principal sale
+    # con etiqueta ("B01 Pension SS / Clases Pasivas", etl/metadata/clave_percepcion_dict.csv; un
+    # codigo sin etiqueta sale con el codigo solo) y "todas cobradas" es la lista de codigos
+    # distintos con importe > 0, de mayor a menor importe (el primero coincide con la principal).
+    por_tipo = df.assign(_tipo=tipo).loc[tipo != ""].groupby(["01 IPF", "_tipo"], as_index=False)["_ingreso_bruto_total"].sum()
+    por_tipo = por_tipo.sort_values(["01 IPF", "_ingreso_bruto_total", "_tipo"], ascending=[True, False, True])
+    etiquetas_df = pd.read_csv(_CLAVE_PERCEPCION_CSV, sep=";", encoding="utf-8", dtype=str)
+    etiquetas = dict(zip(etiquetas_df["codigo"], etiquetas_df["descripcion"]))
+    df_estudio_tipo_ppal = por_tipo.drop_duplicates(subset="01 IPF", keep="first")[["01 IPF", "_tipo"]].copy()
+    df_estudio_tipo_ppal["clave_subclave_ppal"] = df_estudio_tipo_ppal["_tipo"].map(
+        lambda t: f"{t} {etiquetas[t]}" if t in etiquetas else t
+    )
+    df_estudio_tipo_ppal = df_estudio_tipo_ppal[["01 IPF", "clave_subclave_ppal"]]
+    df_estudio_tipo_todas = (
+        por_tipo[por_tipo["_ingreso_bruto_total"] > 0].groupby("01 IPF")["_tipo"].apply(list).reset_index()
+        .rename(columns={"_tipo": "clave_subclave_todas_cobradas"})
+    )
 
     cond = df["20 DISCAPACIDAD"] > 0
     df_estudio_discap_fiscal = df.loc[cond, ["01 IPF"]].drop_duplicates().copy()
@@ -1076,7 +1142,7 @@ def extraer_grupo_f(parquet_folder, anio_datos):
     # ver conteo de filas vs personas de esta sesion): 51.014 personas (4,2%) tienen mas de un
     # valor distinto de 04 PROVINCIA.
     # Desempate confirmado por el usuario via AskUserQuestion: provincia del pagador con MAYOR
-    # ingreso bruto (mismo _ingreso_bruto_total ya calculado arriba para Ingresos_bruto_anual),
+    # ingreso bruto (mismo _ingreso_bruto_total ya calculado arriba para ingresos_bruto_total),
     # con la propia provincia como desempate final para determinismo en empates exactos de
     # ingreso (mismo patron "total DESC, val ASC" ya usado en el resto del fichero).
     df_ordenado = df.sort_values(
@@ -1086,10 +1152,13 @@ def extraer_grupo_f(parquet_folder, anio_datos):
         ["01 IPF", "04 PROVINCIA"]
     ].rename(columns={"04 PROVINCIA": "Prov_fiscal_actual"})
 
-    del df, df_sumado, df_ordenado
+    del df, df_ordenado, por_tipo
     gc.collect()
 
-    extracciones = [df_estudio_ingresosbrutos, df_estudio_discap_fiscal, df_estudio_provincia_actual]
+    extracciones = [
+        df_estudio_ingresosbrutos, df_estudio_discap_fiscal, df_estudio_provincia_actual,
+        df_estudio_tipo_ppal, df_estudio_tipo_todas,
+    ]
     return extracciones, nombre_col_ingresos_brutos
 
 
@@ -1098,6 +1167,7 @@ def fusionar_grupo_f(parquet_folder, anio_datos):
 
     def post_fillna(df):
         df["Discap_fiscal"] = df["Discap_fiscal"].fillna(False).astype(bool)
+        df["clave_subclave_ppal"] = df["clave_subclave_ppal"].fillna("NO CONSTA").astype("category")
 
     return fusionar_grupo(parquet_folder, extracciones, post_fillna), nombre_col_ingresos_brutos
 
@@ -1200,7 +1270,9 @@ NUEVO_ORDEN = [
     "Tipo_Contr_ppal_Agrupado", "T_tot_tipo_contrato_ppal",
     "Prov_trabajo_ppal", "t_tot_prov_ppal",
     "Act_econ_ppal", "t_tot_act_econ_ppal",
-    "Ingresos_bruto_anual_2024", "Prov_fiscal_actual",
+    "ingresos_bruto_total_2024", "ingresos_sueldo_2024", "ingresos_pension_2024", "ingresos_prestacion_2024",
+    "ingresos_actividad_2024", "ingresos_otras_exentas_2024", "retenciones_irpf_2024",
+    "clave_subclave_ppal", "clave_subclave_todas_cobradas", "Prov_fiscal_actual",
     "Discap_fiscal", "Discap_afiliacion", "Discap_pension",
     "Pension_todas_cobradas",
     "Pension_actual", "Cobra_pension_2024/5",
