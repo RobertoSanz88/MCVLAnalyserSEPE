@@ -2,6 +2,21 @@
 
 ## Sin versión todavía (correcciones de las reglas de consistencia, 2026-09-22)
 
+- **`cotizado_anual_promedio` ahora incluye las bases de cotización de cuenta propia (autónomos,
+  agrario cuenta propia...), no solo las de cuenta ajena.** Antes solo se leía la tabla de cuenta
+  ajena; quien cotizó alguna vez como autónomo se veía afectado de dos formas: si toda su carrera
+  fue por cuenta propia, `cotizado_anual_promedio` salía vacío (79.383 personas con historia
+  laboral sin este dato, la mayoría exactamente por esto); si tuvo una carrera mixta (cuenta
+  ajena y propia en distintos años, 485.783 personas), el valor salía con un número, pero
+  **infravalorado**: mediana +33% al corregirlo, y en el 43% de esas personas sube más de un 50%.
+- **`cotizado_anual_promedio` divide entre tiempo de empleo + desempleo + mixto, no entre todo el
+  tiempo desde el inicio de la vida laboral.** Antes se diluía con los huecos sin ningún episodio
+  registrado, donde por definición no puede haber cotización. El desempleo sí se mantiene en el
+  denominador (decisión explícita del usuario, verificada con datos reales): la prestación
+  contributiva y el subsidio para mayores de 52/55 años cotizan a efectos de jubilación, y de
+  hecho llevan aparejada una base de cotización real en un 54% de los casos (99% en el subsidio
+  de 52/55). Junto con el cambio anterior (cuenta propia), la mediana sube un +44%
+  (9.008 → 13.673 €/año).
 - **`t_tot_reg_ppal`, `t_tot_grupo_ppal`, `t_tot_tipo_contrato_ppal`, `t_tot_prov_ppal` y
   `t_tot_act_econ_ppal` ya no cuentan dos veces el pluriempleo simultáneo.** Antes sumaban la
   duración de cada episodio de afiliación tal cual, así que dos altas a la vez en el mismo
@@ -18,6 +33,9 @@
   con el mismo IPF tenía sexo y fecha de nacimiento distintos: son dos personas físicas
   distintas que comparten identificador, no una fila repetida por el ETL. Se eliminan las dos
   filas de cada IPF afectado (no se puede saber cuál es la correcta).
+- **`clave_subclave_ppal` es NO CONSTA para quien no tiene ningún importe positivo.** 278 personas
+  tienen datos fiscales pero todos sus importes son 0 o negativos; antes recibían igualmente un
+  tipo principal arbitrario (el de menor código entre los empatados).
 - **`pension_actual` ya no repite el mismo tipo de pensión dentro de la propia lista** (por
   ejemplo `[Jubilación, Jubilación]` cuando había una fila por año cobrado). Afectaba a 3.823
   personas; `pension_todas_cobradas` ya deduplicaba, a `pension_actual` se le había quedado sin

@@ -1129,7 +1129,15 @@ def extraer_grupo_f(parquet_folder, anio_datos):
     por_tipo = por_tipo.sort_values(["01 IPF", "_ingreso_bruto_total", "_tipo"], ascending=[True, False, True])
     etiquetas_df = pd.read_csv(_CLAVE_PERCEPCION_CSV, sep=";", encoding="utf-8", dtype=str)
     etiquetas = dict(zip(etiquetas_df["codigo"], etiquetas_df["descripcion"]))
-    df_estudio_tipo_ppal = por_tipo.drop_duplicates(subset="01 IPF", keep="first")[["01 IPF", "_tipo"]].copy()
+    # Solo entre los tipos con importe > 0 (2026-09-22, decision explicita del usuario): sin este
+    # filtro, 278 personas con datos fiscales pero NINGUN importe positivo (todos <= 0) recibian
+    # igualmente un "tipo principal" arbitrario (el de menor codigo entre los empatados a 0 o
+    # negativos) en vez de NO CONSTA - inconsistente con clave_subclave_todas_cobradas, que para
+    # esas mismas 278 personas ya salia vacia (ver mas abajo, tambien filtrado a > 0). Al no
+    # quedar fila para ellas aqui, el left merge en fusionar_grupo_f las deja en NaN, y
+    # post_fillna (mas abajo) las convierte a "NO CONSTA" igual que a quien no tiene datos
+    # fiscales en absoluto.
+    df_estudio_tipo_ppal = por_tipo[por_tipo["_ingreso_bruto_total"] > 0].drop_duplicates(subset="01 IPF", keep="first")[["01 IPF", "_tipo"]].copy()
     df_estudio_tipo_ppal["clave_subclave_ppal"] = df_estudio_tipo_ppal["_tipo"].map(
         lambda t: f"{t} {etiquetas[t]}" if t in etiquetas else t
     )
@@ -1182,29 +1190,44 @@ def fusionar_grupo_f(parquet_folder, anio_datos):
 
 
 # ---------------------------------------------------------------------------
-# GRUPO G - Extracciones desde Bases de cotizacion (cuenta ajena)
+# GRUPO G - Extracciones desde Bases de cotizacion (cuenta ajena + cuenta propia)
 # ---------------------------------------------------------------------------
 
 def extraer_grupo_g(con, parquet_folder):
-    """32M filas (cuenta ajena): agregado con DuckDB, igual que Afiliacion."""
+    """~32M + ~4M filas (cuenta ajena + cuenta propia): agregado con DuckDB, igual que
+    Afiliacion. BUG corregido 2026-09-22 (decision explicita del usuario): solo se sumaba
+    cuenta ajena (CA); cuenta propia (CP, autonomos y R.E. Agrario Cuenta Propia) se quedaba
+    fuera, asi que quien cotizo unicamente como autonomo/agrario cuenta propia salia con
+    Cotizado_total y cotizado_anual_promedio NULL pese a tener historia laboral completa.
+    Verificado con datos reales: explicaba 56.029 de las 79.383 personas afectadas (71%; el
+    resto, con regimenes de cuenta ajena, no tiene ninguna fila en Bases CA - hueco de
+    cobertura de la propia MCVL, no de este calculo)."""
     bases_ca = _ruta(parquet_folder, "tabla_bases_cotizacion_CA_optimizada.parquet")
+    bases_cp = _ruta(parquet_folder, "tabla_bases_cotizacion_CP_optimizada.parquet")
+    bases_union = f"""
+        SELECT "01 IPF", "03 ANO_COTIZACION", "16 BCC_ANUAL_TOTAL" FROM read_parquet('{bases_ca}')
+        UNION ALL
+        SELECT "01 IPF", "03 ANO_COTIZACION", "16 BCC_ANUAL_TOTAL" FROM read_parquet('{bases_cp}')
+    """
 
     df_cotizadototal = con.execute(f"""
         SELECT "01 IPF" AS "01 IPF", SUM("16 BCC_ANUAL_TOTAL") AS "Cotizado_total"
-        FROM read_parquet('{bases_ca}') GROUP BY 1
+        FROM ({bases_union}) GROUP BY 1
     """).fetchdf()
 
     # Bases_cotiz_bruto_historico: lista de bases de cotizacion por anyo, ordenada por anyo
     # (igual que el cuaderno: groupby ordena por las claves antes del apply(list)). El agregado
-    # por (IPF, anyo) se hace con DuckDB (32M filas de origen), pero el propio DuckDB revienta
+    # por (IPF, anyo) se hace con DuckDB (32M+4M filas de origen), pero el propio DuckDB revienta
     # -por disco y luego por su limite de memoria interno- al construir la lista ordenada por
     # grupo. El resultado intermedio ya es pequenyo (~150 MB, un IPF-anyo por fila), asi que la
-    # lista final se construye con pandas (igual que el cuaderno), sin ese problema.
+    # lista final se construye con pandas (igual que el cuaderno), sin ese problema. Si una
+    # persona cotizo el mismo anyo por CA y CP a la vez (pluriempleo/pluriactividad), la base de
+    # ese anyo se suma (mismo criterio que Cotizado_total: es la base total cotizada ese anyo).
     por_anio_path = _ruta(parquet_folder, "_tmp_bases_ca_por_anio.parquet")
     con.execute(f"""
         COPY (
             SELECT "01 IPF" AS ipf, "03 ANO_COTIZACION" AS anio, SUM("16 BCC_ANUAL_TOTAL") AS total
-            FROM read_parquet('{bases_ca}') GROUP BY 1, 2
+            FROM ({bases_union}) GROUP BY 1, 2
         ) TO '{por_anio_path}' (FORMAT PARQUET)
     """)
     df_por_anio = pd.read_parquet(por_anio_path).sort_values(["ipf", "anio"])
@@ -1430,9 +1453,20 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     df["num_bajas_anual_promedio"] = df["num_episodios_baja"] / df["Tiempo_total_desde_inicio_VL"].dt.days * 365
     df.drop(columns=["num_episodios_alta", "num_episodios_baja"], inplace=True)
 
-    # Cotizado_anual_promedio: normalizado por anyos de vida laboral (mismo cambio de
-    # denominador que num_altas/bajas_anual_promedio, mismo motivo, misma NOTA pendiente).
-    df["Cotizado_anual_promedio"] = df["Cotizado_total"] / df["Tiempo_total_desde_inicio_VL"].dt.days * 365 / 100
+    # Cotizado_anual_promedio: normalizado por tiempo de empleo + desempleo + mixto, NO por
+    # Tiempo_total_desde_inicio_VL (corregido 2026-09-22, decision explicita del usuario, deja
+    # de compartir denominador con num_altas/bajas_anual_promedio - la "NOTA pendiente" de
+    # arriba solo les afecta a esas dos). Motivo: Tiempo_total_desde_inicio_VL incluye tiempo
+    # SIN ningun episodio ("no empleo", huecos), que diluia el promedio con tiempo donde nunca
+    # pudo haber cotizacion. Pero el desempleo SI hay que incluirlo (no excluirlo del todo,
+    # decision explicita del usuario): la prestacion contributiva de desempleo y el subsidio
+    # >52/55 anyos cotizan a efectos de jubilacion, y se ha verificado con datos reales que ese
+    # tiempo puede llevar aparejada una base de cotizacion real en Bases CA/CP - de las 1.248
+    # personas cuya carrera entera es solo desempleo, 669 (54%) tienen Cotizado_total > 0 (99%
+    # en el caso del TRL 753, subsidio >52/55). Excluir el desempleo del denominador dejaria en
+    # el numerador dinero de anyos que el denominador no cuenta, inflando el promedio.
+    _base_cotizado = df["T_total_EMPLEO"] + df["T_total_DESEMPLEO"] + df["T_total_MIXTO_EMPL_DESEMPL"]
+    df["Cotizado_anual_promedio"] = df["Cotizado_total"] / _base_cotizado.dt.days * 365 / 100
 
     # Nacionalidad_agrupado / Pais_nacim_agrupado
     condiciones = [
