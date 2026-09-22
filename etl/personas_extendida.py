@@ -291,6 +291,68 @@ def fase1b_tramos_fusionados_duckdb(
     return output_path
 
 
+def _sql_categoria_ppal_fusionada(afiliacion, categoria_expr, filtro_extra="TRUE"):
+    """BUG corregido 2026-09-22 (decision explicita del usuario, verificado con datos reales):
+    las columnas t_tot_reg_ppal, t_tot_grupo_ppal, t_tot_tipo_contrato_ppal, t_tot_prov_ppal y
+    t_tot_act_econ_ppal sumaban DURACION_EMPLEO por episodio bruto agrupado por categoria - sin
+    fusionar episodios solapados/contiguos de la MISMA categoria de una misma persona (pluriempleo
+    simultaneo en el mismo regimen/grupo/tipo de contrato/provincia/actividad se contaba dos
+    veces). Mismo fallo que ya se corrigio para T_total_EMPLEO en el Paso 2
+    (fase1b_tramos_fusionados_duckdb) al pasar a sumar sobre tramos fusionados en vez de episodios
+    brutos - aqui se aplica el mismo criterio de fusion ("hueco > 1 dia" entre fecha_baja y la
+    siguiente fecha_alta), pero particionado por (ipf, categoria) en vez de por (ipf, EMPLEO/
+    DESEMPLEO/MIXTO). Verificado con datos reales antes de la correccion: 49.420 personas con
+    t_tot_prov_ppal mayor que su tiempo total de vida laboral, exceso medio 6,8 anyos.
+
+    Devuelve el SQL (WITH ... hasta la CTE 'ranked', sin ejecutar) con una fila por (ipf, val,
+    total) YA quedandose solo con la categoria ganadora de cada persona (rn=1 dentro de
+    'ranked' - el propio ranked trae 'total' ordenado DESC por ipf, la fila con rn=1 es la
+    ganadora). Cada llamada añade su propio SELECT final (decodificando 'val' si hace falta) para
+    reusar la misma fusion en las 5 columnas sin repetir el algoritmo 5 veces.
+
+    categoria_expr: expresion SQL (sobre las columnas crudas de afiliacion) que da el valor de
+    categoria de cada episodio (p.ej. la provincia, el regimen ya agrupado en su cubeta...).
+    filtro_extra: condicion adicional en el WHERE inicial (p.ej. rango valido del grupo de
+    cotizacion) - por defecto TRUE (sin filtro adicional). Los episodios sin empleo real
+    (DURACION_EMPLEO nula o 0, ver Fase 1) y con categoria NULL quedan fuera siempre."""
+    return f"""
+        WITH extraido AS (
+            SELECT "01 IPF" AS ipf, ({categoria_expr}) AS val,
+                   "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta, "Baja_modificada" AS fecha_baja
+            FROM read_parquet('{afiliacion}')
+            WHERE "DURACION_EMPLEO" IS NOT NULL AND "DURACION_EMPLEO" != 0
+              AND ({filtro_extra})
+              AND "Baja_modificada" >= "06 FECHA_ALTA_REAL_AFIL"
+        ), _extraido_ok AS (
+            SELECT * FROM extraido WHERE val IS NOT NULL
+        ), _max_anterior AS (
+            SELECT *, MAX(fecha_baja) OVER (
+                PARTITION BY ipf, val ORDER BY fecha_alta
+                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+            ) AS _max_baja_ant
+            FROM _extraido_ok
+        ), _grupos AS (
+            SELECT *, SUM(CASE
+                    WHEN _max_baja_ant IS NULL OR date_diff('day', _max_baja_ant, fecha_alta) > 1
+                    THEN 1 ELSE 0 END) OVER (
+                PARTITION BY ipf, val ORDER BY fecha_alta
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            ) AS _grupo_id
+            FROM _max_anterior
+        ), _tramos AS (
+            SELECT ipf, val, MIN(fecha_alta) AS _ta, MAX(fecha_baja) AS _tb
+            FROM _grupos GROUP BY ipf, val, _grupo_id
+        ), sumado AS (
+            SELECT ipf, val, SUM((date_diff('day', _ta, _tb) + 1) * {US_POR_DIA}) AS total
+            FROM _tramos GROUP BY ipf, val
+        ), ranked AS (
+            SELECT ipf, val, total,
+                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, val ASC) AS rn
+            FROM sumado
+        )
+    """
+
+
 def fusionar_grupo(parquet_folder, extracciones, post_fillna=None):
     """Carga tabla_personas_extendida.parquet, fusiona (left join por 01 IPF) cada extraccion de
     la lista, aplica post_fillna(df) si se da, guarda y devuelve (shape_antes, shape_despues)."""
@@ -346,16 +408,8 @@ def extraer_grupo_a(con, parquet_folder):
     # personas cambiaban de familia ganadora, y otras 227.130 se quedaban en
     # la misma familia pero con una duracion acumulada incorrecta.
     cubeta_reg = reg_cotizacion_agrupado.sql_cubeta_agrupado('"02 REG_COTIZACION"')
-    df_reg = con.execute(f"""
-        WITH sumado AS (
-            SELECT "01 IPF" AS ipf, ({cubeta_reg}) AS cubeta, SUM("DURACION_EMPLEO") AS total
-            FROM read_parquet('{afiliacion}') GROUP BY 1, 2
-        ), ranked AS (
-            SELECT ipf, cubeta, total,
-                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, cubeta ASC) AS rn
-            FROM sumado
-        )
-        SELECT ipf AS "01 IPF", cubeta, total AS "T_tot_reg_ppal"
+    df_reg = con.execute(_sql_categoria_ppal_fusionada(afiliacion, cubeta_reg) + """
+        SELECT ipf AS "01 IPF", val AS cubeta, total AS "T_tot_reg_ppal"
         FROM ranked WHERE rn = 1
     """).fetchdf()
     df_reg["Reg_cotiz_ppal_Agrupado"] = df_reg["cubeta"].map(reg_cotizacion_agrupado.decodificar_agrupado)
@@ -372,15 +426,9 @@ def extraer_grupo_a(con, parquet_folder):
     # categorias real sin documentar. Se excluyen del ranking (like NULL) en vez de listar los
     # codigos concretos vistos hoy, para cubrir tambien claves fuera de rango que aparezcan en
     # futuras ediciones de la MCVL sin tener que tocar este codigo otra vez.
-    df_grupo = con.execute(f"""
-        WITH sumado AS (
-            SELECT "01 IPF" AS ipf, "03 GRU_COTIZACION" AS val, SUM("DURACION_EMPLEO") AS total
-            FROM read_parquet('{afiliacion}') WHERE "03 GRU_COTIZACION" BETWEEN 0 AND 12 GROUP BY 1, 2
-        ), ranked AS (
-            SELECT ipf, val, total,
-                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, val ASC) AS rn
-            FROM sumado
-        )
+    df_grupo = con.execute(_sql_categoria_ppal_fusionada(
+        afiliacion, '"03 GRU_COTIZACION"', '"03 GRU_COTIZACION" BETWEEN 0 AND 12'
+    ) + """
         SELECT ipf AS "01 IPF", val AS "Grupo_cotiz_ppal", total AS "t_tot_grupo_ppal"
         FROM ranked WHERE rn = 1
     """).fetchdf()
@@ -417,19 +465,9 @@ def extraer_grupo_a(con, parquet_folder):
     # categorica de Afiliacion en app/, no reimplementada aqui).
     val_corregido = sql_corregido('"04 TIPO_CONTRATO"', '"05 COEF_T_PARCIAL"')
     cubeta_ganador = sql_bin_corregido("val")
-    df_tipo = con.execute(f"""
-        WITH episodios AS (
-            SELECT "01 IPF" AS ipf, ({val_corregido}) AS val, "DURACION_EMPLEO" AS duracion
-            FROM read_parquet('{afiliacion}')
-            WHERE "04 TIPO_CONTRATO" IS NOT NULL
-        ), sumado AS (
-            SELECT ipf, val, SUM(duracion) AS total
-            FROM episodios GROUP BY 1, 2
-        ), ranked AS (
-            SELECT ipf, val, total,
-                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, val ASC) AS rn
-            FROM sumado
-        )
+    df_tipo = con.execute(_sql_categoria_ppal_fusionada(
+        afiliacion, val_corregido, '"04 TIPO_CONTRATO" IS NOT NULL'
+    ) + f"""
         SELECT ipf AS "01 IPF", ({cubeta_ganador}) AS cubeta, total AS "T_tot_tipo_contrato_ppal"
         FROM ranked WHERE rn = 1
     """).fetchdf()
@@ -665,37 +703,18 @@ def extraer_grupo_c(con, parquet_folder):
     """).fetchdf()
 
     # Prov_trabajo_ppal / t_tot_prov_ppal: digitos 5-6 del CCC_2, con mas duracion acumulada
-    df_prov = con.execute(f"""
-        WITH extraido AS (
-            SELECT "01 IPF" AS ipf,
-                   CASE WHEN LENGTH("10 CCC_2") >= 6
+    prov_expr = """CASE WHEN LENGTH("10 CCC_2") >= 6
                         THEN TRY_CAST(SUBSTRING("10 CCC_2", 5, 2) AS TINYINT)
-                        ELSE NULL END AS prov,
-                   "DURACION_EMPLEO" AS dur
-            FROM read_parquet('{afiliacion}')
-        ), sumado AS (
-            SELECT ipf, prov, SUM(dur) AS total FROM extraido WHERE prov IS NOT NULL GROUP BY 1, 2
-        ), ranked AS (
-            SELECT ipf, prov, total,
-                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, prov ASC) AS rn
-            FROM sumado
-        )
-        SELECT ipf AS "01 IPF", prov AS "Prov_trabajo_ppal", total AS "t_tot_prov_ppal"
+                        ELSE NULL END"""
+    df_prov = con.execute(_sql_categoria_ppal_fusionada(afiliacion, prov_expr) + """
+        SELECT ipf AS "01 IPF", val AS "Prov_trabajo_ppal", total AS "t_tot_prov_ppal"
         FROM ranked WHERE rn = 1
     """).fetchdf()
 
     # Act_econ_ppal / t_tot_act_econ_ppal: CNAE (excluye 0: autonomos/desconocido)
-    df_actecon = con.execute(f"""
-        WITH sumado AS (
-            SELECT "01 IPF" AS ipf, "12 CNAE2009_CC" AS val, SUM("DURACION_EMPLEO") AS total
-            FROM read_parquet('{afiliacion}')
-            WHERE "12 CNAE2009_CC" IS NOT NULL AND "12 CNAE2009_CC" != 0
-            GROUP BY 1, 2
-        ), ranked AS (
-            SELECT ipf, val, total,
-                   ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY total DESC, val ASC) AS rn
-            FROM sumado
-        )
+    df_actecon = con.execute(_sql_categoria_ppal_fusionada(
+        afiliacion, '"12 CNAE2009_CC"', '"12 CNAE2009_CC" != 0'
+    ) + """
         SELECT ipf AS "01 IPF", val AS "Act_econ_ppal", total AS "t_tot_act_econ_ppal"
         FROM ranked WHERE rn = 1
     """).fetchdf()
@@ -833,7 +852,14 @@ def extraer_grupo_d(con, parquet_folder):
     # "No cobra del SEPE en la actualidad" en el propio dato (mezclaria fecha y texto en la
     # misma columna, forzando pandas a "object" y rompiendo o degradando la escritura a
     # Parquet) - ese texto, si se quiere, es cosa del frontend.
-    trl_sql = ", ".join(str(t) for t in TRL_COBRO_SEPE)
+    # BUG corregido 2026-09-22 (decision explicita del usuario): el TRL de "coincide" solo
+    # cubria TRL_COBRO_SEPE (751-756), pero usa_cobrando_sepe en grupo_h_final tambien incluye
+    # Asimilado_otros (TRL 980/400) - su propio comentario dice "en todas ellas
+    # Fecha_inicio_ultima_racha_sin_empleo tiene valor", pero para Asimilado_otros casi nunca lo
+    # tenia: de las personas Asimilado_otros clasificadas como Parado, 265 de 266 salian con
+    # racha NULL (verificado con datos reales: el episodio mas reciente de 255 de ellas es TRL
+    # 400, que no coincidia con ningun valor del filtro). Se anyade 980 y 400 al conjunto.
+    trl_sql = ", ".join(str(t) for t in TRL_COBRO_SEPE + (980, 400))
     df_fechainicioparo = con.execute(f"""
         WITH ranked AS (
             SELECT "01 IPF" AS ipf, "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta,
@@ -965,7 +991,14 @@ def extraer_grupo_e(df_pensiones, anio_datos):
     # si los hubiera (2.523 personas con ANO_DATO=2025 en los datos reales).
     df_ultimo = df[df["02 ANO_DATO"] >= anio_datos]
 
-    df_estudio_pensionactual = df_ultimo.groupby("01 IPF")["Tipo_pension"].apply(list).reset_index()
+    # .unique() (2026-09-22, decision explicita del usuario, bug real corregido): sin
+    # deduplicar, una persona con el MISMO tipo de pension en varias filas de df_ultimo
+    # (p.ej. ANO_DATO=2024 y ANO_DATO=2025, ambas "Jubilacion") salia con ese tipo repetido
+    # dentro de la propia lista (["Jubilacion", "Jubilacion"]) en vez de una lista de tipos
+    # DISTINTOS - mismo criterio que ya se aplicaba en Pension_todas_cobradas (ver abajo),
+    # que aqui se habia quedado sin aplicar. Verificado con datos reales: 3.823 personas
+    # afectadas (p.ej. ipf 683: ["Jubilacion", "Jubilacion"]).
+    df_estudio_pensionactual = df_ultimo.groupby("01 IPF")["Tipo_pension"].apply(lambda s: list(s.unique())).reset_index()
     df_estudio_pensionactual.columns = ["01 IPF", "Pension_actual"]
 
     nombre_col_cobra_pension = f"Cobra_pension_{anio_datos}/{str(anio_datos + 1)[-1]}"
@@ -1563,6 +1596,19 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     antes = df.shape[0]
     df = df[df["02 FECHA_NACIMIENTO"].notna()].copy()
     print(f"Filas eliminadas por no tener fecha de nacimiento: {antes - df.shape[0]}")
+
+    # Filtrar IPF duplicado (2026-09-22, decision explicita del usuario): "01 IPF" deberia ser
+    # unico (una fila por persona, es la clave de join de toda la app), pero 200 IPF (453 filas)
+    # vienen duplicados ya en el origen (tabla Personas cruda) con sexo y fecha_nacimiento
+    # DISTINTOS entre las filas de un mismo IPF - son dos personas fisicas distintas que
+    # comparten IPF, no una fila repetida por el ETL, asi que no hay forma fiable de elegir
+    # cual de las dos es "la buena". Se borran todas las filas de esos IPF (no solo una de cada
+    # dos), para no arrastrar un dato de origen ambiguo a la tabla final.
+    antes = df.shape[0]
+    ipf_duplicado = df["01 IPF"][df["01 IPF"].duplicated(keep=False)]
+    df = df[~df["01 IPF"].isin(ipf_duplicado)].copy()
+    print(f"Filas eliminadas por IPF duplicado en origen: {antes - df.shape[0]} "
+          f"({ipf_duplicado.nunique()} IPF distintos)")
 
     # Filtrar outliers de Tiempo_total_desde_inicio_VL (± 3 desviaciones estandar)
     media = df["Tiempo_total_desde_inicio_VL"].mean()

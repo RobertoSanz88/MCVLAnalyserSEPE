@@ -1,5 +1,28 @@
 # Novedades por versión
 
+## Sin versión todavía (correcciones de las reglas de consistencia, 2026-09-22)
+
+- **`t_tot_reg_ppal`, `t_tot_grupo_ppal`, `t_tot_tipo_contrato_ppal`, `t_tot_prov_ppal` y
+  `t_tot_act_econ_ppal` ya no cuentan dos veces el pluriempleo simultáneo.** Antes sumaban la
+  duración de cada episodio de afiliación tal cual, así que dos altas a la vez en el mismo
+  régimen/grupo/tipo de contrato/provincia/actividad se sumaban por separado en vez de una sola
+  vez. Ahora se fusionan primero los episodios solapados o contiguos de la misma categoría
+  (igual criterio que ya se usa para el tiempo total de empleo), y se suma la duración fusionada.
+  **Los valores cambian**: antes, hasta 49.420 personas tenían `t_tot_prov_ppal` mayor que su
+  tiempo total de vida laboral (6,8 años de más de media); ahora, 0.
+- **`Fecha_inicio_ultima_racha_sin_empleo` ya se rellena para `Asimilado_otros`.** El cálculo
+  solo miraba episodios de prestación o subsidio del SEPE (TRL 751-756); una persona cuya
+  situación actual es `Asimilado_otros` (TRL 400/980) casi nunca tenía ninguno entre sus 5
+  episodios más recientes, así que la racha quedaba vacía aunque constara como parada.
+- **200 IPF (453 filas) que venían duplicados en el origen se eliminan.** Cada pareja de filas
+  con el mismo IPF tenía sexo y fecha de nacimiento distintos: son dos personas físicas
+  distintas que comparten identificador, no una fila repetida por el ETL. Se eliminan las dos
+  filas de cada IPF afectado (no se puede saber cuál es la correcta).
+- **`pension_actual` ya no repite el mismo tipo de pensión dentro de la propia lista** (por
+  ejemplo `[Jubilación, Jubilación]` cuando había una fila por año cobrado). Afectaba a 3.823
+  personas; `pension_todas_cobradas` ya deduplicaba, a `pension_actual` se le había quedado sin
+  aplicar el mismo criterio.
+
 ## v2.2
 
 ### Datos (hay que descargar los Parquet nuevos, generados con el ETL de esta versión)
