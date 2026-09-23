@@ -1572,10 +1572,37 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     # siguen siendo mutuamente excluyentes y su suma sigue dando el total
     # exacto de personas - condicion explicita del usuario.
     cobra_pension = df["Cobra_pension_2024/5"] == "SI"
+
+    # Jubilacion excluida de Parado_*_y_pensionista (2026-09-23, decision explicita del usuario,
+    # matiz sobre la decision de arriba que unifico en Cobra_pension_2024/5 para todo tipo de
+    # pension): un jubilado no esta "en paro" en el sentido que pretende esta categoria - la
+    # categoria compuesta quiere representar a quien alterna trabajo y cobro de pension (p.ej.
+    # incapacidad parcial, viudedad - compatibles con trabajar) y esta AHORA MISMO
+    # temporalmente sin empleo, no a alguien retirado. Ocupado_y_pensionista NO se toca: trabajar
+    # y cobrar jubilacion a la vez es un caso real y legitimo (jubilacion activa). Verificado con
+    # datos reales: 53.077 Parado_LD_y_pensionista y 1.248 Parado_NoLD_y_pensionista tenian
+    # Jubilacion en Pension_actual, edad media 78 anyos, mayoria con ultima baja de afiliacion
+    # "Baja_de_actividad" normal (no "pase a pensionista") anyos antes de empezar a cobrar.
+    tiene_jubilacion = df["Pension_actual"].apply(lambda l: isinstance(l, (list, np.ndarray)) and "Jubilación" in l)
+
     combinable_con_pension = df["Situacion_Paro_Ocupacion"].isin(["Ocupado", "Parado_LD", "Parado_NoLD"])
-    mask_pension = combinable_con_pension & cobra_pension
-    df.loc[mask_pension, "Situacion_Paro_Ocupacion"] = (
-        df.loc[mask_pension, "Situacion_Paro_Ocupacion"] + "_y_pensionista"
+    es_parado_actual = df["Situacion_Paro_Ocupacion"].isin(["Parado_LD", "Parado_NoLD"])
+
+    # Parado + jubilacion -> Pensionista puro (no sufijo): ya no es un sufijo, es la
+    # categoria en si, igual criterio que Baja_para_pension/Nunca_ha_cotizado (arriba).
+    mask_parado_jubilado = es_parado_actual & cobra_pension & tiene_jubilacion
+    df.loc[mask_parado_jubilado, "Situacion_Paro_Ocupacion"] = "Pensionista"
+
+    # Renombrado 2026-09-23 (decision explicita del usuario): "Parado_LD/NoLD_y_pensionista" se
+    # queda como "Parado_LD/NoLD_pension_no_jubilacion" - tras la exclusion de arriba, quien
+    # conserva esta categoria NUNCA tiene jubilacion (siempre incapacidad/viudedad/orfandad/etc.),
+    # asi que el nombre antiguo podia confundir (sonaba a "puede incluir jubilados"). Ocupado
+    # sigue con el sufijo "_y_pensionista" de siempre (SI puede incluir jubilacion, ver arriba).
+    mask_pension_ocupado = (df["Situacion_Paro_Ocupacion"] == "Ocupado") & cobra_pension
+    df.loc[mask_pension_ocupado, "Situacion_Paro_Ocupacion"] = "Ocupado_y_pensionista"
+    mask_pension_parado = es_parado_actual & cobra_pension & ~mask_parado_jubilado
+    df.loc[mask_pension_parado, "Situacion_Paro_Ocupacion"] = (
+        df.loc[mask_pension_parado, "Situacion_Paro_Ocupacion"] + "_pension_no_jubilacion"
     )
 
     # Correccion de tramos que se extienden mas alla del fallecimiento (2026-09-23, decision

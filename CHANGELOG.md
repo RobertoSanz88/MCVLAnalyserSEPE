@@ -2,6 +2,17 @@
 
 ## Sin versión todavía (correcciones de las reglas de consistencia, 2026-09-22)
 
+- **Quien cobra jubilación ya no puede aparecer como "en paro".** `situacion_paro_ocupacion`
+  combinaba "Parado_LD"/"Parado_NoLD" con "_y_pensionista" para cualquier tipo de pensión,
+  incluida la jubilación. Un jubilado no está buscando trabajo, así que ahora pasa directamente
+  a `Pensionista`. `Ocupado_y_pensionista` no cambia: trabajar y cobrar jubilación a la vez es una
+  situación real (jubilación activa). **Cambian 54.568 personas** (53.571 `Parado_LD_y_pensionista`
+  + 997 `Parado_NoLD_y_pensionista` → `Pensionista`); nadie más se mueve.
+- **`Parado_LD_y_pensionista` y `Parado_NoLD_y_pensionista` se renombran a
+  `Parado_LD_pension_no_jubilacion` y `Parado_NoLD_pension_no_jubilacion`.** Tras el cambio
+  anterior, estas dos categorías ya nunca incluyen jubilación (solo incapacidad, viudedad,
+  orfandad...); el nombre lo deja explícito para no llevar a confusión. **Cualquier análisis o
+  filtro que use el nombre antiguo hay que actualizarlo.**
 - **`cotizado_anual_promedio` ahora incluye las bases de cotización de cuenta propia (autónomos,
   agrario cuenta propia...), no solo las de cuenta ajena.** Antes solo se leía la tabla de cuenta
   ajena; quien cotizó alguna vez como autónomo se veía afectado de dos formas: si toda su carrera
