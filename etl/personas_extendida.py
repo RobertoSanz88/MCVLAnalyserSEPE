@@ -1578,14 +1578,58 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
         df.loc[mask_pension, "Situacion_Paro_Ocupacion"] + "_y_pensionista"
     )
 
+    # Correccion de tramos que se extienden mas alla del fallecimiento (2026-09-23, decision
+    # explicita del usuario, alternativa explorada al rediseño de Fase 1 - ver comentario de mas
+    # abajo, "impacto ya aceptado como marginal", que databa de antes de esta correccion): Fase 1
+    # sustituye el placeholder 2099 (episodio "aun activo") por FECHA_CORTE sin conocer la fecha
+    # de fallecimiento (esa columna no existe en Afiliacion, solo llega a Personas) - si alguien
+    # fallece teniendo un episodio todavia activo, ese tramo se cuenta hasta FECHA_CORTE en vez de
+    # hasta su muerte real. Se corrige aqui, sin tocar Fase 1 ni su arquitectura: se relee
+    # tabla_afiliacion_tramos.parquet (ya generado en el Paso 2) restringido a fallecidos, y se
+    # resta de T_total_EMPLEO/DESEMPLEO/MIXTO_EMPL_DESEMPL (la categoria que corresponda en cada
+    # caso) los dias de cada tramo que caen DESPUES de fecha_fin_vl (la fecha de fallecimiento ya
+    # calculada arriba). Solo afecta a quien tiene un tramo que de verdad se extiende mas alla de
+    # su propia muerte - verificado con datos reales: 14 personas de 18.804 fallecidas con
+    # afiliacion (0,07%). Probado contra los 2 casos con T_total_NO_EMPLEO negativo conocidos
+    # (ipf 118384, exceso de 335 dias en EMPLEO; ipf 4725529, 396 dias en EMPLEO): tras la
+    # correccion, sus residuos dejan de ser negativos.
+    import duckdb
+    _tramos_path = _ruta(parquet_folder, "tabla_afiliacion_tramos.parquet")
+    _fallecidos = pd.DataFrame({"ipf": df.loc[tiene_fallecimiento, "01 IPF"].values,
+                                 "fecha_fin_vl": fecha_fin_vl.loc[tiene_fallecimiento].values})
+    if len(_fallecidos):
+        _con_correccion = duckdb.connect()
+        _con_correccion.register("_fallecidos", _fallecidos)
+        _exceso = _con_correccion.execute(f"""
+            SELECT t.ipf AS "01 IPF", t.categoria,
+                   SUM(date_diff('day', GREATEST(t.fecha_inicio_tramo, f.fecha_fin_vl + INTERVAL 1 DAY), t.fecha_fin_tramo) + 1)
+                       AS dias_exceso
+            FROM read_parquet('{_tramos_path}') t
+            JOIN _fallecidos f ON t.ipf = f.ipf
+            WHERE t.fecha_fin_tramo > f.fecha_fin_vl
+            GROUP BY 1, 2
+        """).fetchdf()
+        _con_correccion.close()
+        if len(_exceso):
+            print(f"Corrigiendo {_exceso['01 IPF'].nunique()} fallecidos con tramos mas alla de su fecha de fallecimiento")
+            _exceso_us = pd.to_timedelta(_exceso["dias_exceso"], unit="D")
+            for _categoria, _col in (("EMPLEO", "T_total_EMPLEO"), ("DESEMPLEO", "T_total_DESEMPLEO"),
+                                      ("MIXTO", "T_total_MIXTO_EMPL_DESEMPL")):
+                _mask = _exceso["categoria"] == _categoria
+                if not _mask.any():
+                    continue
+                _resta = pd.Series(_exceso_us[_mask].values, index=_exceso.loc[_mask, "01 IPF"].values)
+                _resta = _resta.reindex(df["01 IPF"]).fillna(CERO_DIAS)
+                _resta.index = df.index
+                df[_col] = df[_col] - _resta
+
     # T_total_NO_EMPLEO (PASO 3, 2026-09-08, decision explicita del usuario - materializada como
     # columna el mismo dia, a peticion expresa del usuario): residuo, no suma directa -
     # Tiempo_total_desde_inicio_VL menos las 3 categorias ya fusionadas/sin solape
     # (Paso 2: T_total_EMPLEO/DESEMPLEO/MIXTO_EMPL_DESEMPL). Por construccion no deberia poder
     # salir negativo - verificado con datos reales (tras el fix del +1 dia en
-    # Tiempo_total_desde_inicio_VL, ver mas arriba): solo 2 residuos negativos en
-    # 1,31M personas, ambos fallecidos cuyo episodio real excede su propia fecha de
-    # fallecimiento (ver Paso 0, impacto ya aceptado como marginal) - no un fallo del barrido.
+    # Tiempo_total_desde_inicio_VL, ver mas arriba, y la correccion de tramos mas alla del
+    # fallecimiento justo encima): 0 residuos negativos en 1,31M personas.
     df["T_total_NO_EMPLEO"] = (
         df["Tiempo_total_desde_inicio_VL"]
         - df["T_total_EMPLEO"] - df["T_total_DESEMPLEO"] - df["T_total_MIXTO_EMPL_DESEMPL"]
