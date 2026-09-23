@@ -1390,6 +1390,17 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     df["Fecha_final_Ultimo_Empleo_completa"] = df["Fecha_final_Ultimo_Empleo"].dt.year * 12 + df["Fecha_final_Ultimo_Empleo"].dt.month
     df["02 FECHA_NACIMIENTO_completa"] = df["02 FECHA_NACIMIENTO"].dt.year * 12 + df["02 FECHA_NACIMIENTO"].dt.month
 
+    # Diagnostico (2026-09-23): una regeneracion dejo Edad_Ultimo_Empleo/Edad_Primer_Empleo_Signif en
+    # anyos calendario (2023,5 en vez de 62,6), como si 02 FECHA_NACIMIENTO_completa valiera 0 aqui,
+    # mientras Edad_Actual_Fecha_Corte (mismo origen, se calcula mas abajo) salia bien. Sin causa
+    # conocida: se imprime el valor intermedio siempre, para que el log lo enseñe aunque no falle.
+    print(
+        "Diagnostico edades: 02 FECHA_NACIMIENTO dtype="
+        f"{df['02 FECHA_NACIMIENTO'].dtype}, _completa min/max="
+        f"{df['02 FECHA_NACIMIENTO_completa'].min()}/{df['02 FECHA_NACIMIENTO_completa'].max()} "
+        f"(dtype {df['02 FECHA_NACIMIENTO_completa'].dtype}); Fecha_final_Ultimo_Empleo_completa min/max="
+        f"{df['Fecha_final_Ultimo_Empleo_completa'].min()}/{df['Fecha_final_Ultimo_Empleo_completa'].max()}"
+    )
     df["Edad_Ultimo_Empleo"] = df["Fecha_final_Ultimo_Empleo_completa"] - df["02 FECHA_NACIMIENTO_completa"]
     df.drop(columns=["Fecha_ini_Primer_Empleo_completa", "Fecha_final_Ultimo_Empleo_completa"], inplace=True)
 
@@ -1454,6 +1465,16 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
 
     df["Edad_Ultimo_Empleo"] = df["Edad_Ultimo_Empleo"] / 12
     df["Edad_Primer_Empleo_Signif"] = df["Edad_Primer_Empleo_Signif"] / 12
+
+    # Comprobacion de cordura (2026-09-23, ver "Diagnostico edades" mas arriba): una edad no puede
+    # ser un anyo calendario. Con datos buenos la mediana ronda 25-55.
+    for _c in ("Edad_Ultimo_Empleo", "Edad_Primer_Empleo_Signif"):
+        _mediana = df[_c].median()
+        if _mediana > 120:
+            raise ValueError(
+                f"{_c} tiene mediana {_mediana:.1f}: son anyos calendario, no edades (02 FECHA_NACIMIENTO "
+                f"restada como 0). Ver la linea 'Diagnostico edades' del log."
+            )
 
     # Edad negativa (episodio de Afiliacion anterior a la fecha de nacimiento) -> NULL, no un
     # valor imposible (decision explicita del usuario, 2026-08-20, para no falsear
