@@ -1472,6 +1472,15 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     fecha_nacimiento_completa = df["02 FECHA_NACIMIENTO"].dt.year * 12 + df["02 FECHA_NACIMIENTO"].dt.month
     fecha_corte_completa = FECHA_CORTE.year * 12 + FECHA_CORTE.month
     df["Edad_Actual_Fecha_Corte"] = (fecha_corte_completa - fecha_nacimiento_completa) / 12
+    # Comprobacion de cordura (2026-09-23): una regeneracion salio con esta columna a 0 para las
+    # 1.359.056 personas y no se noto hasta ejecutar las reglas de consistencia, 30 minutos despues.
+    # Si no hay ni una edad positiva, parar aqui con un error claro en vez de escribir el Parquet.
+    if not (df["Edad_Actual_Fecha_Corte"] > 0).any():
+        raise ValueError(
+            "Edad_Actual_Fecha_Corte no tiene ningun valor positivo (todo 0 o nulo): "
+            f"FECHA_CORTE={FECHA_CORTE.date()}, primeras fechas de nacimiento="
+            f"{df['02 FECHA_NACIMIENTO'].head(3).tolist()}. Revisar antes de continuar."
+        )
 
     # num_altas_anual_promedio / num_bajas_anual_promedio: normalizados por anyos de vida laboral.
     # Denominador cambiado de DURACION_1er_Empleo_a_Ultimo_Empleo a
