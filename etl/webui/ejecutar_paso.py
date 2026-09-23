@@ -5,6 +5,7 @@ retransmite al navegador via SSE). Tambien se puede lanzar a mano desde la termi
 
 import argparse
 import os
+import shutil
 import sys
 
 # Aseguramos que la raiz del proyecto este en sys.path, se ejecute como se ejecute este
@@ -37,6 +38,14 @@ def _nueva_conexion(hilos):
     con.execute("SET preserve_insertion_order=false")
     con.execute(f"SET threads={hilos}")
     return con
+
+
+def _ruta_extendida(parquet_folder):
+    return os.path.join(parquet_folder, "tabla_personas_extendida.parquet")
+
+
+def _ruta_preh(parquet_folder):
+    return os.path.join(parquet_folder, "tabla_personas_extendida_preH.parquet")
 
 
 def _borrar_optimizada(parquet_folder, nombre_tabla):
@@ -126,6 +135,28 @@ def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv,
         print("Grupo G (bases de cotizacion)...")
         fusionar_grupo_g(parquet_folder, con)
 
+        # Copia de seguridad justo antes del Grupo H (2026-09-23): el H lee y reescribe encima
+        # tabla_personas_extendida.parquet, asi que sin esta copia el estado previo se pierde y
+        # cualquier ajuste del H obliga a repetir todos los grupos anteriores (~7 min). Con ella,
+        # la accion "grupo_h" (abajo) solo repite el H. Es un Parquet intermedio con datos MCVL: no
+        # se distribuye (mismo motivo que el resto de Parquet, ver *.parquet en .gitignore).
+        shutil.copy2(_ruta_extendida(parquet_folder), _ruta_preh(parquet_folder))
+        print(f"Copia previa al Grupo H guardada: {os.path.basename(_ruta_preh(parquet_folder))}")
+
+        print("Grupo H (calculos finales, filtros, seleccion de columnas)...")
+        df_final = grupo_h_final(parquet_folder, provincias_csv, cnae_csv, paises_csv, causa_baja_csv)
+        print(f"tabla_personas_extendida.parquet lista: {df_final.shape}")
+
+    elif accion == "grupo_h":
+        # Solo el Grupo H, sobre la copia que dejo la ultima ejecucion completa de
+        # "personas_extendida" (ver arriba). Restaura esa copia encima de la extendida y la
+        # reprocesa: para probar cambios del H sin repetir los grupos A-G.
+        if not os.path.exists(_ruta_preh(parquet_folder)):
+            print(f"\nERROR: falta {os.path.basename(_ruta_preh(parquet_folder))}. Se crea en una ejecucion")
+            print('  completa del boton final ("Construir tabla de personas extendida") con este codigo.')
+            sys.exit(1)
+        shutil.copy2(_ruta_preh(parquet_folder), _ruta_extendida(parquet_folder))
+        print("Restaurada la copia previa al Grupo H")
         print("Grupo H (calculos finales, filtros, seleccion de columnas)...")
         df_final = grupo_h_final(parquet_folder, provincias_csv, cnae_csv, paises_csv, causa_baja_csv)
         print(f"tabla_personas_extendida.parquet lista: {df_final.shape}")
