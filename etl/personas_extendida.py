@@ -1733,6 +1733,29 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     )
     df["%T_total_NO_EMPLEO"] = df["T_total_NO_EMPLEO"] / df["Tiempo_total_desde_inicio_VL"] * 100
 
+    # Comprobacion de cordura (2026-09-23): una regeneracion salio con %T_total_DESEMPLEO a 0 para
+    # las 779.211 personas con T_total_DESEMPLEO > 0 (las otras 3 columnas %, bien) y no se noto
+    # hasta ejecutar las reglas C-062/C-068. No se pudo reproducir sobre datos pequenos, asi que
+    # si vuelve a ocurrir, parar aqui con los dtypes a la vista en vez de escribir el Parquet.
+    _cols_pct = [("T_total_EMPLEO", "%T_total_EMPLEO"), ("T_total_DESEMPLEO", "%T_total_DESEMPLEO"),
+                 ("T_total_MIXTO_EMPL_DESEMPL", "%T_total_MIXTO_EMPL_DESEMPL"),
+                 ("T_total_NO_EMPLEO", "%T_total_NO_EMPLEO")]
+    for _t, _p in _cols_pct:
+        if (df[_t] > CERO_DIAS).any() and not (df[_p] > 0).any():
+            raise ValueError(
+                f"{_p} es 0 o nula para todos aunque {_t} tiene valores positivos. "
+                f"dtypes: {_t}={df[_t].dtype}, Tiempo_total_desde_inicio_VL="
+                f"{df['Tiempo_total_desde_inicio_VL'].dtype}, {_p}={df[_p].dtype}. "
+                f"Ejemplo: {df.loc[df[_t] > CERO_DIAS, [_t, 'Tiempo_total_desde_inicio_VL', _p]].head(3).to_dict('records')}"
+            )
+    _suma_pct = df[[p for _, p in _cols_pct]].sum(axis=1)
+    _no_suman_100 = ((_suma_pct - 100).abs() > 0.5) & (df["Tiempo_total_desde_inicio_VL"] > CERO_DIAS)
+    if _no_suman_100.any():
+        raise ValueError(
+            f"Los 4 porcentajes T_total no suman 100 (±0,5) en {int(_no_suman_100.sum())} personas "
+            f"(suma media {float(_suma_pct[_no_suman_100].mean()):.2f}). Revisar antes de continuar."
+        )
+
     # Conversion de columnas Timedelta a anyos (in-place)
     for col in df.columns:
         if pd.api.types.is_timedelta64_dtype(df[col]):
