@@ -1749,7 +1749,13 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
                 f"Ejemplo: {df.loc[df[_t] > CERO_DIAS, [_t, 'Tiempo_total_desde_inicio_VL', _p]].head(3).to_dict('records')}"
             )
     _suma_pct = df[[p for _, p in _cols_pct]].sum(axis=1)
-    _no_suman_100 = ((_suma_pct - 100).abs() > 0.5) & (df["Tiempo_total_desde_inicio_VL"] > CERO_DIAS)
+    # Solo quien tiene totales calculados: hay 9 personas con Tiempo_total_desde_inicio_VL > 0 pero
+    # sin ningun tramo de afiliacion, con los 4 T_total_* y los 4 % nulos (no 0) - dato nulo, no error.
+    _no_suman_100 = (
+        ((_suma_pct - 100).abs() > 0.5)
+        & (df["Tiempo_total_desde_inicio_VL"] > CERO_DIAS)
+        & df["T_total_NO_EMPLEO"].notna()
+    )
     if _no_suman_100.any():
         raise ValueError(
             f"Los 4 porcentajes T_total no suman 100 (±0,5) en {int(_no_suman_100.sum())} personas "
