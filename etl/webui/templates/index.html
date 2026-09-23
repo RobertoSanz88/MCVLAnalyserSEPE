@@ -8,9 +8,14 @@
                font-size: 1.15rem; }
         h1 { font-size: 1.6rem; }
         fieldset { margin-bottom: 1.5rem; font-size: 1rem; }
-        label { display: inline-block; min-width: 11rem; }
+        label { display: inline-block; min-width: 11rem; flex-shrink: 0; }
         input[type=text] { width: 22rem; font-size: 1rem; }
-        .fila { margin-bottom: 0.5rem; }
+        .fila { margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+        /* Cajas de ruta (TXT brutos / salida Parquet): ensanchadas para que quepan rutas largas,
+           hasta el ancho del fieldset que las enmarca (2026-09-23, decision explicita del
+           usuario) - .fila pasa a flex y estas dos cajas ocupan todo el hueco que dejan
+           label+gap, en vez del ancho fijo de 22rem del resto de cajas de texto. */
+        input.ruta { flex: 1; min-width: 0; }
         .acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
         button { padding: 0.6rem 1rem; cursor: pointer; font-size: 1rem; }
         button.final { background: #2b5; color: white; font-weight: bold; }
@@ -41,8 +46,8 @@
 
     <fieldset>
         <legend>Configuración</legend>
-        <div class="fila"><label for="raw">Carpeta TXT brutos</label><input type="text" id="raw" placeholder="C:\ruta\a\MCVL 2024 TXT"></div>
-        <div class="fila"><label for="parquet">Carpeta de salida Parquet</label><input type="text" id="parquet" placeholder="C:\ruta\a\parquet"></div>
+        <div class="fila"><label for="raw">Carpeta TXT brutos</label><input type="text" id="raw" class="ruta" placeholder="C:\ruta\a\MCVL 2024 TXT"></div>
+        <div class="fila"><label for="parquet">Carpeta de salida Parquet</label><input type="text" id="parquet" class="ruta" placeholder="C:\ruta\a\parquet"></div>
         <div class="fila"><label for="year">Año</label><input type="text" id="year" value="2024" style="width:5rem"></div>
         <div class="fila"><label for="borrar_txt">Borrar TXT tras procesar</label><input type="checkbox" id="borrar_txt">
             <span class="aviso">Marcar sólo si existe una copia de los TXT y el ordenador tiene menos de 10 GB de RAM</span>
