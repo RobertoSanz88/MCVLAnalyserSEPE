@@ -52,6 +52,14 @@ def _borrar_optimizada(parquet_folder, nombre_tabla):
 
 
 def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv, cnae_csv, paises_csv, causa_baja_csv):
+    # Fecha de corte = 1 de mayo del anyo siguiente al de la casilla "Anyo"; se fija en el ETL y se
+    # deja escrita junto a los Parquet para que la app use la misma (ver config.py).
+    import etl.personas_extendida as _pe
+    from config import escribir_fecha_corte
+    os.makedirs(parquet_folder, exist_ok=True)
+    _fecha_corte = escribir_fecha_corte(parquet_folder, year)
+    _pe.fijar_fecha_corte(_fecha_corte)
+    print(f"Fecha de corte: {_fecha_corte} (1 de mayo del anyo siguiente a {year})")
     ram_gb = ram_total_gb()
     hilos = threads_optimos(ram_gb)
     print(f"RAM detectada: {ram_gb:.1f} GB -> hilos DuckDB={hilos}"

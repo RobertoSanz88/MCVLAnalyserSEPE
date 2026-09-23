@@ -20,6 +20,7 @@ probar la v2.0, la carpeta que hubiera dejado guardada esa version anterior
 la carpeta).
 """
 
+import datetime
 import json
 import sys
 from pathlib import Path
@@ -92,7 +93,38 @@ def _pedir_carpeta_parquet() -> Path:
 # (afecta a columnas ya calculadas por el ETL, no solo a la app).
 # 2026-09-21 (decision explicita del usuario): 2025-06-01 -> 2025-05-01. La ultima
 # baja real de la muestra es del 30-04-2025, luego se extrajo el 1-05.
+# 2026-09-23 (decision explicita del usuario): la fecha de corte de una MCVL es el 1 de mayo del
+# anyo SIGUIENTE al de la edicion (edicion 2024 -> 2025-05-01, edicion 2025 -> 2026-05-01). El ETL
+# la calcula a partir de la casilla "Anyo" y la deja escrita en FICHERO_FECHA_CORTE dentro de la
+# carpeta de Parquet, para que la app (otro proceso, a veces otro PC) use SIEMPRE la misma que se
+# uso al construirlos. Un Parquet sin ese fichero (construido antes de este cambio) usa
+# FECHA_CORTE, que es la de la edicion 2024. Verificar contra las ultimas altas/bajas reales de
+# cada edicion nueva: la formula es una convencion, no un dato.
 FECHA_CORTE = "2025-05-01"
+FICHERO_FECHA_CORTE = "fecha_corte.txt"
+
+
+def fecha_corte_para_anio(anio) -> str:
+    """Fecha de corte (ISO) de la edicion de MCVL 'anio': 1 de mayo del anyo siguiente."""
+    return f"{int(anio) + 1}-05-01"
+
+
+def escribir_fecha_corte(parquet_dir, anio) -> str:
+    """Escribe fecha_corte.txt junto a los Parquet (lo llama el ETL) y devuelve la fecha."""
+    iso = fecha_corte_para_anio(anio)
+    Path(parquet_dir, FICHERO_FECHA_CORTE).write_text(iso + "\n", encoding="utf-8")
+    return iso
+
+
+def leer_fecha_corte(parquet_dir) -> str:
+    """Fecha de corte de los Parquet de 'parquet_dir': la de fecha_corte.txt, o FECHA_CORTE
+    (edicion 2024) si no existe o no es valida."""
+    try:
+        texto = Path(parquet_dir, FICHERO_FECHA_CORTE).read_text(encoding="utf-8").strip()
+        datetime.date.fromisoformat(texto)
+        return texto
+    except (OSError, ValueError):
+        return FECHA_CORTE
 
 PUERTO_POR_DEFECTO = 8000
 

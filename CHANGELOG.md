@@ -8,6 +8,15 @@
   a `Pensionista`. `Ocupado_y_pensionista` no cambia: trabajar y cobrar jubilación a la vez es una
   situación real (jubilación activa). **Cambian 54.568 personas** (53.571 `Parado_LD_y_pensionista`
   + 997 `Parado_NoLD_y_pensionista` → `Pensionista`); nadie más se mueve.
+- **Preparado para procesar otra edición de la MCVL (p. ej. la 2025).** (1) Las columnas con el
+  año en el nombre (`ingresos_*_AAAA`, `retenciones_irpf_AAAA`, `Cobra_pension_AAAA/A`) ya no
+  están escritas a mano con "2024" en el ETL ni en `app/db.py`: se detectan por patrón, para
+  cualquier año. Antes, con otro año, el ETL las descartaba en silencio y la app no las veía.
+  (2) La fecha de corte pasa a ser el 1 de mayo del año siguiente al de la casilla "Año" del ETL
+  (2024 -> 2025-05-01, 2025 -> 2026-05-01); el ETL la deja en `fecha_corte.txt` junto a los
+  Parquet y la app la lee de ahí. Un Parquet sin ese fichero usa 2025-05-01 (edición 2024), así
+  que con 2024 no cambia nada. Comprobar con los datos reales de cada edición nueva que esa
+  fecha encaja con las últimas altas/bajas.
 - **`Parado_LD_y_pensionista` y `Parado_NoLD_y_pensionista` se renombran a
   `Parado_LD_pension_no_jubilacion` y `Parado_NoLD_pension_no_jubilacion`.** Tras el cambio
   anterior, estas dos categorías ya nunca incluyen jubilación (solo incapacidad, viudedad,

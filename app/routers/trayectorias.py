@@ -17,7 +17,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from pydantic import BaseModel
 
-from config import FECHA_CORTE as FECHA_CORTE_ISO
+from app.db import PARQUET_DIR
+from config import leer_fecha_corte
 from etl import reg_cotizacion_agrupado, tipo_contrato_claves_sucesoras
 from app.routers.colectivos import (
     GRUPO_SIN_FILTRO,
@@ -26,6 +27,9 @@ from app.routers.colectivos import (
     calcular_condiciones_subgrupos,
     condiciones_sin_filtro,
 )
+
+# Fecha de corte de los Parquet cargados (fecha_corte.txt junto a ellos; ver config.py).
+FECHA_CORTE_ISO = leer_fecha_corte(PARQUET_DIR)
 
 router = APIRouter()
 # Ver comentario equivalente en colectivos.py: ruta relativa al fichero, no al CWD.

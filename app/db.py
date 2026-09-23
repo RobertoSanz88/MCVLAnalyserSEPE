@@ -6,6 +6,8 @@ snake_case. El resto de la app (routers/, etc.) debe consultar siempre
 estas vistas y usar los nombres limpios, nunca los crudos.
 """
 
+import re
+
 import duckdb
 
 from config import get_parquet_dir
@@ -57,20 +59,12 @@ TABLES = {
             "fecha_ultima_baja": "fecha_ultima_baja",
             "Fecha_inicio_ultima_racha_sin_empleo": "fecha_inicio_ultima_racha_sin_empleo",
             "Pension_actual": "pension_actual",
-            "Cobra_pension_2024/5": "cobra_pension_2024_5",
+            # Cobra_pension_AAAA/A e ingresos_*/retenciones_irpf con el anyo en el nombre: NO se
+            # listan aqui con un anyo fijo (2026-09-23, decision explicita del usuario) - se
+            # detectan por patron en get_connection() (_columnas_fiscales_pension), para
+            # funcionar con cualquier anyo de MCVL sin tocar este fichero cada vez.
             "Pension_todas_cobradas": "pension_todas_cobradas",
             "Discap_pension": "discap_pension",
-            # v2.2: Ingresos_bruto_anual_2024 pasa a llamarse ingresos_bruto_total_2024 (mismo
-            # valor). Se mapean los dos nombres crudos al mismo nombre limpio: cada Parquet trae
-            # solo uno de los dos, asi que la app funciona con el ETL nuevo y con el anterior.
-            "Ingresos_bruto_anual_2024": "ingresos_bruto_total_2024",
-            "ingresos_bruto_total_2024": "ingresos_bruto_total_2024",
-            "ingresos_sueldo_2024": "ingresos_sueldo_2024",
-            "ingresos_pension_2024": "ingresos_pension_2024",
-            "ingresos_prestacion_2024": "ingresos_prestacion_2024",
-            "ingresos_actividad_2024": "ingresos_actividad_2024",
-            "ingresos_otras_exentas_2024": "ingresos_otras_exentas_2024",
-            "retenciones_irpf_2024": "retenciones_irpf_2024",
             "clave_subclave_ppal": "clave_subclave_ppal",
             "clave_subclave_todas_cobradas": "clave_subclave_todas_cobradas",
             "Prov_fiscal_actual": "prov_fiscal_actual",
@@ -193,10 +187,33 @@ def _quote(identifier: str) -> str:
 # siendo obligatorias: si faltan, el error debe verse.
 COLUMNAS_OPCIONALES = {
     "prov_resid_habitual", "edad_fallecimiento", "ha_fallecido",
-    "Ingresos_bruto_anual_2024", "ingresos_bruto_total_2024", "ingresos_sueldo_2024", "ingresos_pension_2024",
-    "ingresos_prestacion_2024", "ingresos_actividad_2024", "ingresos_otras_exentas_2024",
-    "retenciones_irpf_2024", "clave_subclave_ppal", "clave_subclave_todas_cobradas",
+    "clave_subclave_ppal", "clave_subclave_todas_cobradas",
 }
+
+# Columnas fiscales/de pension con el anyo de la MCVL grabado en el propio nombre (2026-09-23,
+# decision explicita del usuario): antes se listaban con "2024" fijo en TABLES y en
+# COLUMNAS_OPCIONALES, asi que un Parquet de otro anyo (p.ej. la muestra 2025) no las mostraba
+# en la app - desaparecian sin ningun aviso. Se detectan aqui por patron sobre las columnas
+# REALES del Parquet, para cualquier anyo (y si no existen ninguna, como en un Parquet anterior
+# a la v2.2, sencillamente no se anyade nada - mismo comportamiento "opcional" de antes).
+_PATRON_INGRESOS_RETENCIONES = re.compile(r"^(ingresos_\w+|retenciones_irpf)_\d{4}$")
+_PATRON_COBRA_PENSION = re.compile(r"^Cobra_pension_(\d{4})/(\d)$")
+_PATRON_INGRESOS_LEGACY = re.compile(r"^Ingresos_bruto_anual_(\d{4})$")
+
+
+def _columnas_fiscales_pension(existentes: set) -> dict:
+    extra = {}
+    for raw in existentes:
+        if _PATRON_INGRESOS_RETENCIONES.match(raw):
+            extra[raw] = raw  # ya en snake_case, mismo nombre crudo y limpio
+        elif (m := _PATRON_COBRA_PENSION.match(raw)):
+            extra[raw] = f"cobra_pension_{m.group(1)}_{m.group(2)}"
+        elif (m := _PATRON_INGRESOS_LEGACY.match(raw)):
+            # v2.2: Ingresos_bruto_anual_AAAA pasaba a llamarse ingresos_bruto_total_AAAA (mismo
+            # valor, solo el nombre) - se mapea al nombre limpio nuevo tambien para un Parquet
+            # generado con el ETL anterior a ese cambio.
+            extra[raw] = f"ingresos_bruto_total_{m.group(1)}"
+    return extra
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
@@ -215,12 +232,17 @@ def get_connection() -> duckdb.DuckDBPyConnection:
         # 1.5.5 de este entorno de desarrollo (que no lo reproduce). Requiere
         # duckdb>=1.5.5 (ver requirements.txt) para evitarlo aunque alguien
         # quite esta cualificacion sin darse cuenta.
+        # DESCRIBE incondicional (no solo si hay columnas opcionales declaradas, 2026-09-23):
+        # hace falta tambien para detectar las fiscales/de pension por patron (ver
+        # _columnas_fiscales_pension) en la vista "personas" - coste minimo, es solo metadatos.
+        existentes = {
+            fila[0] for fila in con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{parquet_path.as_posix()}')"
+            ).fetchall()
+        }
+        columns = dict(columns)
+        columns.update(_columnas_fiscales_pension(existentes))
         if COLUMNAS_OPCIONALES & columns.keys():
-            existentes = {
-                fila[0] for fila in con.execute(
-                    f"DESCRIBE SELECT * FROM read_parquet('{parquet_path.as_posix()}')"
-                ).fetchall()
-            }
             columns = {raw: clean for raw, clean in columns.items()
                        if raw in existentes or raw not in COLUMNAS_OPCIONALES}
         select_list = ", ".join(

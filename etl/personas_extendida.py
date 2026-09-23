@@ -29,6 +29,16 @@ CERO_DIAS = pd.Timedelta(days=0)
 FECHA_CORTE = pd.to_datetime(_FECHA_CORTE_ISO)
 
 
+def fijar_fecha_corte(iso):
+    """Cambia la fecha de corte de todo este modulo (2026-09-23): la calcula ejecutar_paso.py a
+    partir de la casilla "Anyo" (1 de mayo del anyo siguiente, ver config.fecha_corte_para_anio).
+    Las funciones leen estos globales al ejecutarse, no al importarse, asi que basta con
+    llamarla antes de lanzar cualquier paso."""
+    global _FECHA_CORTE_ISO, FECHA_CORTE
+    _FECHA_CORTE_ISO = iso
+    FECHA_CORTE = pd.to_datetime(iso)
+
+
 def _ruta(parquet_folder, nombre_parquet):
     return os.path.join(parquet_folder, nombre_parquet)
 
@@ -1302,16 +1312,36 @@ NUEVO_ORDEN = [
     "Tipo_Contr_ppal_Agrupado", "T_tot_tipo_contrato_ppal",
     "Prov_trabajo_ppal", "t_tot_prov_ppal",
     "Act_econ_ppal", "t_tot_act_econ_ppal",
-    "ingresos_bruto_total_2024", "ingresos_sueldo_2024", "ingresos_pension_2024", "ingresos_prestacion_2024",
-    "ingresos_actividad_2024", "ingresos_otras_exentas_2024", "retenciones_irpf_2024",
+    # Las columnas fiscales/de pension con el anyo grabado en el propio nombre (ingresos_*_AAAA,
+    # retenciones_irpf_AAAA, Cobra_pension_AAAA/A) NO se listan aqui con un anyo fijo (2026-09-23,
+    # decision explicita del usuario): antes decian literalmente "2024", asi que procesar
+    # cualquier otro anyo las descartaba en silencio de la tabla final (solo quedaba un AVISO por
+    # consola, sin frenar la ejecucion). Se detectan por patron justo antes de seleccionar las
+    # columnas finales (ver mas abajo, _columnas_fiscales_pension) y se insertan aqui mismo.
     "clave_subclave_ppal", "clave_subclave_todas_cobradas", "Prov_fiscal_actual",
     "Discap_fiscal", "Discap_afiliacion", "Discap_pension",
     "Pension_todas_cobradas",
-    "Pension_actual", "Cobra_pension_2024/5",
+    "Pension_actual",
     "fecha_ultima_baja", "Situacion_actual_afiliacion", "Situacion_Paro_Ocupacion",
     "Fecha_inicio_ultima_racha_sin_empleo", "duracion_actual_sin_empleo",
     "causa_baja_mas_comun", "causas_baja_distintas",
 ]
+
+# Patrones de las columnas fiscales/de pension con el anyo grabado en el nombre (ver comentario
+# en NUEVO_ORDEN). Compartido con app/db.py conceptualmente (alli se repite el mismo criterio,
+# sobre el Parquet ya generado, para reconocerlas sin tener que escribir el anyo a mano).
+_PATRON_INGRESOS_RETENCIONES = re.compile(r"^(ingresos_\w+|retenciones_irpf)_\d{4}$")
+_PATRON_COBRA_PENSION = re.compile(r"^Cobra_pension_\d{4}/\d$")
+_PATRON_INGRESOS_LEGACY = re.compile(r"^Ingresos_bruto_anual_\d{4}$")
+
+
+def _columnas_fiscales_pension_presentes(columnas):
+    """Devuelve, de entre 'columnas' (las de df en Grupo H), las que son fiscales/de pension con
+    el anyo en el nombre - para cualquier anyo, no solo 2024. Orden estable: ingresos/retenciones
+    primero (alfabetico), Cobra_pension al final (va justo despues de Pension_actual)."""
+    ingresos = sorted(c for c in columnas if _PATRON_INGRESOS_RETENCIONES.match(c) or _PATRON_INGRESOS_LEGACY.match(c))
+    cobra_pension = sorted(c for c in columnas if _PATRON_COBRA_PENSION.match(c))
+    return ingresos, cobra_pension
 
 
 def _codificar_domicilio(codigo, provincias_dict):
@@ -1571,7 +1601,13 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     # una (nunca anyade ni quita filas), asi que las categorias resultantes
     # siguen siendo mutuamente excluyentes y su suma sigue dando el total
     # exacto de personas - condicion explicita del usuario.
-    cobra_pension = df["Cobra_pension_2024/5"] == "SI"
+    # Nombre de columna independiente del anyo (2026-09-23, decision explicita del usuario,
+    # mismo motivo que NUEVO_ORDEN mas abajo): antes decia literalmente "Cobra_pension_2024/5",
+    # asi que procesar un anyo distinto de 2024 reventaba aqui con KeyError.
+    _, _col_cobra_pension_detectada = _columnas_fiscales_pension_presentes(df.columns)
+    if not _col_cobra_pension_detectada:
+        raise KeyError("No se encuentra ninguna columna Cobra_pension_AAAA/A en df - revisar Grupo E (fusionar_grupo_e)")
+    cobra_pension = df[_col_cobra_pension_detectada[0]] == "SI"
 
     # Jubilacion excluida de Parado_*_y_pensionista (2026-09-23, decision explicita del usuario,
     # matiz sobre la decision de arriba que unifico en Cobra_pension_2024/5 para todo tipo de
@@ -1833,9 +1869,24 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     for columna in ["Causa_Baja_Trab_Ppal", "causa_ult_baja", "causa_baja_mas_comun"]:
         df[columna] = _decodificar_causa_baja(df[columna])
 
-    # Reordenar y seleccionar las columnas finales
-    columnas_presentes = [c for c in NUEVO_ORDEN if c in df.columns]
-    columnas_faltantes = [c for c in NUEVO_ORDEN if c not in df.columns]
+    # Reordenar y seleccionar las columnas finales. Las fiscales/de pension con el anyo en el
+    # nombre (ver NUEVO_ORDEN) se insertan aqui, detectadas por patron sobre las columnas reales
+    # de df - no estan en NUEVO_ORDEN con un anyo fijo, asi que se anyaden justo despues de
+    # "t_tot_act_econ_ppal" (ingresos/retenciones) y "Pension_actual" (Cobra_pension), que es
+    # donde vivian antes con el anyo escrito a mano.
+    _ingresos_detectados, _cobra_pension_detectada = _columnas_fiscales_pension_presentes(df.columns)
+    orden_final = []
+    for c in NUEVO_ORDEN:
+        orden_final.append(c)
+        if c == "t_tot_act_econ_ppal":
+            orden_final.extend(_ingresos_detectados)
+        elif c == "Pension_actual":
+            orden_final.extend(_cobra_pension_detectada)
+    if _ingresos_detectados or _cobra_pension_detectada:
+        print(f"Columnas fiscales/de pension detectadas por patron: {_ingresos_detectados + _cobra_pension_detectada}")
+
+    columnas_presentes = [c for c in orden_final if c in df.columns]
+    columnas_faltantes = [c for c in orden_final if c not in df.columns]
     if columnas_faltantes:
         print(f"AVISO: columnas del esquema objetivo que todavia no existen en df: {columnas_faltantes}")
     df = df[columnas_presentes]
