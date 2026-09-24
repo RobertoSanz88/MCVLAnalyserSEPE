@@ -35,6 +35,14 @@ reglas = [r for r in ws.iter_rows(min_row=2, values_only=True)
           if r[0] and r[0].startswith(bloque + "-") and desde <= int(r[0].split("-")[1]) <= hasta]
 
 con = get_connection()
+# Tabla auxiliar para las reglas del grupo G08 (2026-09-24, decision explicita del usuario): personas
+# cuyos episodios de afiliacion son TODOS de prestacion/subsidio (TRL 700-799) o TRL 400, sin ningun
+# episodio de empleo real. Es dato de origen (p. ej. agrarios con trabajo temporal mal registrado),
+# no un fallo del ETL: sus campos de empleo quedan a NULL a proposito, asi que esas reglas las excluyen.
+if any("solo_prestaciones" in (r[8] or "") for r in reglas):
+    con.execute("""CREATE TEMP TABLE solo_prestaciones AS
+        SELECT ipf FROM afiliacion GROUP BY ipf
+        HAVING bool_and(COALESCE(trl >= 700 AND trl < 800, FALSE) OR COALESCE(trl = 400, FALSE))""")
 total = con.execute("SELECT COUNT(*) FROM personas").fetchone()[0]
 filas, t_bloque = [], time.time()
 for r in reglas:
