@@ -96,6 +96,14 @@ def ejecutar(accion, year, raw_root, parquet_folder, borrar_txt, provincias_csv,
         fase1b_tramos_fusionados_duckdb(con, parquet_folder)
         _borrar_optimizada(parquet_folder, "afiliacion")
 
+    elif accion == "tramos":
+        # Solo la fusion de tramos (Paso 2, tabla_afiliacion_tramos.parquet) sobre la
+        # tabla_afiliacion_extendida.parquet ya existente (2026-09-24): sin releer los TXT ni recalcular la
+        # Fase 1. Para regenerarlos tras un arreglo de fase1b_tramos_fusionados_duckdb; despues hay que repetir
+        # "Personas" y el boton final ("Construir tabla de personas extendida") porque los T_total_* salen de aqui.
+        fase1b_tramos_fusionados_duckdb(con, parquet_folder)
+        print("tabla_afiliacion_tramos.parquet regenerada")
+
     elif accion == "todas":
         for sub in TODAS_LAS_TABLAS:
             print(f"\n{'#' * 80}\n# {sub.upper()}\n{'#' * 80}")
