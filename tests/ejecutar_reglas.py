@@ -43,6 +43,11 @@ if any("solo_prestaciones" in (r[8] or "") for r in reglas):
     con.execute("""CREATE TEMP TABLE solo_prestaciones AS
         SELECT ipf FROM afiliacion GROUP BY ipf
         HAVING bool_and(COALESCE(trl >= 700 AND trl < 800, FALSE) OR COALESCE(trl = 400, FALSE))""")
+# Recuento independiente desde Afiliacion para C-259 (2026-09-24): causas de baja distintas entre TODOS los
+# episodios de la persona (incluidas prestaciones), el mismo universo que causas_baja_distintas.
+if any("causas_por_persona" in (r[8] or "") for r in reglas):
+    con.execute("""CREATE TEMP TABLE causas_por_persona AS
+        SELECT ipf, COUNT(DISTINCT causa_baja_afil) AS n FROM afiliacion GROUP BY ipf""")
 total = con.execute("SELECT COUNT(*) FROM personas").fetchone()[0]
 filas, t_bloque = [], time.time()
 for r in reglas:
