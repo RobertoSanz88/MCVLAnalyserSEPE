@@ -19,7 +19,7 @@ from datetime import datetime
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
 from openpyxl import load_workbook
-from app.db import get_connection
+from app.db import get_connection, PARQUET_DIR
 
 bloque = sys.argv[1].upper()
 desde = int(sys.argv[2]) if len(sys.argv) > 2 else 1
@@ -43,6 +43,14 @@ if any("solo_prestaciones" in (r[8] or "") for r in reglas):
     con.execute("""CREATE TEMP TABLE solo_prestaciones AS
         SELECT ipf FROM afiliacion GROUP BY ipf
         HAVING bool_and(COALESCE(trl >= 700 AND trl < 800, FALSE) OR COALESCE(trl = 400, FALSE))""")
+# Personas con alguna pension de orfandad VITALICIA (2026-09-24, C-153): segun la guia MCVL (4.030) es la
+# orfandad de quien tiene incapacidad permanente reconocida, que no tiene limite de edad (art. 224 LGSS).
+# La vista "pensiones" de app/db.py no expone esa columna, asi que se lee directamente del Parquet.
+if any("orfandad_vitalicia" in (r[8] or "") for r in reglas):
+    _pens = (PARQUET_DIR / "tabla_pensiones_extendida.parquet").as_posix()
+    con.execute(f"""CREATE TEMP TABLE orfandad_vitalicia AS
+        SELECT DISTINCT "01 IPF" AS ipf FROM read_parquet('{_pens}')
+        WHERE "Tipo_pension" = 'Orfandad' AND "30 PREST_VITALICIA (ORFANDAD Y VIUDEDAD)" = 2""")
 # Recuento independiente desde Afiliacion para C-259 (2026-09-24): causas de baja distintas entre TODOS los
 # episodios de la persona (incluidas prestaciones), el mismo universo que causas_baja_distintas.
 if any("causas_por_persona" in (r[8] or "") for r in reglas):
