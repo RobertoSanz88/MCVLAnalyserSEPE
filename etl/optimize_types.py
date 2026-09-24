@@ -15,6 +15,10 @@ import warnings
 import numpy as np
 import pandas as pd
 
+# numexpr desactivado (2026-09-24): fallaba de forma intermitente en el PC corporativo dejando columnas
+# enteras a 0 en operaciones de mas de 1 millon de filas. Ver el comentario de etl/personas_extendida.py.
+pd.set_option("compute.use_numexpr", False)
+
 from etl.recursos import chunksize_optimo
 
 # view_name -> (nombre, plantillas de fichero, columnas, parquet de salida)

@@ -15,6 +15,13 @@ import re
 import numpy as np
 import pandas as pd
 
+# numexpr desactivado (2026-09-24): con numexpr instalado (PC corporativo: numexpr 2.14.1 + numpy 1.26.4),
+# pandas lo usa solo en operaciones de mas de 1 millon de filas (aqui, 1,36 M) y fallaba de forma
+# intermitente (2 de 200 repeticiones de x*100/365.25 sobre 1,4 M floats; 0 de 200 sin numexpr), dejando
+# la columna entera a 0 - asi salieron a 0 %T_total_DESEMPLEO, T_total_EMPLEO y Cotizado_anual_promedio en
+# regeneraciones distintas, con el mismo codigo y datos que sanos en otro PC sin numexpr.
+pd.set_option("compute.use_numexpr", False)
+
 from config import FECHA_CORTE as _FECHA_CORTE_ISO
 from etl import reg_cotizacion_agrupado
 from etl.tipo_contrato_claves_sucesoras import (
