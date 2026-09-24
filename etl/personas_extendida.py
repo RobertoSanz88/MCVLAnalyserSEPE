@@ -1834,13 +1834,14 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     cnae_df = pd.read_csv(cnae_dict_path, sep=";", encoding="utf-8", dtype={"codigo": str})
     cnae_3d_dict = dict(zip(cnae_df["codigo"], cnae_df["descripcion"]))
 
-    # Codigos 53 y 56 de los digitos 5-6 del CCC_2 (2026-09-24, decision explicita del usuario): el 100 %
-    # de sus episodios (14.169) son del Regimen Especial del Mar (08xx), con domicilio en A Coruna o
-    # Pontevedra - no son un error sino un codigo especial de las cuentas del Mar. Se etiquetan "MAR" como
-    # una provincia mas. SOLO aqui, no en provincias_dict.csv: ese diccionario tambien decodifica
-    # Prov_fiscal_actual, donde el 53 es otro codigo (1.564 personas) que NO es el Mar.
-    provincias_ccc = {**provincias_dict, 53: "MAR", 56: "MAR"}
-    df["Prov_trabajo_ppal"] = df["Prov_trabajo_ppal"].map(provincias_ccc).fillna("NO CONSTA").astype("category")
+    # provincias_dict.csv es la codificacion COMUN de todas las variables de provincia (2026-09-24, decision
+    # explicita del usuario): ademas de 01-52 lleva 53 Isla de La Palma (Prov_fiscal_actual, modelo 190), 56 Mar
+    # (cuentas del Regimen del Mar en A Coruna/Pontevedra: el 100 % de sus episodios son 08xx), 66 Extranjero
+    # (nacidos en el extranjero, guia MCVL) y 98 Extranjero (residencia fiscal en el extranjero, modelo 190).
+    # En el CCC (Prov_trabajo_ppal) el 53 tambien es del Mar (79 episodios, 1 persona con 53 como provincia ganadora):
+    # aqui NO es Isla de La Palma, asi que se pasa al 56 antes de decodificar.
+    df["Prov_trabajo_ppal"] = df["Prov_trabajo_ppal"].where(df["Prov_trabajo_ppal"] != 53, 56)
+    df["Prov_trabajo_ppal"] = df["Prov_trabajo_ppal"].map(provincias_dict).fillna("NO CONSTA").astype("category")
 
     # 05 PROV_NACIMIENTO / 06 PROV_1a_AFILIACION / Prov_fiscal_actual (2026-09-08, decision
     # explicita del usuario tras detectar la inconsistencia en la interfaz: solo
