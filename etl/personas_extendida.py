@@ -206,8 +206,9 @@ def fase1b_tramos_fusionados_duckdb(
             CASE WHEN COALESCE("15 TRL" >= 700 AND "15 TRL" < 800, FALSE) THEN 'DESEMPLEO'
                  ELSE 'EMPLEO' END AS categoria,
             "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta,
-            "Baja_modificada" AS fecha_baja
-        FROM read_parquet('{afiliacion}')
+            "Baja_modificada" AS fecha_baja,
+            file_row_number AS rn
+        FROM read_parquet('{afiliacion}', file_row_number=true)
         -- TRL 400 fuera de la fusion: ni empleo ni desempleo (misma peculiaridad que en Fase 1)
         WHERE NOT COALESCE("15 TRL" = 400, FALSE)
           -- episodios con duracion bruta negativa (dato erroneo, ver DURACION_EMPLEO en Fase 1)
@@ -215,11 +216,17 @@ def fase1b_tramos_fusionados_duckdb(
           AND "Baja_modificada" >= "06 FECHA_ALTA_REAL_AFIL"
     """)
 
+    # ORDEN TOTAL en las dos ventanas siguientes (2026-09-24): con "ORDER BY fecha_alta" a secas, episodios de
+    # la misma persona y categoria que empiezan el mismo dia quedaban en un orden no fijado, y cada una de
+    # las dos ventanas podia ordenarlos distinto - la fusion salia distinta entre dos ejecuciones identicas
+    # (5.001 de 1.313.883 personas en el PC corporativo, hasta 44 anyos de diferencia) y en 159-254 personas
+    # un episodio de empleo mas largo que su EMPLEO+MIXTO (detectado por la regla C-265). rn = numero de fila
+    # del fichero (file_row_number) desempata episodios identicos. Mismo cambio en _sql_categoria_ppal_fusionada.
     con.execute("""
         CREATE OR REPLACE VIEW _tramos_max_anterior AS
         SELECT *,
             MAX(fecha_baja) OVER (
-                PARTITION BY ipf, categoria ORDER BY fecha_alta
+                PARTITION BY ipf, categoria ORDER BY fecha_alta, fecha_baja, rn
                 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
             ) AS _max_baja_anterior
         FROM _tramos_episodios
@@ -236,7 +243,7 @@ def fase1b_tramos_fusionados_duckdb(
                          OR date_diff('day', _max_baja_anterior, fecha_alta) > 1
                     THEN 1 ELSE 0
                 END) OVER (
-                PARTITION BY ipf, categoria ORDER BY fecha_alta
+                PARTITION BY ipf, categoria ORDER BY fecha_alta, fecha_baja, rn
                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             ) AS _grupo_id
         FROM _tramos_max_anterior
@@ -335,8 +342,9 @@ def _sql_categoria_ppal_fusionada(afiliacion, categoria_expr, filtro_extra="TRUE
     return f"""
         WITH extraido AS (
             SELECT "01 IPF" AS ipf, ({categoria_expr}) AS val,
-                   "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta, "Baja_modificada" AS fecha_baja
-            FROM read_parquet('{afiliacion}')
+                   "06 FECHA_ALTA_REAL_AFIL" AS fecha_alta, "Baja_modificada" AS fecha_baja,
+                   file_row_number AS rn
+            FROM read_parquet('{afiliacion}', file_row_number=true)
             WHERE "DURACION_EMPLEO" IS NOT NULL AND "DURACION_EMPLEO" != 0
               AND ({filtro_extra})
               AND "Baja_modificada" >= "06 FECHA_ALTA_REAL_AFIL"
@@ -344,7 +352,7 @@ def _sql_categoria_ppal_fusionada(afiliacion, categoria_expr, filtro_extra="TRUE
             SELECT * FROM extraido WHERE val IS NOT NULL
         ), _max_anterior AS (
             SELECT *, MAX(fecha_baja) OVER (
-                PARTITION BY ipf, val ORDER BY fecha_alta
+                PARTITION BY ipf, val ORDER BY fecha_alta, fecha_baja, rn
                 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
             ) AS _max_baja_ant
             FROM _extraido_ok
@@ -352,7 +360,7 @@ def _sql_categoria_ppal_fusionada(afiliacion, categoria_expr, filtro_extra="TRUE
             SELECT *, SUM(CASE
                     WHEN _max_baja_ant IS NULL OR date_diff('day', _max_baja_ant, fecha_alta) > 1
                     THEN 1 ELSE 0 END) OVER (
-                PARTITION BY ipf, val ORDER BY fecha_alta
+                PARTITION BY ipf, val ORDER BY fecha_alta, fecha_baja, rn
                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             ) AS _grupo_id
             FROM _max_anterior
