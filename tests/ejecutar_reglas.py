@@ -43,6 +43,22 @@ if any("solo_prestaciones" in (r[8] or "") for r in reglas):
     con.execute("""CREATE TEMP TABLE solo_prestaciones AS
         SELECT ipf FROM afiliacion GROUP BY ipf
         HAVING bool_and(COALESCE(trl >= 700 AND trl < 800, FALSE) OR COALESCE(trl = 400, FALSE))""")
+# Menores autorizados (2026-09-24, G04, decision explicita del usuario): personas con algun episodio de
+# afiliacion que EMPIEZA antes de la edad minima legal (14 hasta la cohorte 1965, 16 despues) en un regimen o
+# sector donde es plausible que trabajen menores con autorizacion: el Estatuto de los Trabajadores (art. 6.4)
+# permite la intervencion de menores de 16 en espectaculos publicos. Regimen 0112 = Regimen General (Artistas)
+# (guia MCVL 2.001); CNAE 2009 (3 digitos): 59 cine/video/TV, 60 radio y TV, 90 creacion artistica y espectaculos,
+# 93 deportivas/recreativas, 73 publicidad, 781 agencias de colocacion (incluye casting), 742 fotografia,
+# 855 educacion cultural (musica, danza, arte dramatico). CNAE desconocido (0) NO cuenta como plausible.
+if any("menor_autorizado" in (r[8] or "") for r in reglas):
+    con.execute("""CREATE TEMP TABLE menor_autorizado AS
+        SELECT DISTINCT a.ipf
+        FROM afiliacion a JOIN personas p ON p.ipf = a.ipf
+        WHERE date_diff('year', p.fecha_nacimiento, a.fecha_alta_real_afil)
+                < (CASE WHEN year(p.fecha_nacimiento) <= 1965 THEN 14 ELSE 16 END)
+          AND (a.reg_cotizacion = 112
+               OR a.cnae2009_cc // 10 IN (59, 60, 90, 93, 73)
+               OR a.cnae2009_cc IN (781, 742, 855))""")
 # Personas con alguna pension de orfandad VITALICIA (2026-09-24, C-153): segun la guia MCVL (4.030) es la
 # orfandad de quien tiene incapacidad permanente reconocida, que no tiene limite de edad (art. 224 LGSS).
 # La vista "pensiones" de app/db.py no expone esa columna, asi que se lee directamente del Parquet.
