@@ -36,6 +36,15 @@ def _abrir_navegador_cuando_arranque(puerto: int) -> None:
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    if "--elegir-carpeta" in sys.argv:
+        # Subproceso del selector de carpeta (lo lanza config.elegir_carpeta_dialogo): sin importar app.main.
+        from config import _dialogo_carpeta
+
+        pos = sys.argv.index("--elegir-carpeta") + 1
+        titulo = sys.argv[pos] if len(sys.argv) > pos else "Selecciona una carpeta"
+        sys.stdout.reconfigure(encoding="utf-8")
+        print(_dialogo_carpeta(titulo))
+        sys.exit(0)
     # puerto_libre: el puerto PREFERIDO (8000 salvo override en config.json)
     # puede estar ocupado de forma permanente por otro programa (visto en el
     # PC corporativo del usuario, un servicio de firma digital) - antes esto

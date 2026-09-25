@@ -50,36 +50,32 @@ CONFIG_FILE = _archivo_config()
 _FICHERO_CLAVE_PARQUET = "tabla_personas_extendida.parquet"
 
 
-def _pedir_carpeta_parquet() -> Path:
+def _dialogo_carpeta(titulo: str) -> str:
+    """Selector de carpeta nativo. Devuelve '' si se cancela."""
     import tkinter as tk
-    from tkinter import filedialog, messagebox
+    from tkinter import filedialog
 
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
+    try:
+        return filedialog.askdirectory(title=titulo) or ""
+    finally:
+        root.destroy()
 
-    # Bucle: si la carpeta elegida no tiene el fichero clave, se avisa y se
-    # vuelve a preguntar en vez de aceptarla a ciegas (mismo motivo que la
-    # validacion de la carpeta ya guardada en get_parquet_dir - una carpeta
-    # equivocada aqui llevaria al mismo fallo silencioso al arrancar).
-    while True:
-        carpeta = filedialog.askdirectory(
-            title="Selecciona la carpeta con los Parquet de la MCVL"
-        )
-        if not carpeta:
-            root.destroy()
-            raise RuntimeError("No se selecciono ninguna carpeta de Parquet.")
 
-        ruta = Path(carpeta)
-        if (ruta / _FICHERO_CLAVE_PARQUET).exists():
-            root.destroy()
-            return ruta
+def elegir_carpeta_dialogo(titulo: str):
+    """Abre el selector de carpeta en un PROCESO APARTE (el servidor es multihilo y Tk no debe usarse desde
+    un hilo de peticion). En el .exe se relanza el propio ejecutable con --elegir-carpeta (ver run.py)."""
+    import subprocess
 
-        messagebox.showerror(
-            "Carpeta no válida",
-            f"Esa carpeta no tiene {_FICHERO_CLAVE_PARQUET}.\n\n"
-            "Selecciona la carpeta correcta con los Parquet de la MCVL.",
-        )
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--elegir-carpeta", titulo]
+    else:
+        cmd = [sys.executable, str(Path(__file__).resolve().parent / "run.py"), "--elegir-carpeta", titulo]
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=900)
+    lineas = [x for x in r.stdout.splitlines() if x.strip()]
+    return lineas[-1].strip() if r.returncode == 0 and lineas else None
 
 
 # Fecha de corte de la MCVL procesada (edicion 2024): fecha de extraccion de
@@ -330,30 +326,38 @@ def puerto_libre(preferido: int, intentos: int = 20) -> int:
     return preferido
 
 
-def get_parquet_dir() -> Path:
-    """Devuelve la carpeta de Parquet de esta instalacion, pidiendola si hace
-    falta: en el primer arranque, o si la carpeta guardada ya no es valida
-    (se borro/movio, o le falta _FICHERO_CLAVE_PARQUET - p.ej. apunta a una
-    carpeta de otra MCVL sin regenerar). Sin esta validacion, una carpeta
-    guardada que dejo de existir se reutilizaba en silencio y la app fallaba
-    al arrancar sin decir por que (bug real reportado por el usuario,
-    2026-09-11)."""
-    if CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        parquet_dir = Path(data["parquet_dir"])
-        if (parquet_dir / _FICHERO_CLAVE_PARQUET).exists():
-            return parquet_dir
-        # Carpeta guardada invalida - se trata como un primer arranque de
-        # esta instalacion, cae al bloque de abajo y vuelve a preguntar.
+def pedir_primera_muestra(cfg: dict) -> dict:
+    """Primer arranque (sin muestras): pide la carpeta (validada) y, si no tiene fecha_corte.txt, el anio."""
+    import tkinter as tk
+    from tkinter import messagebox, simpledialog
 
-    parquet_dir = _pedir_carpeta_parquet()
+    def _raiz():
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        return root
 
-    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump({"parquet_dir": str(parquet_dir)}, f, ensure_ascii=False, indent=2)
-
-    return parquet_dir
+    while True:
+        carpeta = _dialogo_carpeta("Selecciona la carpeta con los Parquet de la MCVL")
+        if not carpeta:
+            raise RuntimeError("No se selecciono ninguna carpeta de Parquet.")
+        if carpeta_valida(carpeta):
+            break
+        root = _raiz()
+        messagebox.showerror("Carpeta no válida", f"Esa carpeta no tiene {_FICHERO_CLAVE_PARQUET}.\n\n"
+                             "Selecciona la carpeta correcta con los Parquet de la MCVL.")
+        root.destroy()
+    anio = None
+    if leer_anio(carpeta) is None:
+        root = _raiz()
+        anio = simpledialog.askinteger("Año de la muestra", "Esta carpeta no indica el año de la MCVL.\nAño:",
+                                       minvalue=2004, maxvalue=2100, parent=root)
+        root.destroy()
+        if anio is None:
+            raise RuntimeError("No se indico el año de la muestra.")
+    anadir_muestra(cfg, carpeta, anio)
+    guardar_config(cfg)
+    return cfg
 
 
 # Columnas categoricas que se muestran en "Distribucion categorica" del
