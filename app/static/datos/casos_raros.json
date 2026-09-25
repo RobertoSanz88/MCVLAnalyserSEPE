@@ -1,0 +1,818 @@
+[
+ {
+  "id": "A-054",
+  "regla": "Alta_ocupado ⇒ edad ≤ 90",
+  "estado": "Casos raros (reales)",
+  "n": 29,
+  "pct": 0.0021,
+  "explicacion": "CASO RARO REAL. 29 ocupados de más de 90 años (mediana 92,3, máximo 97,4): 26 autónomos (régimen 521) con episodios abiertos desde hace décadas, y 24 con ingresos fiscales en 2024 (mediana 32.832 €): siguen con actividad económica. Son las mismas 29 personas de B-006 (10, sin pensión) y B-022 (19, con pensión)."
+ },
+ {
+  "id": "A-064",
+  "regla": "Asimilado_al_alta_prest_subs ⇒ sin pensión de jubilación (incompatible con prestación/subsidio)",
+  "estado": "Casos raros (reales)",
+  "n": 23,
+  "pct": 0.0017,
+  "explicacion": "CASO RARO. 23 asimilados al alta por prestación o subsidio con jubilación (edad media 79 años): probables episodios antiguos aún abiertos o compatibilidad de jubilación con subsidio. Volumen pequeño."
+ },
+ {
+  "id": "A-072",
+  "regla": "Asimilado_al_alta_subs52 ⇒ sin pensión de jubilación (incompatible con prestación/subsidio)",
+  "estado": "Casos raros (reales)",
+  "n": 20,
+  "pct": 0.0015,
+  "explicacion": "CASO RARO. 20 asimilados al alta por subsidio de mayores con jubilación (edad media 73,5 años): probables episodios antiguos aún abiertos o compatibilidad. Volumen pequeño."
+ },
+ {
+  "id": "A-074",
+  "regla": "Subsidio >52/55 años o fijos discontinuos (guía TRL 753/754) ⇒ edad ≥ 45",
+  "estado": "Casos raros (reales)",
+  "n": 1,
+  "pct": 0.0001,
+  "explicacion": "CASO RARO. 1 persona menor de 45 años con subsidio de mayores: los fijos discontinuos pueden ser más jóvenes (guía TRL 753/754)."
+ },
+ {
+  "id": "A-098",
+  "regla": "Baja_para_pension ⇒ edad ≥ 20",
+  "estado": "Casos raros (reales)",
+  "n": 1,
+  "pct": 0.0001,
+  "explicacion": "CASO RARO REAL. 1 persona de 18,8 años en Baja_para_pension: joven con pensión (posible orfandad); caso aislado."
+ },
+ {
+  "id": "B-006",
+  "regla": "Ocupado ⇒ edad ≤ 90",
+  "estado": "Casos raros (reales)",
+  "n": 10,
+  "pct": 0.0007,
+  "explicacion": "CASO RARO REAL. Mismas personas que A-054 (autónomos de más de 90 años que siguen trabajando): las 10 sin pensión. B-006 + B-022 = las 29 de A-054."
+ },
+ {
+  "id": "B-014",
+  "regla": "Ocupado ⇒ tiene ingresos brutos 2024",
+  "estado": "Casos raros (reales)",
+  "n": 4054,
+  "pct": 0.2983,
+  "explicacion": "CASO RARO REAL. 4.054 ocupados sin ingresos fiscales en 2024 tras excluir territorios forales (la AEAT no tiene sus datos), autónomos, empleados de hogar y empleadores persona física. Residuo: 3.896 con empleador con NIF/CIF, 2.092 empleadores distintos sin concentración; perfil: 44,2 % extranjeros (24 % UE o Reino Unido) frente al 10,5 %, edad mediana 37,3 frente a 45,1 años y 67 % con el episodio abierto desde 2023 frente al 42 %. Hipótesis sin comprobar: extranjeros recientes que tributan como no residentes o desplazados (modelos 296 o 151, no el 190). Ninguno está en la tabla fiscal cruda: no es un fallo del ETL."
+ },
+ {
+  "id": "B-022",
+  "regla": "Ocupado_y_pensionista ⇒ edad ≤ 90",
+  "estado": "Casos raros (reales)",
+  "n": 19,
+  "pct": 0.0014,
+  "explicacion": "CASO RARO REAL. Mismas personas que A-054 (autónomos de más de 90 años que siguen trabajando): las 19 que además cobran pensión (jubilación activa). B-006 + B-022 = las 29 de A-054."
+ },
+ {
+  "id": "B-030",
+  "regla": "Ocupado_y_pensionista ⇒ tiene ingresos brutos 2024",
+  "estado": "Casos raros (reales)",
+  "n": 7,
+  "pct": 0.0005,
+  "explicacion": "CASO RARO REAL. Igual que B-014 (ver su explicación) para Ocupado_y_pensionista: de 1.245 a 7 tras excluir territorios forales, autónomos, empleados de hogar y empleador persona física."
+ },
+ {
+  "id": "B-108",
+  "regla": "Pensionista ⇒ edad ≤ 100",
+  "estado": "Casos raros (reales)",
+  "n": 1048,
+  "pct": 0.0771,
+  "explicacion": "CASO RARO REAL. 1.048 pensionistas de más de 100 años: 366 fallecidos que murieron con más de 100 y 682 vivos con pensión en 2024 (cifra plausible: unos 560 esperables en una muestra del 4 %). 527 tienen jubilación; el resto, viudedad o incapacidad de mayores de 65. Con el corte el 1-5-2025, quien nació entre enero y abril de 1925 tiene entre 100,0 y 100,3 años: parte es efecto del umbral."
+ },
+ {
+  "id": "B-110",
+  "regla": "Parado_LD_pension_no_jubilacion ⇒ edad ≤ 100",
+  "estado": "Casos raros (reales)",
+  "n": 83,
+  "pct": 0.0061,
+  "explicacion": "CASO RARO REAL. 83 personas de más de 100 años en Parado_LD_pension_no_jubilacion (19 fallecidas y 64 vivas) con viudedad o incapacidad, sin jubilación. La etiqueta 'parado' no mira la edad: 76 de las 83 dejaron de trabajar hace una mediana de 40,2 años. Las personas existen; lo raro es la etiqueta."
+ },
+ {
+  "id": "C-071",
+  "regla": "edad_actual_fecha_corte no debería superar 105",
+  "estado": "Casos raros (reales)",
+  "n": 67,
+  "pct": 0.0049,
+  "explicacion": "CASO RARO. 67 personas de más de 105 años (23 fallecidas con esa edad al morir y 44 vivas con pensión), nacidas entre 1913 y 1920: más de lo esperable (unas 15 en una muestra del 4 %); algunas reales y otras con fecha de nacimiento errónea o fallecimiento no comunicado."
+ },
+ {
+  "id": "C-087",
+  "regla": "La racha sin empleo no empieza antes del primer empleo (las prestaciones exigen cotización previa)",
+  "estado": "Casos raros (reales)",
+  "n": 24,
+  "pct": 0.0018,
+  "explicacion": "CASO RARO REAL. 24 personas con la racha sin empleo antes de su primer empleo en Afiliación: cotización previa fuera de la muestra (igual que en G08) o subsidios sin cotización mínima."
+ },
+ {
+  "id": "C-088",
+  "regla": "La racha no empieza antes de 360 días tras el primer empleo (cotización mínima para prestación)",
+  "estado": "Casos raros (reales)",
+  "n": 1088,
+  "pct": 0.0801,
+  "explicacion": "CASO RARO REAL. 1.088 personas con la racha sin empleo a menos de 360 días del primer empleo (mediana 184 días): el 88 % son subsidio o asimilado. Subsidios que no exigen la cotización mínima de la prestación contributiva, o cotización previa fuera de la muestra (igual que en G08)."
+ },
+ {
+  "id": "C-153",
+  "regla": "Orfandad ⇒ edad ≤ 60, salvo orfandad vitalicia (incapacidad permanente reconocida, sin límite de edad)",
+  "estado": "Casos raros (reales)",
+  "n": 12,
+  "pct": 0.0009,
+  "explicacion": "CASO RARO REAL. 12 mujeres de más de 60 años con orfandad no vitalicia, nacidas entre 1946 y 1958, que cobran prestaciones complementarias de mutualidad (10 del régimen 68, Fondo de la Mutualidad de Previsión, y 2 del 38, Mutualidad de Funcionarios), con condiciones propias distintas de la LGSS."
+ },
+ {
+  "id": "C-156",
+  "regla": "Incapacidad>65 ⇒ edad ≥ 65",
+  "estado": "Casos raros (reales)",
+  "n": 2,
+  "pct": 0.0001,
+  "explicacion": "CASO RARO. 2 personas de 54 y 56 años con pensión 'Incapacidad>65' (clave J, que se asigna al cumplir 65 años): clave anticipada o error de origen; caso aislado."
+ },
+ {
+  "id": "C-157",
+  "regla": "No se cobra jubilación e incapacidad a la vez (la incapacidad se convierte en jubilación)",
+  "estado": "Casos raros (reales)",
+  "n": 1108,
+  "pct": 0.0815,
+  "explicacion": "CASO RARO REAL. 1.108 personas con jubilación e incapacidad a la vez: 612 'Incapacidad>65 + Jubilación' y 343 'Incapacidad + Jubilación'; solo 6 tienen SOVI. Posible pluripensión (pensiones de distintos regímenes); no se puede confirmar con los datos."
+ },
+ {
+  "id": "C-168",
+  "regla": "Con ingresos ⇒ edad ≥ 16",
+  "estado": "Casos raros (reales)",
+  "n": 1626,
+  "pct": 0.1196,
+  "explicacion": "CASO RARO REAL. 1.626 personas con ingresos fiscales en 2024 y menos de 16 años: en su mayoría pensiones de orfandad (que constan como ingresos) y menores con sueldo autorizados en espectáculos (art. 6.4 ET). No es un error."
+ },
+ {
+  "id": "C-230",
+  "regla": "R.E. Agrario cuenta ajena ⇒ actividad agraria/forestal/pesquera (CNAE 01-03)",
+  "estado": "Casos raros (reales)",
+  "n": 8906,
+  "pct": 0.6553,
+  "explicacion": "CASO RARO REAL. 8.906 agrarios por cuenta ajena con actividad principal no agraria. Desajuste estructural esperado: el régimen principal y la actividad principal son dos 'ganadores' calculados de forma independiente sobre la misma persona (la actividad puede ser de otro periodo) y no tienen por qué coincidir. Comprobado: la fusión de tramos no lo arregla (solo 3 de 6.000 casos cambian de actividad ganadora). Personas reales con combinaciones poco habituales, no datos erróneos. "
+ },
+ {
+  "id": "C-231",
+  "regla": "R.E. Agrario cuenta propia ⇒ actividad agraria (CNAE 01-03)",
+  "estado": "Casos raros (reales)",
+  "n": 1450,
+  "pct": 0.1067,
+  "explicacion": "CASO RARO REAL. 1.450 del R.E. Agrario cuenta propia con actividad principal no agraria. Desajuste estructural esperado: el régimen principal y la actividad principal son dos 'ganadores' calculados de forma independiente sobre la misma persona (la actividad puede ser de otro periodo) y no tienen por qué coincidir. Comprobado: la fusión de tramos no lo arregla (solo 3 de 6.000 casos cambian de actividad ganadora). Personas reales con combinaciones poco habituales, no datos erróneos. "
+ },
+ {
+  "id": "C-232",
+  "regla": "R.E. Empleados de Hogar ⇒ CNAE 970 (hogares como empleadores)",
+  "estado": "Casos raros (reales)",
+  "n": 2310,
+  "pct": 0.17,
+  "explicacion": "CASO RARO REAL. 2.310 del R.E. Empleados de Hogar con CNAE distinto de 970 (hogares como empleadores). Desajuste estructural esperado: el régimen principal y la actividad principal son dos 'ganadores' calculados de forma independiente sobre la misma persona (la actividad puede ser de otro periodo) y no tienen por qué coincidir. Comprobado: la fusión de tramos no lo arregla (solo 3 de 6.000 casos cambian de actividad ganadora). Personas reales con combinaciones poco habituales, no datos erróneos. "
+ },
+ {
+  "id": "C-233",
+  "regla": "Régimen General (S.E.C. Empleados de Hogar) ⇒ CNAE 970",
+  "estado": "Casos raros (reales)",
+  "n": 23,
+  "pct": 0.0017,
+  "explicacion": "CASO RARO REAL. 23 del Régimen General (S.E.C. Empleados de Hogar) con CNAE distinto de 970. Desajuste estructural esperado: el régimen principal y la actividad principal son dos 'ganadores' calculados de forma independiente sobre la misma persona (la actividad puede ser de otro periodo) y no tienen por qué coincidir. Comprobado: la fusión de tramos no lo arregla (solo 3 de 6.000 casos cambian de actividad ganadora). Personas reales con combinaciones poco habituales, no datos erróneos. "
+ },
+ {
+  "id": "C-234",
+  "regla": "R.E. del Mar ⇒ pesca o transporte marítimo (CNAE 03/50)",
+  "estado": "Casos raros (reales)",
+  "n": 1316,
+  "pct": 0.0968,
+  "explicacion": "CASO RARO REAL. 1.316 del R.E. del Mar con actividad principal distinta de pesca o transporte marítimo (p. ej. hostelería o servicios portuarios). Desajuste estructural esperado: el régimen principal y la actividad principal son dos 'ganadores' calculados de forma independiente sobre la misma persona (la actividad puede ser de otro periodo) y no tienen por qué coincidir. Comprobado: la fusión de tramos no lo arregla (solo 3 de 6.000 casos cambian de actividad ganadora). Personas reales con combinaciones poco habituales, no datos erróneos. "
+ },
+ {
+  "id": "C-235",
+  "regla": "R.E. Minería del Carbón ⇒ CNAE 05 (extracción de carbón)",
+  "estado": "Casos raros (reales)",
+  "n": 112,
+  "pct": 0.0082,
+  "explicacion": "CASO RARO REAL. 112 del R.E. Minería del Carbón con actividad principal distinta de la extracción de carbón. Desajuste estructural esperado: el régimen principal y la actividad principal son dos 'ganadores' calculados de forma independiente sobre la misma persona (la actividad puede ser de otro periodo) y no tienen por qué coincidir. Comprobado: la fusión de tramos no lo arregla (solo 3 de 6.000 casos cambian de actividad ganadora). Personas reales con combinaciones poco habituales, no datos erróneos. "
+ },
+ {
+  "id": "C-239",
+  "regla": "R.E. Agrario cuenta propia (extinguido en 2008) ⇒ ≤ 41,5 años en ese régimen (1967-2008)",
+  "estado": "Casos raros (reales)",
+  "n": 239,
+  "pct": 0.0176,
+  "explicacion": "CASO RARO REAL. 239 personas superan los 41,5 años en el R.E. Agrario cuenta propia (1967-2008, el máximo posible). Probable pluriactividad agraria o cuentas de cotización simultáneas que se cuentan por separado; son personas reales con historias poco habituales."
+ },
+ {
+  "id": "C-251",
+  "regla": "Primer empleo como ingeniero/licenciado (grupo 1) ⇒ edad ≥ 18",
+  "estado": "Casos raros (reales)",
+  "n": 125,
+  "pct": 0.0092,
+  "explicacion": "CASO RARO. 125 personas con primer empleo significativo como ingeniero o licenciado (grupo 1) con menos de 18 años: casos infrecuentes de jóvenes con esa cualificación o grupo mal asignado; no se distingue con los datos."
+ },
+ {
+  "id": "C-309",
+  "regla": "Con prestación por desempleo en 2024 ⇒ ha tenido tiempo de desempleo",
+  "estado": "Casos raros (reales)",
+  "n": 383,
+  "pct": 0.0282,
+  "explicacion": "CASO RARO REAL. 383 personas con prestación por desempleo en 2024 y sin tiempo de desempleo en Afiliación: los subsidios pueden no figurar como desempleo en la tabla de afiliación."
+ },
+ {
+  "id": "C-310",
+  "regla": "Con sueldo en 2024 ⇒ tiene primer empleo en afiliación",
+  "estado": "Casos raros (reales)",
+  "n": 211,
+  "pct": 0.0155,
+  "explicacion": "CASO RARO REAL. 211 personas con sueldo en 2024 y sin primer empleo en Afiliación: los funcionarios de mutualidades (p. ej. MUFACE) no cotizan en el sistema de la MCVL."
+ },
+ {
+  "id": "C-311",
+  "regla": "Con sueldo en 2024 ⇒ la última baja no es anterior a 2024",
+  "estado": "Casos raros (reales)",
+  "n": 3867,
+  "pct": 0.2845,
+  "explicacion": "CASO RARO REAL. 3.867 personas con sueldo en 2024 y última baja anterior a 2024: sueldo mediano de solo 328 €; 2.926 están en Baja_para_pension y 2.168 tienen la baja en 2023. Encaja con finiquitos, atrasos o indemnizaciones pagados después de la baja."
+ },
+ {
+  "id": "C-313",
+  "regla": "Cobra pensión en la tabla de pensiones ⇒ tiene pensión en fiscal (si consta en fiscal)",
+  "estado": "Casos raros (reales)",
+  "n": 2030,
+  "pct": 0.1494,
+  "explicacion": "CASO RARO REAL. 2.030 personas que cobran pensión según la tabla de pensiones y no tienen importe de pensión en fiscal: pensión iniciada en 2025 (cobra_pension_2024/5 incluye 2025) o no declarada en el modelo 190 de 2024."
+ },
+ {
+  "id": "C-338",
+  "regla": "La provincia de residencia coincide con la provincia fiscal",
+  "estado": "Casos raros (reales)",
+  "n": 61583,
+  "pct": 4.5313,
+  "explicacion": "CASO RARO REAL. La provincia de residencia (Padrón) no coincide con la fiscal (domicilio a 31-12-2024) en 61.583 personas (4,5 %): mudanzas y domicilios fiscales sin actualizar. La provincia fiscal 53 (Isla de La Palma) se compara como 38 y el 98 (residencia fiscal en el extranjero) se excluye. 1.354 de las 1.560 con fiscal 53 residen en Santa Cruz de Tenerife, que es su provincia INE."
+ },
+ {
+  "id": "A-042",
+  "regla": "Quien no es Nunca_ha_cotizado tiene t_total_empleo informada",
+  "estado": "Baja calidad de los datos",
+  "n": 7,
+  "pct": 0.0005,
+  "explicacion": "Episodios de 1979-1984 con la fecha de baja anterior a la de alta: la duración de empleo sale nula y arrastra t_total_empleo, el número de altas y el tiempo total. Afecta a 6-9 personas; dato de origen. "
+ },
+ {
+  "id": "A-043",
+  "regla": "Quien no es Nunca_ha_cotizado tiene num_altas_anual_promedio informada",
+  "estado": "Baja calidad de los datos",
+  "n": 9,
+  "pct": 0.0007,
+  "explicacion": "Episodios de 1979-1984 con la fecha de baja anterior a la de alta: la duración de empleo sale nula y arrastra t_total_empleo, el número de altas y el tiempo total. Afecta a 6-9 personas; dato de origen. "
+ },
+ {
+  "id": "A-052",
+  "regla": "Alta_ocupado ⇒ t_total_empleo > 0",
+  "estado": "Baja calidad de los datos",
+  "n": 4,
+  "pct": 0.0003,
+  "explicacion": "4 personas Alta_ocupado sin tiempo de empleo: episodios de 1979-1984 con la baja anterior al alta (duración nula), como G20. Dato de origen."
+ },
+ {
+  "id": "A-078",
+  "regla": "Baja_de_prestacion ⇒ inicio de racha ≤ fecha_ultima_baja",
+  "estado": "Baja calidad de los datos",
+  "n": 4,
+  "pct": 0.0003,
+  "explicacion": "4 personas en Baja_de_prestacion con el inicio de la racha posterior a la última baja: fechas de racha incoherentes con la última baja por episodios solapados; volumen insignificante."
+ },
+ {
+  "id": "A-092",
+  "regla": "Baja_de_actividad ⇒ fecha_ultima_baja ≥ fecha_ini_primer_empleo",
+  "estado": "Baja calidad de los datos",
+  "n": 6,
+  "pct": 0.0004,
+  "explicacion": "Episodios de 1979-1984 con la fecha de baja anterior a la de alta: la duración de empleo sale nula y arrastra t_total_empleo, el número de altas y el tiempo total. Afecta a 6-9 personas; dato de origen. "
+ },
+ {
+  "id": "A-093",
+  "regla": "Baja_de_actividad ⇒ edad ≥ 16",
+  "estado": "Baja calidad de los datos",
+  "n": 287,
+  "pct": 0.0211,
+  "explicacion": "Menores de 16 años actuales con afiliación (287, los mismos en A-093, B-040, B-054, B-070, B-084, C-114 y C-115), nacidos sobre todo desde 2010. De los 262 que además tienen sueldo en 2024, 249 son menores autorizados en espectáculos (art. 6.4 ET); el resto son errores de fecha o afiliaciones de niños sin causa conocida."
+ },
+ {
+  "id": "A-096",
+  "regla": "Baja_para_pension ⇒ cobra pensión en 2024/25",
+  "estado": "Baja calidad de los datos",
+  "n": 2341,
+  "pct": 0.1723,
+  "explicacion": "Desfase temporal entre Afiliación y Pensiones: el 99,8 % de las 2.346 tiene Baja_para_pension con causa 58 (paso a pensionista) y la última baja muy reciente (1.926 en 2025, 415 en 2024), pero la tabla de Pensiones de esta edición aún no recoge esa pensión. Cada columna está bien calculada desde su tabla de origen. "
+ },
+ {
+  "id": "A-097",
+  "regla": "Baja_para_pension ⇒ ha cobrado alguna pensión",
+  "estado": "Baja calidad de los datos",
+  "n": 2315,
+  "pct": 0.1703,
+  "explicacion": "Desfase temporal entre Afiliación y Pensiones: el 99,8 % de las 2.346 tiene Baja_para_pension con causa 58 (paso a pensionista) y la última baja muy reciente (1.926 en 2025, 415 en 2024), pero la tabla de Pensiones de esta edición aún no recoge esa pensión. Cada columna está bien calculada desde su tabla de origen. "
+ },
+ {
+  "id": "A-105",
+  "regla": "Nunca_ha_cotizado ⇒ sin pensión contributiva de jubilación",
+  "estado": "Baja calidad de los datos",
+  "n": 6773,
+  "pct": 0.4984,
+  "explicacion": "Jubilados sin ningún episodio de cotización en Afiliación (6.773), edad mediana 85,8 años: 5.479 tienen pensión SOVI (cotizaciones anteriores a 1967, no recogidas en Afiliación). Cobertura incompleta de origen."
+ },
+ {
+  "id": "A-106",
+  "regla": "Nunca_ha_cotizado ⇒ sin pensión de incapacidad contributiva",
+  "estado": "Baja calidad de los datos",
+  "n": 486,
+  "pct": 0.0358,
+  "explicacion": "Nunca_ha_cotizado con pensión de incapacidad (486), sobre todo 'Incapacidad>65', edad mediana 89 años: su trabajo es anterior a 1967 o está fuera de la MCVL. Cobertura incompleta de origen."
+ },
+ {
+  "id": "B-004",
+  "regla": "Ocupado ⇒ t_total_empleo > 0",
+  "estado": "Baja calidad de los datos",
+  "n": 4,
+  "pct": 0.0003,
+  "explicacion": "4 personas Ocupado sin tiempo de empleo: episodios de 1979-1984 con la baja anterior al alta (duración nula), como G20. Dato de origen."
+ },
+ {
+  "id": "B-012",
+  "regla": "Ocupado ⇒ actividad económica principal conocida",
+  "estado": "Baja calidad de los datos",
+  "n": 548,
+  "pct": 0.0403,
+  "explicacion": "548 ocupados sin actividad económica principal: en su mayoría (521 de 570 entre B-012 y B-028) del régimen general, donde falta el CNAE de la cuenta de cotización; 28 autónomos y 13 empleados de hogar. Dato de origen."
+ },
+ {
+  "id": "B-028",
+  "regla": "Ocupado_y_pensionista ⇒ actividad económica principal conocida",
+  "estado": "Baja calidad de los datos",
+  "n": 22,
+  "pct": 0.0016,
+  "explicacion": "22 ocupados y pensionistas sin actividad económica principal: CNAE de la cuenta de cotización sin informar (ver B-012). Dato de origen."
+ },
+ {
+  "id": "B-040",
+  "regla": "Parado_LD ⇒ edad ≥ 16",
+  "estado": "Baja calidad de los datos",
+  "n": 67,
+  "pct": 0.0049,
+  "explicacion": "Menores de 16 años actuales con afiliación (287, los mismos en A-093, B-040, B-054, B-070, B-084, C-114 y C-115), nacidos sobre todo desde 2010. De los 262 que además tienen sueldo en 2024, 249 son menores autorizados en espectáculos (art. 6.4 ET); el resto son errores de fecha o afiliaciones de niños sin causa conocida."
+ },
+ {
+  "id": "B-054",
+  "regla": "Parado_LD_pension_no_jubilacion ⇒ edad ≥ 16",
+  "estado": "Baja calidad de los datos",
+  "n": 6,
+  "pct": 0.0004,
+  "explicacion": "Menores de 16 años actuales con afiliación (287, los mismos en A-093, B-040, B-054, B-070, B-084, C-114 y C-115), nacidos sobre todo desde 2010. De los 262 que además tienen sueldo en 2024, 249 son menores autorizados en espectáculos (art. 6.4 ET); el resto son errores de fecha o afiliaciones de niños sin causa conocida."
+ },
+ {
+  "id": "B-060",
+  "regla": "Parado_LD_pension_no_jubilacion ⇒ ha trabajado alguna vez (t_total_empleo + t_total_mixto_empl_desempl > 0)",
+  "estado": "Baja calidad de los datos",
+  "n": 8,
+  "pct": 0.0006,
+  "explicacion": "8 personas Parado_LD con pensión no jubilación sin tiempo de empleo (tras excluir a quien solo tiene prestaciones y sumar el tiempo mixto): todas tienen episodios de 1979-1984 con la baja anterior al alta (duración nula), como G20. Dato de origen."
+ },
+ {
+  "id": "B-070",
+  "regla": "Parado_NoLD ⇒ edad ≥ 16",
+  "estado": "Baja calidad de los datos",
+  "n": 212,
+  "pct": 0.0156,
+  "explicacion": "Menores de 16 años actuales con afiliación (287, los mismos en A-093, B-040, B-054, B-070, B-084, C-114 y C-115), nacidos sobre todo desde 2010. De los 262 que además tienen sueldo en 2024, 249 son menores autorizados en espectáculos (art. 6.4 ET); el resto son errores de fecha o afiliaciones de niños sin causa conocida."
+ },
+ {
+  "id": "B-084",
+  "regla": "Parado_NoLD_pension_no_jubilacion ⇒ edad ≥ 16",
+  "estado": "Baja calidad de los datos",
+  "n": 2,
+  "pct": 0.0001,
+  "explicacion": "Menores de 16 años actuales con afiliación (287, los mismos en A-093, B-040, B-054, B-070, B-084, C-114 y C-115), nacidos sobre todo desde 2010. De los 262 que además tienen sueldo en 2024, 249 son menores autorizados en espectáculos (art. 6.4 ET); el resto son errores de fecha o afiliaciones de niños sin causa conocida."
+ },
+ {
+  "id": "B-099",
+  "regla": "Pensionista ⇒ cobra pensión en 2024/25",
+  "estado": "Baja calidad de los datos",
+  "n": 2346,
+  "pct": 0.1726,
+  "explicacion": "Desfase temporal entre Afiliación y Pensiones: el 99,8 % de las 2.346 tiene Baja_para_pension con causa 58 (paso a pensionista) y la última baja muy reciente (1.926 en 2025, 415 en 2024), pero la tabla de Pensiones de esta edición aún no recoge esa pensión. Cada columna está bien calculada desde su tabla de origen. "
+ },
+ {
+  "id": "B-100",
+  "regla": "Pensionista ⇒ pension_actual informada",
+  "estado": "Baja calidad de los datos",
+  "n": 2346,
+  "pct": 0.1726,
+  "explicacion": "Desfase temporal entre Afiliación y Pensiones: el 99,8 % de las 2.346 tiene Baja_para_pension con causa 58 (paso a pensionista) y la última baja muy reciente (1.926 en 2025, 415 en 2024), pero la tabla de Pensiones de esta edición aún no recoge esa pensión. Cada columna está bien calculada desde su tabla de origen. "
+ },
+ {
+  "id": "B-103",
+  "regla": "Pensionista ⇒ sin episodio vigente (fecha_ultima_baja no es 2099)",
+  "estado": "Baja calidad de los datos",
+  "n": 53,
+  "pct": 0.0039,
+  "explicacion": "53 pensionistas con un episodio de afiliación aún abierto (fecha_ultima_baja 2099): pensión reciente con el episodio sin cerrar; mismo origen temporal que el resto de G07 (probable, no comprobado)."
+ },
+ {
+  "id": "B-105",
+  "regla": "Si la categoría implica pensión ⇒ cobra pensión",
+  "estado": "Baja calidad de los datos",
+  "n": 2346,
+  "pct": 0.1726,
+  "explicacion": "Desfase temporal entre Afiliación y Pensiones: el 99,8 % de las 2.346 tiene Baja_para_pension con causa 58 (paso a pensionista) y la última baja muy reciente (1.926 en 2025, 415 en 2024), pero la tabla de Pensiones de esta edición aún no recoge esa pensión. Cada columna está bien calculada desde su tabla de origen. "
+ },
+ {
+  "id": "B-109",
+  "regla": "Parado_LD ⇒ edad ≤ 100",
+  "estado": "Baja calidad de los datos",
+  "n": 2,
+  "pct": 0.0001,
+  "explicacion": "2 personas de más de 100 años en Parado_LD sin pensión: un desempleado de esa edad no es plausible (fecha de nacimiento errónea o registro sin cerrar)."
+ },
+ {
+  "id": "C-051",
+  "regla": "t_tot_reg_ppal no puede superar edad − mínimo legal (+1): no se trabaja antes de la edad mínima legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 17,
+  "pct": 0.0013,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-052",
+  "regla": "t_tot_grupo_ppal no puede superar edad − mínimo legal (+1): no se trabaja antes de la edad mínima legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 4,
+  "pct": 0.0003,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-053",
+  "regla": "t_tot_tipo_contrato_ppal no puede superar edad − mínimo legal (+1): no se trabaja antes de la edad mínima legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 7,
+  "pct": 0.0005,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-054",
+  "regla": "t_tot_prov_ppal no puede superar edad − mínimo legal (+1): no se trabaja antes de la edad mínima legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 16,
+  "pct": 0.0012,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-055",
+  "regla": "t_tot_act_econ_ppal no puede superar edad − mínimo legal (+1): no se trabaja antes de la edad mínima legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 3,
+  "pct": 0.0002,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-056",
+  "regla": "t_total_empleo no puede superar edad − mínimo legal (+1): no se trabaja antes de la edad mínima legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 23,
+  "pct": 0.0017,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-057",
+  "regla": "t_contrato_mas_largo no puede superar edad − mínimo legal (+1): no se trabaja antes de la edad mínima legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 3,
+  "pct": 0.0002,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-058",
+  "regla": "tiempo_total_desde_inicio_vl no puede superar edad − mínimo legal (+1): no se trabaja antes de la edad mínima legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 235,
+  "pct": 0.0173,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-079",
+  "regla": "Primer empleo a la edad mínima legal o más (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 397,
+  "pct": 0.0292,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-080",
+  "regla": "La última baja no es anterior al primer empleo (la guía admite raros errores)",
+  "estado": "Baja calidad de los datos",
+  "n": 6,
+  "pct": 0.0004,
+  "explicacion": "Episodios de 1979-1984 con la fecha de baja anterior a la de alta: la duración de empleo sale nula y arrastra t_total_empleo, el número de altas y el tiempo total. Afecta a 6-9 personas; dato de origen. "
+ },
+ {
+  "id": "C-083",
+  "regla": "Última baja a la edad mínima legal o más (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 5,
+  "pct": 0.0004,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-085",
+  "regla": "Inicio de racha sin empleo a la edad mínima legal o más (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 1,
+  "pct": 0.0001,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-086",
+  "regla": "El inicio de la racha no es posterior a la última baja (si el episodio terminó)",
+  "estado": "Baja calidad de los datos",
+  "n": 4,
+  "pct": 0.0003,
+  "explicacion": "4 personas con el inicio de la racha sin empleo posterior a la última baja: fechas incoherentes por episodios solapados; volumen insignificante."
+ },
+ {
+  "id": "C-095",
+  "regla": "Primer empleo no anterior a 1967 (la guía dice que hay datos desde 1967)",
+  "estado": "Baja calidad de los datos",
+  "n": 19912,
+  "pct": 1.4651,
+  "explicacion": "Primer empleo anterior a 1967 (19.912 personas): la guía de la MCVL dice que los datos de afiliación empiezan en 1967; las fechas anteriores son de origen (posiblemente afiliaciones antiguas cargadas con su fecha real)."
+ },
+ {
+  "id": "C-096",
+  "regla": "Última baja no anterior a 1967 (datos desde 1967, guía 2.008)",
+  "estado": "Baja calidad de los datos",
+  "n": 133,
+  "pct": 0.0098,
+  "explicacion": "Última baja anterior a 1967: la guía de la MCVL dice que los datos de afiliación empiezan en 1967, así que fechas anteriores son de origen (133 personas)."
+ },
+ {
+  "id": "C-097",
+  "regla": "Inicio de racha no anterior a 1967",
+  "estado": "Baja calidad de los datos",
+  "n": 5,
+  "pct": 0.0004,
+  "explicacion": "Inicio de racha sin empleo anterior a 1967 (5 personas): la guía dice que los datos empiezan en 1967; fechas de origen."
+ },
+ {
+  "id": "C-105",
+  "regla": "Primer empleo significativo a la edad mínima legal o más (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 383,
+  "pct": 0.0282,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-106",
+  "regla": "Edad al final del último empleo ≥ mínimo legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 4,
+  "pct": 0.0003,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen."
+ },
+ {
+  "id": "C-107",
+  "regla": "edad − tiempo desde inicio de vida laboral ≥ mínimo legal (14 hasta la cohorte 1965, 16 después)",
+  "estado": "Baja calidad de los datos",
+  "n": 915,
+  "pct": 0.0673,
+  "explicacion": "Empezó a trabajar antes de la edad mínima legal (14 años hasta la cohorte 1965, 16 después; Ley 8/1980) y no en un régimen o sector de menores autorizados (régimen 0112 de artistas, cine/TV, artes, publicidad, deporte, casting: art. 6.4 ET). Del residuo de C-079 (397): 336 tienen el CNAE del primer empleo desconocido, 329 son del régimen general, 150 empezaron con 12-13 años, 133 con 14-15 y 114 con menos de 12. Pueden ser errores de fecha o menores autorizados sin CNAE; con los datos no se distinguen. C-107 sube respecto a antes porque la edad de los fallecidos ya se calcula a su fallecimiento y aflora quien empezó por debajo del mínimo."
+ },
+ {
+  "id": "C-108",
+  "regla": "Edad primer empleo + su duración ≤ edad actual (+1)",
+  "estado": "Baja calidad de los datos",
+  "n": 1,
+  "pct": 0.0001,
+  "explicacion": "Es la MISMA persona en C-108, C-264 y C-265: un fallecido (murió a los 57,25 años) con un episodio de empleo abierto al morir. Su primer empleo significativo empezó a los 56,25 años y dura 2,17 años, pero solo vivió 1,08 años después: la duración del episodio se cuenta hasta la fecha de corte, mientras que su tiempo total de empleo sí está cortado en el fallecimiento. Con una tolerancia de 1 día solo esta persona viola (duracion_1er_empleo_signif y t_contrato_mas_largo); hay 14 fallecidos con episodio abierto, pero en los otros 13 las duraciones no superan el tiempo total. Afiliación sin cerrar en un fallecido: dato de origen. Corrección posible y no aplicada (decisión del usuario): limitar esas dos duraciones al tiempo de empleo más mixto en el Grupo H, como ya se hace con T_total_*, la edad actual y Edad_Ultimo_Empleo."
+ },
+ {
+  "id": "C-114",
+  "regla": "Menor de 16 con historia laboral significativa (>0,1 años)",
+  "estado": "Baja calidad de los datos",
+  "n": 287,
+  "pct": 0.0211,
+  "explicacion": "Menores de 16 años actuales con afiliación (287, los mismos en A-093, B-040, B-054, B-070, B-084, C-114 y C-115), nacidos sobre todo desde 2010. De los 262 que además tienen sueldo en 2024, 249 son menores autorizados en espectáculos (art. 6.4 ET); el resto son errores de fecha o afiliaciones de niños sin causa conocida."
+ },
+ {
+  "id": "C-115",
+  "regla": "Menor de 16 con afiliación (no Nunca_ha_cotizado)",
+  "estado": "Baja calidad de los datos",
+  "n": 287,
+  "pct": 0.0211,
+  "explicacion": "Menores de 16 años actuales con afiliación (287, los mismos en A-093, B-040, B-054, B-070, B-084, C-114 y C-115), nacidos sobre todo desde 2010. De los 262 que además tienen sueldo en 2024, 249 son menores autorizados en espectáculos (art. 6.4 ET); el resto son errores de fecha o afiliaciones de niños sin causa conocida."
+ },
+ {
+  "id": "C-130",
+  "regla": "t_total_empleo vacío ⇒ tiempo_total_desde_inicio_vl vacío (hay historia)",
+  "estado": "Baja calidad de los datos",
+  "n": 7,
+  "pct": 0.0005,
+  "explicacion": "Episodios de 1979-1984 con la fecha de baja anterior a la de alta: la duración de empleo sale nula y arrastra t_total_empleo, el número de altas y el tiempo total. Afecta a 6-9 personas; dato de origen. "
+ },
+ {
+  "id": "C-132",
+  "regla": "num_altas_anual_promedio vacío ⇒ tiempo_total_desde_inicio_vl vacío (hay historia)",
+  "estado": "Baja calidad de los datos",
+  "n": 9,
+  "pct": 0.0007,
+  "explicacion": "Episodios de 1979-1984 con la fecha de baja anterior a la de alta: la duración de empleo sale nula y arrastra t_total_empleo, el número de altas y el tiempo total. Afecta a 6-9 personas; dato de origen. "
+ },
+ {
+  "id": "C-138",
+  "regla": "t_total_desempleo vacío ⇒ tiempo_total_desde_inicio_vl vacío (hay historia)",
+  "estado": "Baja calidad de los datos",
+  "n": 7,
+  "pct": 0.0005,
+  "explicacion": "Episodios de 1979-1984 con la fecha de baja anterior a la de alta: la duración de empleo sale nula y arrastra t_total_empleo, el número de altas y el tiempo total. Afecta a 6-9 personas; dato de origen. "
+ },
+ {
+  "id": "C-150",
+  "regla": "Discapacidad por pensión ⇒ ha cobrado una pensión de incapacidad",
+  "estado": "Baja calidad de los datos",
+  "n": 524,
+  "pct": 0.0386,
+  "explicacion": "524 personas con discapacidad por pensión (Discap_pension) sin pensión de incapacidad en la tabla de pensiones. Pendiente de confirmar la definición de Discap_pension; probablemente el mismo desfase temporal que el resto de G07."
+ },
+ {
+  "id": "C-158",
+  "regla": "Jubilación ⇒ ≥ 10 años de empleo (se exigen 15 cotizados)",
+  "estado": "Baja calidad de los datos",
+  "n": 16660,
+  "pct": 1.2259,
+  "explicacion": "Jubilados con menos de 10 años de empleo afiliado (16.660), nacidos sobre todo entre 1920 y 1950 (edad mediana 82,7 años, 73 % mujeres). Tienen pensión SOVI (cotizaciones anteriores a 1967, que no están en Afiliación) 7.607 de los 16.660; el resto, carreras en parte anteriores a 1967 o en regímenes sin registro en la MCVL. Cobertura incompleta de origen."
+ },
+ {
+  "id": "C-159",
+  "regla": "Jubilación ⇒ edad del último empleo ≥ 30",
+  "estado": "Baja calidad de los datos",
+  "n": 613,
+  "pct": 0.0451,
+  "explicacion": "Jubilados cuyo último empleo afiliado fue antes de los 30 años (613): carreras anteriores a 1967 o sin registro en la MCVL; cobertura incompleta de origen."
+ },
+ {
+  "id": "C-166",
+  "regla": "Con ingresos ⇒ provincia fiscal conocida",
+  "estado": "Baja calidad de los datos",
+  "n": 446,
+  "pct": 0.0328,
+  "explicacion": "446 personas con ingresos fiscales y sin provincia fiscal: el código de provincia crudo del modelo 190 es 0 en 445 casos y 99 en 1; el modelo 190 no lo informa. Dato de origen."
+ },
+ {
+  "id": "C-236",
+  "regla": "R.E. Autónomos ⇒ sin grupo de cotización (guía 2.003)",
+  "estado": "Baja calidad de los datos",
+  "n": 162,
+  "pct": 0.0119,
+  "explicacion": "162 autónomos con grupo de cotización: la guía (2.003) dice que en el R.E. de Autónomos no se asigna grupo; algunos registros de origen lo traen igualmente."
+ },
+ {
+  "id": "C-237",
+  "regla": "R.E. Empleados de Hogar ⇒ sin grupo de cotización (guía 2.003)",
+  "estado": "Baja calidad de los datos",
+  "n": 12,
+  "pct": 0.0009,
+  "explicacion": "12 empleados de hogar con grupo de cotización, que la guía (2.003) dice que no se asigna en ese régimen; dato de origen."
+ },
+ {
+  "id": "C-238",
+  "regla": "R.E. Autónomos ⇒ sin tipo de contrato ('No consta')",
+  "estado": "Baja calidad de los datos",
+  "n": 12,
+  "pct": 0.0009,
+  "explicacion": "12 autónomos con tipo de contrato distinto de 'No consta'; dato de origen."
+ },
+ {
+  "id": "C-240",
+  "regla": "R.E. Agrario cuenta ajena (integrado en 2012) ⇒ ≤ 45,5 años en ese régimen",
+  "estado": "Baja calidad de los datos",
+  "n": 21,
+  "pct": 0.0015,
+  "explicacion": "21 personas con más de 45,5 años en el R.E. Agrario cuenta ajena integrado en 2012: posible por episodios simultáneos; volumen pequeño."
+ },
+ {
+  "id": "C-241",
+  "regla": "R.E. Empleados de Hogar (integrado en 2012) ⇒ ≤ 45,5 años",
+  "estado": "Baja calidad de los datos",
+  "n": 1,
+  "pct": 0.0001,
+  "explicacion": "1 persona con más de 45,5 años en el régimen de Empleados de Hogar integrado en 2012: caso aislado."
+ },
+ {
+  "id": "C-243",
+  "regla": "Grupo 11 (menores de 18) ⇒ ≤ 2,1 años en ese grupo (16-18 años)",
+  "estado": "Baja calidad de los datos",
+  "n": 1369,
+  "pct": 0.1007,
+  "explicacion": "El campo 03 GRU_COTIZACION de la MCVL no se actualiza al cumplir la edad: p. ej. un episodio único de 49,6 años seguidos codificado como grupo 11 (menores de 18) de principio a fin (el 76 % de C-243 tiene un único episodio así). El ETL reporta fielmente lo que trae el dato de origen; no hay cálculo propio que corregir. Aquí: más de 2,1 años en el grupo 11 (menores de 18), imposible entre los 16 y los 18 años."
+ },
+ {
+  "id": "C-244",
+  "regla": "Grupo 12 (menores de 17) ⇒ ≤ 1,1 años en ese grupo",
+  "estado": "Baja calidad de los datos",
+  "n": 673,
+  "pct": 0.0495,
+  "explicacion": "El campo 03 GRU_COTIZACION de la MCVL no se actualiza al cumplir la edad: p. ej. un episodio único de 49,6 años seguidos codificado como grupo 11 (menores de 18) de principio a fin (el 76 % de C-243 tiene un único episodio así). El ETL reporta fielmente lo que trae el dato de origen; no hay cálculo propio que corregir. Aquí: más de 1,1 años en el grupo 12 (menores de 17)."
+ },
+ {
+  "id": "C-245",
+  "regla": "Último empleo en grupo 11 ⇒ edad del último empleo < 18",
+  "estado": "Baja calidad de los datos",
+  "n": 198,
+  "pct": 0.0146,
+  "explicacion": "El campo 03 GRU_COTIZACION de la MCVL no se actualiza al cumplir la edad: p. ej. un episodio único de 49,6 años seguidos codificado como grupo 11 (menores de 18) de principio a fin (el 76 % de C-243 tiene un único episodio así). El ETL reporta fielmente lo que trae el dato de origen; no hay cálculo propio que corregir. Aquí: último empleo en el grupo 11 con edad del último empleo de 18 o más."
+ },
+ {
+  "id": "C-246",
+  "regla": "Último empleo en grupo 12 ⇒ edad del último empleo < 17",
+  "estado": "Baja calidad de los datos",
+  "n": 57,
+  "pct": 0.0042,
+  "explicacion": "El campo 03 GRU_COTIZACION de la MCVL no se actualiza al cumplir la edad: p. ej. un episodio único de 49,6 años seguidos codificado como grupo 11 (menores de 18) de principio a fin (el 76 % de C-243 tiene un único episodio así). El ETL reporta fielmente lo que trae el dato de origen; no hay cálculo propio que corregir. Aquí: último empleo en el grupo 12 con edad del último empleo de 17 o más."
+ },
+ {
+  "id": "C-247",
+  "regla": "Primer empleo en grupo 11 ⇒ edad < 18",
+  "estado": "Baja calidad de los datos",
+  "n": 2269,
+  "pct": 0.167,
+  "explicacion": "El campo 03 GRU_COTIZACION de la MCVL no se actualiza al cumplir la edad: p. ej. un episodio único de 49,6 años seguidos codificado como grupo 11 (menores de 18) de principio a fin (el 76 % de C-243 tiene un único episodio así). El ETL reporta fielmente lo que trae el dato de origen; no hay cálculo propio que corregir. Aquí: primer empleo significativo en el grupo 11 (menores de 18) con 18 o más años."
+ },
+ {
+  "id": "C-248",
+  "regla": "Primer empleo en grupo 12 ⇒ edad < 17",
+  "estado": "Baja calidad de los datos",
+  "n": 1862,
+  "pct": 0.137,
+  "explicacion": "El campo 03 GRU_COTIZACION de la MCVL no se actualiza al cumplir la edad: p. ej. un episodio único de 49,6 años seguidos codificado como grupo 11 (menores de 18) de principio a fin (el 76 % de C-243 tiene un único episodio así). El ETL reporta fielmente lo que trae el dato de origen; no hay cálculo propio que corregir. Aquí: primer empleo significativo en el grupo 12 (menores de 17) con 17 o más años."
+ },
+ {
+  "id": "C-249",
+  "regla": "Último empleo en grupo 10 ('mayores de 18') ⇒ edad ≥ 18",
+  "estado": "Baja calidad de los datos",
+  "n": 811,
+  "pct": 0.0597,
+  "explicacion": "El campo 03 GRU_COTIZACION de la MCVL no se actualiza al cumplir la edad: p. ej. un episodio único de 49,6 años seguidos codificado como grupo 11 (menores de 18) de principio a fin (el 76 % de C-243 tiene un único episodio así). El ETL reporta fielmente lo que trae el dato de origen; no hay cálculo propio que corregir. Aquí: último empleo en el grupo 10 ('mayores de 18') con menos de 18 años."
+ },
+ {
+  "id": "C-250",
+  "regla": "Primer empleo en grupo 10 ('mayores de 18') ⇒ edad ≥ 18",
+  "estado": "Baja calidad de los datos",
+  "n": 17708,
+  "pct": 1.303,
+  "explicacion": "El campo 03 GRU_COTIZACION de la MCVL no se actualiza al cumplir la edad: p. ej. un episodio único de 49,6 años seguidos codificado como grupo 11 (menores de 18) de principio a fin (el 76 % de C-243 tiene un único episodio así). El ETL reporta fielmente lo que trae el dato de origen; no hay cálculo propio que corregir. Aquí: primer empleo en el grupo 10 ('mayores de 18 años') con menos de 18 años de edad."
+ },
+ {
+  "id": "C-264",
+  "regla": "El contrato más largo no supera el tiempo total de empleo (+1)",
+  "estado": "Baja calidad de los datos",
+  "n": 1,
+  "pct": 0.0001,
+  "explicacion": "Es la MISMA persona en C-108, C-264 y C-265: un fallecido (murió a los 57,25 años) con un episodio de empleo abierto al morir. Su primer empleo significativo empezó a los 56,25 años y dura 2,17 años, pero solo vivió 1,08 años después: la duración del episodio se cuenta hasta la fecha de corte, mientras que su tiempo total de empleo sí está cortado en el fallecimiento. Con una tolerancia de 1 día solo esta persona viola (duracion_1er_empleo_signif y t_contrato_mas_largo); hay 14 fallecidos con episodio abierto, pero en los otros 13 las duraciones no superan el tiempo total. Afiliación sin cerrar en un fallecido: dato de origen. Corrección posible y no aplicada (decisión del usuario): limitar esas dos duraciones al tiempo de empleo más mixto en el Grupo H, como ya se hace con T_total_*, la edad actual y Edad_Ultimo_Empleo."
+ },
+ {
+  "id": "C-265",
+  "regla": "La duración del primer empleo significativo no supera el tiempo total de empleo (+1)",
+  "estado": "Baja calidad de los datos",
+  "n": 1,
+  "pct": 0.0001,
+  "explicacion": "Es la MISMA persona en C-108, C-264 y C-265: un fallecido (murió a los 57,25 años) con un episodio de empleo abierto al morir. Su primer empleo significativo empezó a los 56,25 años y dura 2,17 años, pero solo vivió 1,08 años después: la duración del episodio se cuenta hasta la fecha de corte, mientras que su tiempo total de empleo sí está cortado en el fallecimiento. Con una tolerancia de 1 día solo esta persona viola (duracion_1er_empleo_signif y t_contrato_mas_largo); hay 14 fallecidos con episodio abierto, pero en los otros 13 las duraciones no superan el tiempo total. Afiliación sin cerrar en un fallecido: dato de origen. Corrección posible y no aplicada (decisión del usuario): limitar esas dos duraciones al tiempo de empleo más mixto en el Grupo H, como ya se hace con T_total_*, la edad actual y Edad_Ultimo_Empleo."
+ },
+ {
+  "id": "C-270",
+  "regla": "Última baja por fallecimiento (56) ⇒ fecha_fallecimiento informada",
+  "estado": "Baja calidad de los datos",
+  "n": 7,
+  "pct": 0.0005,
+  "explicacion": "Baja por fallecimiento (causa 56) en Afiliación sin fecha de fallecimiento en Personas (7 personas): la guía admite retrasos en registrar el fallecimiento. Dato de origen."
+ },
+ {
+  "id": "C-279",
+  "regla": "Con tiempo de desempleo > 0 ⇒ ha tenido bajas",
+  "estado": "Baja calidad de los datos",
+  "n": 8,
+  "pct": 0.0006,
+  "explicacion": "8 personas con tiempo de desempleo y sin bajas de empleo, con empleo aún abierto: episodios sin cerrar; volumen pequeño."
+ },
+ {
+  "id": "C-302",
+  "regla": "Con ingresos de sueldo ⇒ edad ≥ 16",
+  "estado": "Baja calidad de los datos",
+  "n": 13,
+  "pct": 0.001,
+  "explicacion": "13 menores de 16 años con sueldo en 2024 que NO son menores autorizados (de 262 iniciales, 249 sí lo son: art. 6.4 ET). Fecha de nacimiento errónea o afiliación de niños sin causa conocida."
+ },
+ {
+  "id": "C-306",
+  "regla": "Con ingresos de actividad ⇒ edad ≥ 16",
+  "estado": "Baja calidad de los datos",
+  "n": 5,
+  "pct": 0.0004,
+  "explicacion": "5 menores de 16 años con ingresos de actividad en 2024 que NO son menores autorizados (de 11 iniciales, 6 sí lo son). Fecha de nacimiento errónea o afiliación de niños sin causa conocida."
+ }
+]

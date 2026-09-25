@@ -95,8 +95,34 @@ def generar_variables(carpeta: Path) -> dict:
     return {"personas": personas, "afiliacion": afiliacion}
 
 
+def generar_casos() -> list:
+    import openpyxl
+
+    wb = openpyxl.load_workbook(RAIZ / "tests" / "reglas_consistencia_resultados_sin_ipf.xlsx", read_only=True)
+    filas = list(wb["Resultados"].iter_rows(values_only=True))
+    cab = list(filas[0])
+    ix = {n: cab.index(n) for n in ("ID", "Regla (debe cumplirse)", "Estado (seguimiento)", "Filas que la incumplen",
+                                    "% de personas")}
+    ix_expl = next(i for i, n in enumerate(cab) if str(n).startswith("Explicaci"))
+    casos = []
+    for f in filas[1:]:
+        estado = f[ix["Estado (seguimiento)"]]
+        if estado in ("Casos raros (reales)", "Baja calidad de los datos"):
+            casos.append({"id": f[ix["ID"]], "regla": f[ix["Regla (debe cumplirse)"]], "estado": estado,
+                          "n": f[ix["Filas que la incumplen"]] or 0, "pct": f[ix["% de personas"]] or 0,
+                          "explicacion": f[ix_expl] or ""})
+    casos.sort(key=lambda c: (c["estado"] != "Casos raros (reales)", c["id"]))
+    return casos
+
+
 if __name__ == "__main__":
     modo = sys.argv[1]
+    if modo == "casos":
+        casos = generar_casos()
+        DATOS.mkdir(parents=True, exist_ok=True)
+        (DATOS / "casos_raros.json").write_text(json.dumps(casos, ensure_ascii=False, indent=1), encoding="utf-8")
+        print("casos raros:", sum(c["estado"].startswith("Casos") for c in casos),
+              "baja calidad:", sum(c["estado"].startswith("Baja") for c in casos))
     if modo == "variables":
         datos = generar_variables(Path(sys.argv[2]))
         vacias = [n for n, v in datos["personas"].items() if not v["descripcion"]]

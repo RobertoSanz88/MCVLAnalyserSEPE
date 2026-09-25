@@ -144,3 +144,34 @@ def variables():
                           "origen": info.get("origen", ""), "descripcion": info.get("descripcion") or "sin descripción"})
         salida[tabla] = filas
     return salida
+
+
+_SECCIONES_CONSTRUCCION = ("## Cómo construir los datos", "## Estructura")
+_SECCIONES_TESTS = ("## Reglas de consistencia",)
+
+
+def partir_readme(texto: str) -> dict:
+    """Separa el README en el texto principal y los dos desplegables finales (construccion de variables y tests)."""
+    trozos, actual = [], []
+    for linea in texto.splitlines():
+        if linea.startswith("## ") and actual:
+            trozos.append("\n".join(actual))
+            actual = []
+        actual.append(linea)
+    trozos.append("\n".join(actual))
+    salida = {"principal": [], "construccion": [], "tests": []}
+    for t in trozos:
+        if t.startswith(_SECCIONES_CONSTRUCCION):
+            salida["construccion"].append(t)
+        elif t.startswith(_SECCIONES_TESTS):
+            salida["tests"].append(t)
+        else:
+            salida["principal"].append(t)
+    return {k: "\n\n".join(v) for k, v in salida.items()}
+
+
+@router.get("/acerca-de")
+def acerca_de():
+    texto = _ruta_recurso("README.md").read_text(encoding="utf-8")
+    casos = json.loads(_ruta_recurso("app/static/datos/casos_raros.json").read_text(encoding="utf-8"))
+    return {**partir_readme(texto), "casos": casos}

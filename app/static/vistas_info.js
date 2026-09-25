@@ -48,3 +48,51 @@ document.addEventListener('DOMContentLoaded', () => {
         cambiarVista(location.hash.slice(1));
     }
 });
+
+let acercaCargada = false;
+
+async function iniciarVistaAcerca() {
+    if (acercaCargada) return;
+    const cont = document.getElementById('acerca-cuerpo');
+    try {
+        const r = await fetch('/acerca-de');
+        if (!r.ok) throw new Error('Error ' + r.status);
+        const d = await r.json();
+        cont.innerHTML = marked.parse(d.principal);  // README propio del proyecto (contenido de confianza)
+        cont.appendChild(acercaDesplegable('Tests de consistencia', marked.parse(d.tests) + acercaCasos(d.casos)));
+        cont.appendChild(acercaDesplegable('Construcción de variables', marked.parse(d.construccion)));
+        acercaCargada = true;
+    } catch (e) {
+        cabAvisar('No se pudo cargar "Acerca de": ' + e.message, 'error');
+    }
+}
+
+function acercaDesplegable(titulo, html) {
+    const det = document.createElement('details');
+    const sum = document.createElement('summary');
+    sum.textContent = titulo;
+    const cuerpo = document.createElement('div');
+    cuerpo.innerHTML = html;
+    det.appendChild(sum);
+    det.appendChild(cuerpo);
+    return det;
+}
+
+function acercaEscapar(t) {
+    return String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function acercaCasos(casos) {
+    let html = '';
+    for (const [estado, titulo] of [['Casos raros (reales)', 'Casos raros (personas reales con situaciones poco habituales)'],
+                                    ['Baja calidad de los datos', 'Baja calidad de los datos (dato de origen incompleto o incoherente)']]) {
+        const lista = casos.filter(c => c.estado === estado);
+        html += '<h3>' + acercaEscapar(titulo) + ' — ' + lista.length + ' reglas</h3>' +
+                '<table><thead><tr><th>Regla</th><th>Enunciado</th><th>Personas</th><th>Explicación</th></tr></thead><tbody>' +
+                lista.map(c => '<tr><td>' + acercaEscapar(c.id) + '</td><td>' + acercaEscapar(c.regla) + '</td><td>' +
+                              Number(c.n).toLocaleString('es-ES') + ' (' + Number(c.pct).toFixed(3) + ' %)</td><td>' +
+                              acercaEscapar(c.explicacion) + '</td></tr>').join('') +
+                '</tbody></table>';
+    }
+    return html;
+}
