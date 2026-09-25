@@ -1,7 +1,12 @@
 """Gestion de muestras (carpetas de Parquet) y cambio de la muestra activa."""
 import copy
+import json
+import re
+import sys
 import threading
+from pathlib import Path
 
+import duckdb
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -110,3 +115,32 @@ def activar(body: MuestraBody):
         estado.muestra = _abrir_o_400(config.buscar_muestra(cfg, body.carpeta))  # solo se sustituye si se abrio bien
         config.guardar_config(cfg)
         return _respuesta(cfg)
+
+
+def _ruta_recurso(relativa: str) -> Path:
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent.parent))
+    return base / relativa
+
+
+def _normalizar(col: str) -> str:
+    col = re.sub(r"(\d{4})/\d$", "AAAA/A", col)
+    return re.sub(r"_(\d{4})$", "_AAAA", col)
+
+
+@router.get("/variables")
+def variables():
+    """Descripcion de las variables de Personas y Afiliacion, cruzada con las columnas reales de la muestra activa."""
+    catalogo = json.loads(_ruta_recurso("app/static/datos/variables.json").read_text(encoding="utf-8"))
+    m = estado.muestra
+    con = duckdb.connect()
+    salida = {"anio": m.anio}
+    for tabla, fichero in (("personas", "tabla_personas_extendida.parquet"), ("afiliacion", "tabla_afiliacion_extendida.parquet")):
+        columnas = [(x[0], x[1]) for x in con.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{(m.carpeta / fichero).as_posix()}')").fetchall()]
+        filas = []
+        for n, t in columnas:
+            info = catalogo[tabla].get(_normalizar(n) if tabla == "personas" else n, {})
+            filas.append({"nombre": _normalizar(n) if tabla == "personas" else n, "tipo": t,
+                          "origen": info.get("origen", ""), "descripcion": info.get("descripcion") or "sin descripción"})
+        salida[tabla] = filas
+    return salida

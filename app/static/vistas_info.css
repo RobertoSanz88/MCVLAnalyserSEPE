@@ -1,0 +1,17 @@
+.panel-info { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.info-barra { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0 0.7rem; flex-wrap: wrap; }
+.info-pestana { padding: 0.4rem 0.9rem; border: 1px solid #2f7d5b; border-radius: 5px; background: #fff; cursor: pointer; }
+.info-pestana.activa { background: #2f7d5b; color: #fff; }
+#var-buscar { flex: 1; min-width: 220px; padding: 0.4rem 0.6rem; }
+.info-tabla-envoltorio { flex: 1; min-height: 0; overflow: auto; }
+#var-tabla { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+#var-tabla th { position: sticky; top: 0; background: #e8f1ed; text-align: left; padding: 0.4rem 0.6rem; }
+#var-tabla td { padding: 0.35rem 0.6rem; border-top: 1px solid #dfe9e4; vertical-align: top; }
+#var-tabla td:nth-child(2) { font-family: var(--mono, monospace); white-space: nowrap; }
+#acerca-cuerpo { overflow: auto; padding: 1rem 1.4rem; }
+#acerca-cuerpo h1, #acerca-cuerpo h2 { margin: 1rem 0 0.5rem; }
+#acerca-cuerpo table { border-collapse: collapse; margin: 0.6rem 0; }
+#acerca-cuerpo th, #acerca-cuerpo td { border: 1px solid #b9cfc6; padding: 0.3rem 0.6rem; font-size: 0.86rem; }
+#acerca-cuerpo pre { background: #f2f6f4; padding: 0.6rem; overflow: auto; }
+#acerca-cuerpo details { border: 1px solid #b9cfc6; border-radius: 6px; margin: 0.8rem 0; padding: 0.4rem 0.9rem; }
+#acerca-cuerpo summary { cursor: pointer; font-weight: 800; padding: 0.3rem 0; }

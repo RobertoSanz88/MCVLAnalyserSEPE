@@ -1,0 +1,678 @@
+{
+ "personas": {
+  "01 IPF": {
+   "orden": 1,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "Identificador de persona anonimizado. Clave de unión."
+  },
+  "02 FECHA_NACIMIENTO": {
+   "orden": 2,
+   "tipo": "TIMESTAMP",
+   "origen": "original",
+   "descripcion": "Fecha de nacimiento (solo año y mes son fiables)."
+  },
+  "03 SEXO": {
+   "orden": 3,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "Hombre, Mujer o NO CONSTA (52 personas)."
+  },
+  "04 NACIONALIDAD": {
+   "orden": 4,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "Nacionalidad decodificada: N01 Alemania, ..."
+  },
+  "05 PROV_NACIMIENTO": {
+   "orden": 5,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "Provincia de nacimiento (28 MADRID...). 66 EXTRANJERO para los nacidos fuera; NO CONSTA si no consta."
+  },
+  "06 PROV_1a_AFILIACION": {
+   "orden": 6,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "Provincia de la primera afiliación."
+  },
+  "07 DOMIC_RESID_HABITUAL": {
+   "orden": 7,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "Código INE de 5 dígitos del municipio de residencia (los municipios pequeños se agrupan como PP000)."
+  },
+  "prov_resid_habitual": {
+   "orden": 8,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Provincia de residencia, derivada del anterior."
+  },
+  "08 FECHA_FALLECIMIENTO": {
+   "orden": 9,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "Fecha de fallecimiento aaaamm; 0 si no ha fallecido."
+  },
+  "edad_fallecimiento": {
+   "orden": 10,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Edad al fallecer (precisión de mes). NULL si no ha fallecido."
+  },
+  "ha_fallecido": {
+   "orden": 11,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "SI / NO (18.801 fallecidos)."
+  },
+  "09 PAIS_NACIMIENTO": {
+   "orden": 12,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "País de nacimiento decodificado."
+  },
+  "Nacionalidad_agrupado": {
+   "orden": 13,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "espana, paises_UE_UK, paises_latinos, paises_africanos, paises_lejanos."
+  },
+  "Pais_nacim_agrupado": {
+   "orden": 14,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Igual, para el país de nacimiento (NULL si no consta, 3,9 %)."
+  },
+  "Edad_Actual_Fecha_Corte": {
+   "orden": 15,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Edad a la fecha de corte. **Para los fallecidos es la edad a su fecha de fallecimiento** (coincide con edad_fallecimiento)."
+  },
+  "Edad_Primer_Empleo_Signif": {
+   "orden": 16,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Edad al inicio del primer empleo significativo."
+  },
+  "Duracion_1er_Empleo_Signif": {
+   "orden": 17,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Duración de ese episodio."
+  },
+  "Grupo_cotiz_1er_Empleo_Signif": {
+   "orden": 18,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Grupo de cotización de ese episodio."
+  },
+  "Edad_Ultimo_Empleo": {
+   "orden": 19,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Edad al final del último episodio de empleo. **Para un fallecido no supera su edad al fallecer.**"
+  },
+  "Grupo_Ultimo_Empleo": {
+   "orden": 20,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Grupo de cotización del último empleo."
+  },
+  "causa_ult_baja": {
+   "orden": 21,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Causa de baja del último episodio (51 Voluntaria...)."
+  },
+  "tipo_contr_ult_baja": {
+   "orden": 22,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Tipo de contrato del último episodio."
+  },
+  "act_econ_ult_baja": {
+   "orden": 23,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "CNAE del último episodio (código descripción)."
+  },
+  "t_contrato_mas_largo": {
+   "orden": 24,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Duración del episodio de empleo más largo."
+  },
+  "Causa_Baja_Trab_Ppal": {
+   "orden": 25,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Causa de baja de ese mismo episodio (el más largo)."
+  },
+  "Fecha_ini_Primer_Empleo": {
+   "orden": 26,
+   "tipo": "TIMESTAMP",
+   "origen": "derivada",
+   "descripcion": "Inicio del primer episodio de empleo. NULL si nunca ha tenido empleo real."
+  },
+  "Tiempo_total_desde_inicio_VL": {
+   "orden": 27,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Desde el primer episodio de **cualquier tipo** hasta la fecha de corte (o hasta el fallecimiento)."
+  },
+  "duracion_promedio_EMPLEO": {
+   "orden": 28,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Duración media de los episodios de empleo."
+  },
+  "Cotizado_anual_promedio": {
+   "orden": 29,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Bases de cotización totales (cuenta ajena **y propia**, en euros) divididas por T_total_EMPLEO + DESEMPLEO + MIXTO."
+  },
+  "num_altas_anual_promedio": {
+   "orden": 30,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Altas y bajas **de empleo** por año de vida laboral. Una baja cuenta solo si el episodio de empleo tiene fecha de baja real (no 2099)."
+  },
+  "num_bajas_anual_promedio": {
+   "orden": 31,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Altas y bajas **de empleo** por año de vida laboral. Una baja cuenta solo si el episodio de empleo tiene fecha de baja real (no 2099)."
+  },
+  "T_total_EMPLEO": {
+   "orden": 32,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Tiempo solo con empleo."
+  },
+  "T_total_DESEMPLEO": {
+   "orden": 33,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Tiempo solo con prestación o subsidio."
+  },
+  "T_total_MIXTO_EMPL_DESEMPL": {
+   "orden": 34,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Tiempo con empleo y prestación a la vez. También es trabajo."
+  },
+  "T_total_NO_EMPLEO": {
+   "orden": 35,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Residuo: tiempo sin ningún episodio."
+  },
+  "%T_total_EMPLEO": {
+   "orden": 36,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Porcentaje de cada uno sobre Tiempo_total_desde_inicio_VL. Suman 100."
+  },
+  "%T_total_DESEMPLEO": {
+   "orden": 37,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Porcentaje de cada uno sobre Tiempo_total_desde_inicio_VL. Suman 100."
+  },
+  "%T_total_MIXTO_EMPL_DESEMPL": {
+   "orden": 38,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Porcentaje de cada uno sobre Tiempo_total_desde_inicio_VL. Suman 100."
+  },
+  "%T_total_NO_EMPLEO": {
+   "orden": 39,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Porcentaje de cada uno sobre Tiempo_total_desde_inicio_VL. Suman 100."
+  },
+  "Reg_cotiz_ppal_Agrupado": {
+   "orden": 40,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Régimen principal (01 Régimen General, 05 R.E. Autónomos, 06 R.E. Agrario Cuenta Ajena, 08 R.E. Mar, 12 R.E. Empleados de Hogar...)."
+  },
+  "T_tot_reg_ppal": {
+   "orden": 41,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Régimen principal (01 Régimen General, 05 R.E. Autónomos, 06 R.E. Agrario Cuenta Ajena, 08 R.E. Mar, 12 R.E. Empleados de Hogar...)."
+  },
+  "Grupo_cotiz_ppal": {
+   "orden": 42,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Grupo de cotización principal. **Cualquier clave fuera de 00-12 cuenta como 0 NO CONSTA**, como indica la guía."
+  },
+  "t_tot_grupo_ppal": {
+   "orden": 43,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Grupo de cotización principal. **Cualquier clave fuera de 00-12 cuenta como 0 NO CONSTA**, como indica la guía."
+  },
+  "Tipo_Contr_ppal_Agrupado": {
+   "orden": 44,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Tipo de contrato agrupado: Indefinido_t_completo, Indefinido_t_parcial, Indefinido_fijo_discontinuo, Temporal_t_completo, Temporal_t_parcial, Otros, No consta."
+  },
+  "T_tot_tipo_contrato_ppal": {
+   "orden": 45,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Tipo de contrato agrupado: Indefinido_t_completo, Indefinido_t_parcial, Indefinido_fijo_discontinuo, Temporal_t_completo, Temporal_t_parcial, Otros, No consta."
+  },
+  "Prov_trabajo_ppal": {
+   "orden": 46,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Provincia de trabajo principal, a partir de los dígitos 5-6 del CCC (56 MAR para los códigos 53 y 56 del Régimen del Mar)."
+  },
+  "t_tot_prov_ppal": {
+   "orden": 47,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Provincia de trabajo principal, a partir de los dígitos 5-6 del CCC (56 MAR para los códigos 53 y 56 del Régimen del Mar)."
+  },
+  "Act_econ_ppal": {
+   "orden": 48,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Actividad económica principal (CNAE 2009, 3 dígitos). El CNAE 0 se ignora."
+  },
+  "t_tot_act_econ_ppal": {
+   "orden": 49,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Actividad económica principal (CNAE 2009, 3 dígitos). El CNAE 0 se ignora."
+  },
+  "ingresos_actividad_AAAA": {
+   "orden": 50,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Actividades profesionales, agrarias y otras (claves F, G, H)."
+  },
+  "ingresos_bruto_total_AAAA": {
+   "orden": 51,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Total."
+  },
+  "ingresos_otras_exentas_AAAA": {
+   "orden": 52,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Rentas exentas que no son pensión (clave L, resto)."
+  },
+  "ingresos_pension_y_bajas_AAAA": {
+   "orden": 53,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Clave B: pensiones y haberes pasivos **y también bajas por incapacidad temporal** abonadas por la Seguridad Social o la mutua (subclave B01) y prestaciones de mutualidades de funcionarios (B03); más las pensiones exentas L06, L07 y L08. *Antes se llamaba ingresos_pension_2024; el nombre antiguo no describía este contenido.*"
+  },
+  "ingresos_prestacion_AAAA": {
+   "orden": 54,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Prestaciones y subsidios de desempleo (clave C)."
+  },
+  "ingresos_sueldo_AAAA": {
+   "orden": 55,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Trabajo por cuenta ajena (clave A)."
+  },
+  "retenciones_irpf_AAAA": {
+   "orden": 56,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Retenciones."
+  },
+  "clave_subclave_ppal": {
+   "orden": 57,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Tipo de percepción con **mayor importe**: A00 Sueldo, B01 Pensión SS / Clases Pasivas, C00 Prestación o subsidio de desempleo, L06 IPA / gran invalidez exentas, G01 Actividad profesional (general)... NO CONSTA si no hay datos fiscales o el importe es 0."
+  },
+  "clave_subclave_todas_cobradas": {
+   "orden": 58,
+   "tipo": "VARCHAR[]",
+   "origen": "derivada",
+   "descripcion": "Lista de todas las percepciones cobradas."
+  },
+  "Prov_fiscal_actual": {
+   "orden": 59,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Provincia fiscal del pagador con mayor ingreso. Códigos: 1-52 provincias, 53 ISLA DE LA PALMA, 98 EXTRANJERO."
+  },
+  "Discap_fiscal": {
+   "orden": 60,
+   "tipo": "BOOLEAN",
+   "origen": "derivada",
+   "descripcion": "Discapacidad según datos fiscales, alta de afiliación y tabla de pensiones respectivamente (la definición exacta de Discap_pension está pendiente de confirmar)."
+  },
+  "Discap_afiliacion": {
+   "orden": 61,
+   "tipo": "BOOLEAN",
+   "origen": "derivada",
+   "descripcion": "Discapacidad según datos fiscales, alta de afiliación y tabla de pensiones respectivamente (la definición exacta de Discap_pension está pendiente de confirmar)."
+  },
+  "Discap_pension": {
+   "orden": 62,
+   "tipo": "BOOLEAN",
+   "origen": "derivada",
+   "descripcion": "Discapacidad según datos fiscales, alta de afiliación y tabla de pensiones respectivamente (la definición exacta de Discap_pension está pendiente de confirmar)."
+  },
+  "Pension_todas_cobradas": {
+   "orden": 63,
+   "tipo": "VARCHAR[]",
+   "origen": "derivada",
+   "descripcion": "Tipos de pensión cobrados alguna vez (desde 1996)."
+  },
+  "Pension_actual": {
+   "orden": 64,
+   "tipo": "VARCHAR[]",
+   "origen": "derivada",
+   "descripcion": "Tipos de pensión en el año de referencia: Jubilación, Viudedad, Orfandad, Incapacidad, Incapacidad>65, Pension_a_favor_familiares."
+  },
+  "Cobra_pension_AAAA/A": {
+   "orden": 65,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "SI / NO: cobra alguna pensión en la edición."
+  },
+  "fecha_ultima_baja": {
+   "orden": 66,
+   "tipo": "TIMESTAMP",
+   "origen": "derivada",
+   "descripcion": "Fecha de la última baja de afiliación (2099 = episodio aún abierto)."
+  },
+  "Situacion_actual_afiliacion": {
+   "orden": 67,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Situación a la fecha de corte según el último episodio: Alta_ocupado, Baja_de_actividad, Baja_para_pension, Baja_de_prestacion, Baja_de_subsidio, Asimilado_al_alta_prest_subs, Asimilado_al_alta_subs52, Asimilado_otros, Nunca_ha_cotizado."
+  },
+  "Situacion_Paro_Ocupacion": {
+   "orden": 68,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Ocupado, Pensionista, Parado_LD (más de 365 días sin empleo), Parado_NoLD, Ocupado_y_pensionista, Parado_LD_pension_no_jubilacion, Parado_NoLD_pension_no_jubilacion."
+  },
+  "Fecha_inicio_ultima_racha_sin_empleo": {
+   "orden": 69,
+   "tipo": "TIMESTAMP",
+   "origen": "derivada",
+   "descripcion": "Inicio de la última racha de prestación o subsidio."
+  },
+  "duracion_actual_sin_empleo": {
+   "orden": 70,
+   "tipo": "DOUBLE",
+   "origen": "derivada",
+   "descripcion": "Días sin empleo hasta la fecha de corte (desde el inicio de la racha si cobra del SEPE; desde la última baja en otro caso)."
+  },
+  "causa_baja_mas_comun": {
+   "orden": 71,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "Causa de baja más frecuente entre **todos** los episodios."
+  }
+ },
+ "afiliacion": {
+  "01 IPF": {
+   "orden": 1,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "IDENTIFICADOR DE LA PERSONA FÍSICA (IPF)"
+  },
+  "02 REG_COTIZACION": {
+   "orden": 2,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "RÉGIMEN DE COTIZACIÓN"
+  },
+  "03 GRU_COTIZACION": {
+   "orden": 3,
+   "tipo": "TINYINT",
+   "origen": "original",
+   "descripcion": "GRUPO DE COTIZACIÓN"
+  },
+  "04 TIPO_CONTRATO": {
+   "orden": 4,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "TIPO DE CONTRATO DE TRABAJO"
+  },
+  "05 COEF_T_PARCIAL": {
+   "orden": 5,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "COEFICIENTE DE TIEMPO PARCIAL"
+  },
+  "06 FECHA_ALTA_REAL_AFIL": {
+   "orden": 6,
+   "tipo": "TIMESTAMP",
+   "origen": "original",
+   "descripcion": "FECHA REAL DEL ALTA EN AFILIACIÓN"
+  },
+  "07 FECHA_BAJA_REAL_AFIL": {
+   "orden": 7,
+   "tipo": "TIMESTAMP",
+   "origen": "original",
+   "descripcion": "FECHA REAL DE LA BAJA EN AFILIACIÓN"
+  },
+  "08 CAUSA_BAJA_AFIL": {
+   "orden": 8,
+   "tipo": "TINYINT",
+   "origen": "original",
+   "descripcion": "CAUSA DE BAJA EN AFILIACIÓN"
+  },
+  "09 MINUSV_ALTA_AFIL": {
+   "orden": 9,
+   "tipo": "TINYINT",
+   "origen": "original",
+   "descripcion": "MINUSVALÍA SEGÚN ALTA EN AFILIACIÓN"
+  },
+  "10 CCC_2": {
+   "orden": 10,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "CÓDIGO DE CUENTA DE COTIZACIÓN (CCC)"
+  },
+  "11 DOMIC_CC_2": {
+   "orden": 11,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "DOMICILIO DE ACTIVIDAD DE LA CUENTA DE COTIZACIÓN"
+  },
+  "12 CNAE2009_CC": {
+   "orden": 12,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "ACTIVIDAD ECONÓMICA DE LA CUENTA DE COTIZACIÓN (CNAE 2009)"
+  },
+  "13 NUM_TRABAJS_CC_2": {
+   "orden": 13,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "NÚMERO DE TRABAJADORES EN LA CUENTA DE COTIZACIÓN"
+  },
+  "14 FECHA_ALTA_1ER_TRABAJ_CC": {
+   "orden": 14,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "FECHA DE ALTA DEL PRIMER TRABAJADOR DE LA CUENTA DE COTIZACIÓN"
+  },
+  "15 TRL": {
+   "orden": 15,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "TIPO DE RELACIÓN LABORAL (TRL) DE LA CUENTA DE COTIZACIÓN"
+  },
+  "16 COLEC_ESPECIAL_CC": {
+   "orden": 16,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "COLECTIVO ESPECIAL DE LA CUENTA DE COTIZACIÓN"
+  },
+  "17 EMPLEADOR_TIPO_ID": {
+   "orden": 17,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "EMPLEADOR (TIPO DE IDENTIFICADOR)"
+  },
+  "18 EMPLEADOR_LETRA_NIF": {
+   "orden": 18,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "EMPLEADOR (FORMA JURÍDICA) – LETRA NIF DE LA ENTIDAD PAGADORA"
+  },
+  "19 ID_ANONIMADO_PAGADORA": {
+   "orden": 19,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "IDENTIFICADOR (NIF/CIF) ANONIMADO DE LA ENTIDAD PAGADORA"
+  },
+  "20 CCC_PPAL": {
+   "orden": 20,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "CÓDIGO DE CUENTA DE COTIZACIÓN PRINCIPAL (CCCP)"
+  },
+  "21 PROVINCIA_DOMIC_CC_PPAL": {
+   "orden": 21,
+   "tipo": "TINYINT",
+   "origen": "original",
+   "descripcion": "PROVINCIA DEL DOMICILIO DE LA CUENTA DE COTIZACIÓN PRINCIPAL"
+  },
+  "22 FECHA_MODIF_TIPO_CONTR_INI_O_COEF_T_PARCIAL_INI": {
+   "orden": 22,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "FECHA MODIFIC. DEL TIPO CONTRATO INICIAL O COEF. TIEMPO PARCIAL INICIAL"
+  },
+  "23 TIPO_CONTRATO_INI": {
+   "orden": 23,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "TIPO DE CONTRATO INICIAL"
+  },
+  "24 COEF_T_PARCIAL_INI": {
+   "orden": 24,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "COEFICIENTE DE TIEMPO PARCIAL INICIAL"
+  },
+  "25 FECHA_MODIF_TIPO_CONTR_2_O_COEF_T_PARCIAL_2": {
+   "orden": 25,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "FECHA MODIFIC. TIPO CONTRATO SEGUNDO O COEF. TIEMPO PARCIAL SEGUNDO"
+  },
+  "26 TIPO_CONTRATO_2": {
+   "orden": 26,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "TIPO DE CONTRATO SEGUNDO"
+  },
+  "27 COEF_T_PARCIAL_2": {
+   "orden": 27,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "COEFICIENTE DE TIEMPO PARCIAL SEGUNDO"
+  },
+  "28 FECHA_MODIF_GRUPO_COTIZ_INI": {
+   "orden": 28,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "FECHA DE MODIFICACIÓN DEL GRUPO DE COTIZACIÓN INICIAL"
+  },
+  "29 GRUPO_COTIZ_INI": {
+   "orden": 29,
+   "tipo": "TINYINT",
+   "origen": "original",
+   "descripcion": "GRUPO DE COTIZACIÓN INICIAL"
+  },
+  "30 CNAE1993_CC": {
+   "orden": 30,
+   "tipo": "SMALLINT",
+   "origen": "original",
+   "descripcion": "ACTIVIDAD ECONÓMICA DE LA CUENTA DE COTIZACIÓN (CNAE 93)"
+  },
+  "31 SETA": {
+   "orden": 31,
+   "tipo": "VARCHAR",
+   "origen": "original",
+   "descripcion": "SISTEMA ESPECIAL DE TRABAJADORES AGRARIOS (SETA)"
+  },
+  "32 TR CON OTRAS ENT_O_AUT": {
+   "orden": 32,
+   "tipo": "TINYINT",
+   "origen": "original",
+   "descripcion": "TIPO DE RELACIÓN CON OTRAS ENTIDADES O AUTÓNOMOS"
+  },
+  "33 FECHA_EFECTO_ALTA_AFIL": {
+   "orden": 33,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "FECHA DE EFECTO DEL ALTA EN AFILIACIÓN"
+  },
+  "34 FECHA_EFECTO_BAJA_AFIL": {
+   "orden": 34,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "FECHA DE EFECTO DE LA BAJA EN AFILIACIÓN"
+  },
+  "35 CONVENIO_COLECTIVO_1": {
+   "orden": 35,
+   "tipo": "TINYINT",
+   "origen": "original",
+   "descripcion": "CONVENIO COLECTIVO 1"
+  },
+  "36 CONVENIO_COLECTIVO_2": {
+   "orden": 36,
+   "tipo": "TINYINT",
+   "origen": "original",
+   "descripcion": "CONVENIO COLECTIVO 2"
+  },
+  "37 NUM_TRABAJS_CC_PPAL": {
+   "orden": 37,
+   "tipo": "INTEGER",
+   "origen": "original",
+   "descripcion": "NÚMERO DE TRABAJADORES EN LA CUENTA DE COTIZACIÓN PRINCIPAL"
+  },
+  "Baja_modificada": {
+   "orden": 38,
+   "tipo": "TIMESTAMP",
+   "origen": "derivada",
+   "descripcion": "Fecha de baja de afiliación con los episodios abiertos (año 2099) cortados en la fecha de corte."
+  },
+  "Empleo_publico": {
+   "orden": 39,
+   "tipo": "VARCHAR",
+   "origen": "derivada",
+   "descripcion": "SI si la letra del NIF del empleador es P (corporación local), Q (organismo público) o S (órgano de la Administración); NO en otro caso."
+  },
+  "DURACION_EMPLEO": {
+   "orden": 40,
+   "tipo": "BIGINT",
+   "origen": "derivada",
+   "descripcion": "Baja_modificada - fecha de alta + 1 día, en microsegundos. 0 en los episodios de prestación o subsidio (TRL 700-799) y TRL 400; NULL si sale negativa."
+  },
+  "DURACION_DESEMPLEO": {
+   "orden": 41,
+   "tipo": "BIGINT",
+   "origen": "derivada",
+   "descripcion": "Igual, pero solo con valor en los episodios de prestación o subsidio de desempleo (TRL 700-799); 0 en el resto; NULL si sale negativa."
+  }
+ }
+}

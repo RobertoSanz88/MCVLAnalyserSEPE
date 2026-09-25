@@ -493,6 +493,7 @@
         .subpanel-titulo { font-size: 0.66rem; font-weight: 700; color: var(--muted); text-align: center;
                              margin-bottom: 0.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     </style>
+    <link rel="stylesheet" href="/static/vistas_info.css">
 </head>
 <body>
     {% include "_cabecera.html" %}
@@ -744,9 +745,26 @@
                     <div id="grafico-cruce"><p class="aviso-vacio">Configura Filtro 1 y Filtro 2, elige las 2 variables, y pulsa Calcular.</p></div>
                 </div>
             </div>
+            <div id="contenido-variables" class="contenido-vista" style="display:none">
+                <div class="panel panel-info">
+                    <div class="info-barra">
+                        <button type="button" id="var-boton-personas" class="info-pestana activa" onclick="varMostrar('personas')">Personas extendida</button>
+                        <button type="button" id="var-boton-afiliacion" class="info-pestana" onclick="varMostrar('afiliacion')">Afiliación extendida</button>
+                        <input type="search" id="var-buscar" placeholder="Buscar por nombre o descripción" oninput="varFiltrar()">
+                        <span id="var-contador"></span>
+                    </div>
+                    <div class="info-tabla-envoltorio"><table id="var-tabla"><thead><tr>
+                        <th>#</th><th>Variable</th><th>Tipo</th><th>Origen</th><th>Descripción</th></tr></thead><tbody></tbody></table></div>
+                </div>
+            </div>
+            <div id="contenido-acerca" class="contenido-vista" style="display:none">
+                <div class="panel panel-info" id="acerca-cuerpo"></div>
+            </div>
         </div>
     </div>
 
+<script src="/static/marked.min.js"></script>
+<script src="/static/vistas_info.js"></script>
 <script>
 // Sustituye a alert(): no bloquea el hilo (un alert() nativo deja la pagina
 // congelada mientras esta abierto) y no muestra el origen "127.0.0.1:8000
@@ -927,15 +945,17 @@ function cambiarVista(vista) {
     document.getElementById('contenido-trayectorias').style.display = vista === 'trayectorias' ? 'flex' : 'none';
     document.getElementById('contenido-individuales').style.display = vista === 'individuales' ? 'flex' : 'none';
     document.getElementById('contenido-cruce').style.display = vista === 'cruce' ? 'flex' : 'none';
+    document.getElementById('contenido-variables').style.display = vista === 'variables' ? 'flex' : 'none';
+    document.getElementById('contenido-acerca').style.display = vista === 'acerca' ? 'flex' : 'none';
     document.getElementById('bloque-acciones-sidebar').style.display =
-        (vista === 'individuales' || vista === 'seleccion') ? 'none' : 'block';
+        (vista === 'individuales' || vista === 'seleccion' || vista === 'variables' || vista === 'acerca') ? 'none' : 'block';
     // "Exportar Excel" tiene una exportacion propia por pestana (Analisis:
     // paso 1; Trayectorias: paso 2; Cruce: paso 3, ver conversacion
     // 2026-08-28 y 2026-09-09) - se oculta en Individuales y en Seleccion
     // (ninguna de las 2 calcula/exporta nada por si misma). "Calcular" no se
     // toca aqui (bloque-acciones-sidebar entero ya se oculta arriba).
     document.getElementById('boton-exportar').style.display =
-        (vista === 'individuales' || vista === 'seleccion') ? 'none' : 'block';
+        (vista === 'individuales' || vista === 'seleccion' || vista === 'variables' || vista === 'acerca') ? 'none' : 'block';
     actualizarBotonExportar();
 
     // Analisis de colectivos: mismo patron que Cruce (modoCruceRenderizado) -
@@ -982,6 +1002,8 @@ function cambiarVista(vista) {
             document.getElementById('cruce-aviso-filtros').style.display = filtrosListos() ? 'none' : 'block';
         }
     }
+    if (vista === 'variables') iniciarVistaVariables();
+    if (vista === 'acerca' && typeof iniciarVistaAcerca === 'function') iniciarVistaAcerca();
     actualizarBotonCalcular();
 }
 
