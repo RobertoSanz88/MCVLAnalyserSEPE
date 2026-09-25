@@ -1,0 +1,22 @@
+<header class="cabecera">
+    <div class="cab-izq">
+        <button id="cab-boton-menu" type="button" aria-label="Menú de muestras" aria-expanded="false"
+                onclick="cabAlternarMenu(event)">&#9776;</button>
+        <span id="cab-muestra">Muestra …</span>
+        <div id="cab-menu" class="cab-menu" hidden></div>
+    </div>
+    <div class="cab-centro">
+        <div class="logo"><img src="/static/icon.ico" alt=""></div>
+        <div class="header-text">
+            <h1>MCVLAnalyserSEPE</h1>
+            <p>Observatorio de las Ocupaciones</p>
+        </div>
+    </div>
+    <div class="header-badges">
+        <span class="badge">v2.2</span>
+        {% if insignia_extra %}<span class="badge">{{ insignia_extra }}</span>{% endif %}
+    </div>
+</header>
+<div id="cab-aviso" class="cab-aviso" hidden></div>
+<link rel="stylesheet" href="/static/cabecera.css">
+<script src="/static/cabecera.js"></script>
