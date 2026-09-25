@@ -82,7 +82,6 @@ TABLES = {
             "Situacion_Paro_Ocupacion": "situacion_paro_ocupacion",
             "duracion_actual_sin_empleo": "duracion_actual_sin_empleo",
             "causa_baja_mas_comun": "causa_baja_mas_comun",
-            "causas_baja_distintas": "causas_baja_distintas",
             "%T_total_EMPLEO": "pct_t_total_empleo",
             "%T_total_DESEMPLEO": "pct_t_total_desempleo",
             "%T_total_MIXTO_EMPL_DESEMPL": "pct_t_total_mixto_empl_desempl",

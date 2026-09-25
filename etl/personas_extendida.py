@@ -451,8 +451,15 @@ def extraer_grupo_a(con, parquet_folder):
     # categorias real sin documentar. Se excluyen del ranking (like NULL) en vez de listar los
     # codigos concretos vistos hoy, para cubrir tambien claves fuera de rango que aparezcan en
     # futuras ediciones de la MCVL sin tener que tocar este codigo otra vez.
+    # 2026-09-25 (decision explicita del usuario): los grupos 21 y 23 (R.E. Agrario Cuenta Propia,
+    # 0721; 15.117 y 6.347 episodios) se asimilan al 00 NO CONSTA, que es como los trata la guia
+    # (valores fuera de la tabla = "el dato no consta"), en vez de excluirlos del ranking: asi su
+    # tiempo de empleo cuenta en t_tot_grupo_ppal (335 personas con hasta 28,8 anyos de empleo en esos
+    # grupos salian con 0,4 anyos, C-268). El resto de claves fuera de 00-12 (13, 14, 19, 20, 31, 63)
+    # siguen excluidas.
+    _grupo = 'CASE WHEN "03 GRU_COTIZACION" IN (21, 23) THEN 0 ELSE "03 GRU_COTIZACION" END'
     df_grupo = con.execute(_sql_categoria_ppal_fusionada(
-        afiliacion, '"03 GRU_COTIZACION"', '"03 GRU_COTIZACION" BETWEEN 0 AND 12'
+        afiliacion, _grupo, f'({_grupo}) BETWEEN 0 AND 12'
     ) + """
         SELECT ipf AS "01 IPF", val AS "Grupo_cotiz_ppal", total AS "t_tot_grupo_ppal"
         FROM ranked WHERE rn = 1
@@ -912,12 +919,14 @@ def extraer_grupo_d(con, parquet_folder):
         FROM elegido WHERE rn2 = 1
     """).fetchdf()
 
-    # causa_baja_mas_comun / causas_baja_distintas (2026-09-08, decision explicita del usuario,
-    # confirmada por AskUserQuestion): moda y conteo de codigos distintos de "08 CAUSA_BAJA_AFIL"
-    # entre TODOS los episodios de la persona. Desempate de la moda por num de episodios DESC,
-    # codigo ASC (mismo patron "total DESC, val ASC" ya usado en el resto del fichero para
-    # desempates deterministas). causa_baja_mas_comun sin decodificar, igual criterio que
-    # Causa_Baja_Trab_Ppal/causa_ult_baja.
+    # causa_baja_mas_comun (2026-09-08, decision explicita del usuario, confirmada por
+    # AskUserQuestion): moda de los codigos de "08 CAUSA_BAJA_AFIL" entre TODOS los episodios de la
+    # persona. Desempate de la moda por num de episodios DESC, codigo ASC (mismo patron "total DESC,
+    # val ASC" ya usado en el resto del fichero para desempates deterministas). Sin decodificar,
+    # igual criterio que Causa_Baja_Trab_Ppal/causa_ult_baja.
+    # causas_baja_distintas ELIMINADA el 2026-09-25 (decision explicita del usuario): contaba causas
+    # de todos los episodios, incluidas las prestaciones, y no era comparable con las altas de empleo
+    # (las reglas C-259/C-260 salian mal planteadas). Se borro tambien de la app y sus reglas.
     df_causabaja = con.execute(f"""
         WITH conteo AS (
             SELECT "01 IPF" AS ipf, "08 CAUSA_BAJA_AFIL" AS causa, COUNT(*) AS n
@@ -926,11 +935,9 @@ def extraer_grupo_d(con, parquet_folder):
             SELECT ipf, causa, n,
                    ROW_NUMBER() OVER (PARTITION BY ipf ORDER BY n DESC, causa ASC) AS rn
             FROM conteo
-        ), distintas AS (
-            SELECT ipf, COUNT(*) AS causas_baja_distintas FROM conteo GROUP BY 1
         )
-        SELECT r.ipf AS "01 IPF", r.causa AS "causa_baja_mas_comun", d.causas_baja_distintas
-        FROM ranked r JOIN distintas d ON r.ipf = d.ipf
+        SELECT r.ipf AS "01 IPF", r.causa AS "causa_baja_mas_comun"
+        FROM ranked r
         WHERE r.rn = 1
     """).fetchdf()
 
@@ -1339,7 +1346,7 @@ NUEVO_ORDEN = [
     "Pension_actual",
     "fecha_ultima_baja", "Situacion_actual_afiliacion", "Situacion_Paro_Ocupacion",
     "Fecha_inicio_ultima_racha_sin_empleo", "duracion_actual_sin_empleo",
-    "causa_baja_mas_comun", "causas_baja_distintas",
+    "causa_baja_mas_comun",
 ]
 
 # Patrones de las columnas fiscales/de pension con el anyo grabado en el nombre (ver comentario
@@ -1934,9 +1941,6 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     # de la guia MCVL acortado a mano por el usuario - ver etl/metadata/causa_baja_dict.csv,
     # p.ej. "51 Voluntaria" en vez de "DIMISION/BAJA VOLUNTARIA DEL TRABAJADOR"): mismo patron
     # que Act_econ_ppal/act_econ_ult_baja (codigo de 2 digitos con zfill, no 3 como CNAE).
-    # causas_baja_distintas de-incluida (2026-09-08, revertido): SI es numerica de verdad (un
-    # conteo), decision revertida por el usuario - se queda con su dtype natural (float64 con
-    # NaN para quien no tiene episodios, igual que cualquier otra columna numerica del fichero).
     # act_econ_ult_baja NO va en este bloque: se decodifica aparte, igual que Act_econ_ppal (ver
     # mas arriba).
     causa_baja_df = pd.read_csv(causa_baja_dict_path, sep=";", encoding="utf-8", dtype={"codigo": str})

@@ -67,11 +67,6 @@ if any("orfandad_vitalicia" in (r[8] or "") for r in reglas):
     con.execute(f"""CREATE TEMP TABLE orfandad_vitalicia AS
         SELECT DISTINCT "01 IPF" AS ipf FROM read_parquet('{_pens}')
         WHERE "Tipo_pension" = 'Orfandad' AND "30 PREST_VITALICIA (ORFANDAD Y VIUDEDAD)" = 2""")
-# Recuento independiente desde Afiliacion para C-259 (2026-09-24): causas de baja distintas entre TODOS los
-# episodios de la persona (incluidas prestaciones), el mismo universo que causas_baja_distintas.
-if any("causas_por_persona" in (r[8] or "") for r in reglas):
-    con.execute("""CREATE TEMP TABLE causas_por_persona AS
-        SELECT ipf, COUNT(DISTINCT causa_baja_afil) AS n FROM afiliacion GROUP BY ipf""")
 total = con.execute("SELECT COUNT(*) FROM personas").fetchone()[0]
 filas, t_bloque = [], time.time()
 for r in reglas:
