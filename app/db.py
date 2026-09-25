@@ -10,9 +10,9 @@ import re
 
 import duckdb
 
-from config import get_parquet_dir
+from pathlib import Path
 
-PARQUET_DIR = get_parquet_dir()
+from config import leer_fecha_corte
 
 # view_name -> (fichero parquet, {columna_cruda: columna_limpia})
 TABLES = {
@@ -219,12 +219,13 @@ def _columnas_fiscales_pension(existentes: set) -> dict:
     return extra
 
 
-def get_connection() -> duckdb.DuckDBPyConnection:
-    """Abre una conexion DuckDB en memoria y registra una vista por tabla MCVL,
+def get_connection(parquet_dir) -> duckdb.DuckDBPyConnection:
+    """Abre una conexion DuckDB en memoria y registra una vista por tabla MCVL sobre 'parquet_dir',
     con columnas ya renombradas a snake_case."""
+    parquet_dir = Path(parquet_dir)
     con = duckdb.connect(database=":memory:")
     for view_name, (filename, columns) in TABLES.items():
-        parquet_path = PARQUET_DIR / filename
+        parquet_path = parquet_dir / filename
         # "src." delante de cada columna cruda (no solo _quote(raw)) a
         # proposito: sin cualificar, columnas como "Reg_cotiz_ppal" AS
         # reg_cotiz_ppal (mismas letras, solo cambia mayus/minus) chocan con
@@ -256,3 +257,34 @@ def get_connection() -> duckdb.DuckDBPyConnection:
             f"SELECT {select_list} FROM read_parquet('{parquet_path.as_posix()}') AS src"
         )
     return con
+
+
+class Muestra:
+    """Una muestra abierta: carpeta de Parquet, anio de la edicion, conexion DuckDB con las vistas y fecha de corte."""
+
+    def __init__(self, carpeta, anio, con, fecha_corte):
+        self.carpeta, self.anio, self.con, self.fecha_corte = Path(carpeta), anio, con, fecha_corte
+
+
+def abrir_muestra(carpeta, anio) -> Muestra:
+    """Abre y valida la muestra (lanza si falta un Parquet o esta danado). No toca el estado global."""
+    con = get_connection(carpeta)
+    con.execute("SELECT 1 FROM personas LIMIT 1").fetchone()
+    return Muestra(carpeta, anio, con, leer_fecha_corte(carpeta))
+
+
+class Estado:
+    muestra = None
+    aviso_arranque = None
+
+
+estado = Estado()
+
+
+class ConexionActiva:
+    """app.state.con: delega en la muestra activa en el momento de cada peticion. El cambio de muestra es un
+    intercambio atomico de estado.muestra; las peticiones en curso (tambien las de streaming) siguen con el cursor
+    que ya tenian, sobre la muestra anterior, cuya conexion se libera al soltarse su ultimo cursor."""
+
+    def cursor(self):
+        return estado.muestra.con.cursor()

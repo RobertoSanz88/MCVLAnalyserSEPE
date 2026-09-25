@@ -14,12 +14,19 @@ usuario: conservar los resultados sucesivos segun se van arreglando errores, par
 comparar una ejecucion con la anterior en vez de perder el resultado viejo al sobrescribir).
 """
 import csv, os, shutil, sys, time
+from pathlib import Path
 from datetime import datetime
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
 from openpyxl import load_workbook
-from app.db import get_connection, PARQUET_DIR
+import config
+from app.db import get_connection
+
+_m, _ = config.muestra_inicial(config.leer_config())
+if _m is None:
+    raise SystemExit("No hay ninguna muestra configurada (config.json).")
+PARQUET_DIR = Path(_m["carpeta"])
 
 bloque = sys.argv[1].upper()
 desde = int(sys.argv[2]) if len(sys.argv) > 2 else 1
@@ -34,7 +41,7 @@ ws = load_workbook(FICHERO, read_only=True)["Reglas"]
 reglas = [r for r in ws.iter_rows(min_row=2, values_only=True)
           if r[0] and r[0].startswith(bloque + "-") and desde <= int(r[0].split("-")[1]) <= hasta]
 
-con = get_connection()
+con = get_connection(PARQUET_DIR)
 # Tabla auxiliar para las reglas del grupo G08 (2026-09-24, decision explicita del usuario): personas
 # cuyos episodios de afiliacion son TODOS de prestacion/subsidio (TRL 700-799) o TRL 400, sin ningun
 # episodio de empleo real. Es dato de origen (p. ej. agrarios con trabajo temporal mal registrado),

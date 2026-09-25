@@ -6,26 +6,31 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.db import get_connection
-from app.routers import colectivos, trayectorias
+import config
+from app.db import ConexionActiva, abrir_muestra, estado
+from app.routers import colectivos, muestras, trayectorias
 
 app = FastAPI(title="MCVL Analyser SEPE")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 app.include_router(trayectorias.router)
 app.include_router(colectivos.router)
+app.include_router(muestras.router)
 
 
 @app.on_event("startup")
 def startup():
-    # Una unica conexion DuckDB para toda la app; los endpoints NO deben usarla
-    # directamente (peticiones concurrentes de verdad corrompen el estado
-    # interno de una misma Connection - visto con datos reales: una peticion
-    # devolvia "Columna desconocida" para una columna que si existe, al
-    # solaparse con otra peticion en curso). Cada endpoint saca su propio
-    # con.cursor() (ver routers/colectivos.py y routers/trayectorias.py) - es
-    # barato, comparte la misma base de datos en memoria, y aisla la ejecucion
-    # entre peticiones simultaneas.
-    app.state.con = get_connection()
+    # Los endpoints NO usan una Connection compartida directamente (peticiones concurrentes la corrompen):
+    # cada uno saca su cursor con request.app.state.con.cursor(). app.state.con delega en la muestra activa.
+    cfg = config.leer_config()
+    m, aviso = config.muestra_inicial(cfg)
+    if m is None:
+        cfg = config.pedir_primera_muestra(cfg)
+        m, aviso = config.muestra_inicial(cfg)
+    estado.muestra = abrir_muestra(m["carpeta"], config.anio_de(m))
+    estado.aviso_arranque = aviso
+    cfg["activa"] = m["carpeta"]
+    config.guardar_config(cfg)  # persiste tambien la migracion del config.json antiguo
+    app.state.con = ConexionActiva()
 
 
 @app.get("/health")

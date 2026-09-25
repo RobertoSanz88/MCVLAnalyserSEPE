@@ -17,8 +17,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from pydantic import BaseModel
 
-from app.db import PARQUET_DIR
-from config import leer_fecha_corte
+from app.db import estado
 from etl import reg_cotizacion_agrupado, tipo_contrato_claves_sucesoras
 from app.routers.colectivos import (
     GRUPO_SIN_FILTRO,
@@ -27,9 +26,6 @@ from app.routers.colectivos import (
     calcular_condiciones_subgrupos,
     condiciones_sin_filtro,
 )
-
-# Fecha de corte de los Parquet cargados (fecha_corte.txt junto a ellos; ver config.py).
-FECHA_CORTE_ISO = leer_fecha_corte(PARQUET_DIR)
 
 router = APIRouter()
 # Ver comentario equivalente en colectivos.py: ruta relativa al fichero, no al CWD.
@@ -936,7 +932,7 @@ def trayectoria_individual_aleatoria(request: Request, body: TrayectoriaAleatori
         "ipf": ipf,
         "persona": _persona_resumen(con, ipf),
         "episodios": _episodios_afiliacion(con, ipf),
-        "fecha_corte": FECHA_CORTE_ISO,
+        "fecha_corte": estado.muestra.fecha_corte,
     }
 
 
@@ -950,6 +946,6 @@ def trayectoria(request: Request, ipf: int):
             "ipf": ipf,
             "persona_json": json.dumps(_persona_resumen(con, ipf), ensure_ascii=False),
             "episodios_json": json.dumps(_episodios_afiliacion(con, ipf), ensure_ascii=False),
-            "fecha_corte": FECHA_CORTE_ISO,
+            "fecha_corte": estado.muestra.fecha_corte,
         },
     )
