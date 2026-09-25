@@ -1407,6 +1407,41 @@ def _columnas_fallecimiento(codigo, nacimiento):
     return edad, ha_fallecido.map({True: "SI", False: "NO"}).astype("category")
 
 
+# Columnas que en una tabla de personas sana siempre tienen valores positivos para alguna persona.
+# Si una sale toda a 0 o nula, el calculo ha fallado en silencio (p. ej. el fallo intermitente de numexpr,
+# que dejo a 0 columnas enteras en 2026-09-23/24): se para antes de escribir el Parquet.
+COLUMNAS_QUE_NO_PUEDEN_SER_CERO = [
+    "Tiempo_total_desde_inicio_VL", "T_total_EMPLEO", "T_total_DESEMPLEO", "T_total_MIXTO_EMPL_DESEMPL",
+    "T_total_NO_EMPLEO", "%T_total_EMPLEO", "%T_total_DESEMPLEO", "%T_total_MIXTO_EMPL_DESEMPL",
+    "%T_total_NO_EMPLEO", "T_tot_reg_ppal", "t_tot_grupo_ppal", "T_tot_tipo_contrato_ppal", "t_tot_prov_ppal",
+    "t_tot_act_econ_ppal", "duracion_promedio_EMPLEO", "t_contrato_mas_largo", "Cotizado_anual_promedio",
+    "num_altas_anual_promedio", "num_bajas_anual_promedio", "Edad_Actual_Fecha_Corte",
+    "Edad_Primer_Empleo_Signif", "Duracion_1er_Empleo_Signif", "Edad_Ultimo_Empleo", "duracion_actual_sin_empleo",
+]
+
+
+def _comprobar_columnas_con_datos(df):
+    """Para el Grupo H si alguna columna clave no tiene ni un valor positivo (todo 0 o nulo).
+    Incluye las columnas fiscales de importes detectadas por patron (ingresos_*_AAAA)."""
+    candidatas = COLUMNAS_QUE_NO_PUEDEN_SER_CERO + [
+        c for c in df.columns if re.match(r"^(ingresos_(sueldo|bruto_total)|retenciones_irpf)_\d{4}$", c)]
+    a_cero = []
+    for c in candidatas:
+        if c not in df.columns:
+            continue
+        s = df[c]
+        if pd.api.types.is_timedelta64_dtype(s):
+            s = s.dt.total_seconds()
+        if not (pd.to_numeric(s, errors="coerce") > 0).any():
+            a_cero.append(c)
+    if a_cero:
+        raise ValueError(
+            f"Columnas sin ningun valor positivo (todo 0 o nulo): {a_cero}. No se escribe el Parquet. "
+            "Repetir el Grupo H; si vuelve a pasar, mirar pandas.show_versions() (numexpr) antes que el codigo."
+        )
+    print(f"Comprobacion de columnas con datos: {len(candidatas)} columnas clave con valores positivos.")
+
+
 def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_dict_path, causa_baja_dict_path):
     """Ultimo paso: calculos derivados (edades, tasas anuales, agrupaciones, filtros de
     calidad) y seleccion final de columnas. Todo en pandas: para cuando se llega aqui, la
@@ -1839,7 +1874,9 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
 
     # Diccionario de grupos de cotizacion
     for columna in ["Grupo_cotiz_ppal", "Grupo_cotiz_1er_Empleo_Signif", "Grupo_Ultimo_Empleo"]:
-        df[columna] = df[columna].map(GRUPOS_COTIZ_DICT).fillna("NO CONSTA").astype("category")
+        # 2026-09-25 (decision del usuario): sin episodio o sin grupo tambien es "0 NO CONSTA", para que la
+        # variable tenga una unica categoria de "no consta" (antes salian "NO CONSTA" y "0 NO CONSTA").
+        df[columna] = df[columna].map(GRUPOS_COTIZ_DICT).fillna("0 NO CONSTA").astype("category")
 
     # Filtrar personas sin fecha de nacimiento
     antes = df.shape[0]
@@ -2007,6 +2044,8 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
         print(f"AVISO: columnas del esquema objetivo que todavia no existen en df: {columnas_faltantes}")
     df = df[columnas_presentes]
     print(f"Grupo H: forma final {df.shape}")
+
+    _comprobar_columnas_con_datos(df)
 
     df.to_parquet(output_path, index=False)
     return df

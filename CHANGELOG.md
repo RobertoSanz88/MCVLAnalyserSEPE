@@ -2,6 +2,11 @@
 
 ## Sin versión todavía (cambios de variables tras revisar las reglas de consistencia, 2026-09-25)
 
+- **`Grupo_cotiz_ppal`, `Grupo_cotiz_1er_Empleo_Signif` y `Grupo_Ultimo_Empleo` solo tienen una categoría de "no consta":
+  `0 NO CONSTA`.** Antes las personas sin episodio salían como `NO CONSTA` (46.820, 254.015 y 55.812) y las de
+  grupo 00 o fuera de rango como `0 NO CONSTA`. Hay que repetir el Grupo H (acción `grupo_h`) para verlo.
+- **El Grupo H para si una columna clave sale toda a 0 o nula** (`T_total_*`, `Cotizado_anual_promedio`, edades,
+  ingresos...) y no escribe el Parquet; así el fallo de numexpr no pasa desapercibido en un PC nuevo.
 - **`ingresos_pension_2024` se renombra a `ingresos_pension_y_bajas_2024`.** La clave B del modelo 190
   no es solo pensión: incluye también las prestaciones por incapacidad temporal (bajas por enfermedad)
   abonadas directamente por la Seguridad Social o la mutua y las de mutualidades de funcionarios. De las
