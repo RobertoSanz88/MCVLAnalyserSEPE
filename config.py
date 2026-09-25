@@ -22,6 +22,7 @@ la carpeta).
 
 import datetime
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -125,6 +126,161 @@ def leer_fecha_corte(parquet_dir) -> str:
         return texto
     except (OSError, ValueError):
         return FECHA_CORTE
+
+# --- Varias muestras (v2.2) -------------------------------------------------------------------------------
+# config.json: {"muestras": [{"carpeta": ..., "anio": ...}], "activa": <carpeta>|null, "puerto": ...}.
+# Un config.json anterior ({"parquet_dir": ...}) se migra en memoria a una lista de una muestra.
+
+
+class ErrorMuestra(Exception):
+    """Error de validacion al gestionar la lista de muestras (mensaje apto para mostrar al usuario)."""
+
+
+class FaltaAnio(ErrorMuestra):
+    """La carpeta no tiene fecha_corte.txt y no se ha indicado el anio."""
+
+
+def _clave(carpeta) -> str:
+    return os.path.normcase(os.path.normpath(str(carpeta)))
+
+
+def carpeta_valida(carpeta) -> bool:
+    return (Path(carpeta) / _FICHERO_CLAVE_PARQUET).exists()
+
+
+def leer_anio(carpeta):
+    """Anio de la edicion (anio de corte - 1) segun fecha_corte.txt; None si no existe o no es valida."""
+    try:
+        texto = Path(carpeta, FICHERO_FECHA_CORTE).read_text(encoding="utf-8").strip()
+        return datetime.date.fromisoformat(texto).year - 1
+    except (OSError, ValueError):
+        return None
+
+
+def anio_de(m: dict):
+    return leer_anio(m["carpeta"]) or m.get("anio")
+
+
+def disponible(m: dict) -> bool:
+    return carpeta_valida(m["carpeta"])
+
+
+def leer_config() -> dict:
+    data = {}
+    if CONFIG_FILE.exists():
+        try:
+            leido = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            if isinstance(leido, dict):
+                data = leido
+        except (OSError, ValueError):
+            data = {}
+    if "muestras" not in data:
+        antigua = data.pop("parquet_dir", None)
+        data["muestras"] = []
+        data["activa"] = None
+        if antigua:
+            carpeta = str(Path(antigua))
+            data["muestras"] = [{"carpeta": carpeta, "anio": leer_anio(carpeta)}]
+            data["activa"] = carpeta
+    data.pop("parquet_dir", None)
+    data.setdefault("activa", None)
+    return data
+
+
+def guardar_config(cfg: dict) -> None:
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def buscar_muestra(cfg: dict, carpeta):
+    for m in cfg["muestras"]:
+        if _clave(m["carpeta"]) == _clave(carpeta):
+            return m
+    return None
+
+
+def _mas_reciente_disponible(cfg: dict):
+    disp = [m for m in cfg["muestras"] if disponible(m)]
+    return max(disp, key=lambda m: anio_de(m) or 0) if disp else None
+
+
+def anadir_muestra(cfg: dict, carpeta, anio=None) -> dict:
+    if not carpeta_valida(carpeta):
+        raise ErrorMuestra(f"Esa carpeta no tiene {_FICHERO_CLAVE_PARQUET}.")
+    if buscar_muestra(cfg, carpeta):
+        raise ErrorMuestra("Esa carpeta ya está en la lista de muestras.")
+    a = leer_anio(carpeta) or anio
+    if a is None:
+        raise FaltaAnio("La carpeta no tiene fecha_corte.txt: indica el año de la muestra.")
+    cfg["muestras"].append({"carpeta": str(Path(carpeta)), "anio": int(a)})
+    if not cfg.get("activa"):
+        cfg["activa"] = str(Path(carpeta))
+    return cfg
+
+
+def editar_muestra(cfg: dict, actual, nueva, anio=None) -> dict:
+    m = buscar_muestra(cfg, actual)
+    if m is None:
+        raise ErrorMuestra("La muestra no está en la lista.")
+    if not carpeta_valida(nueva):
+        raise ErrorMuestra(f"Esa carpeta no tiene {_FICHERO_CLAVE_PARQUET}.")
+    otra = buscar_muestra(cfg, nueva)
+    if otra is not None and otra is not m:
+        raise ErrorMuestra("Esa carpeta ya está en la lista de muestras.")
+    a = leer_anio(nueva) or anio
+    if a is None:
+        raise FaltaAnio("La carpeta no tiene fecha_corte.txt: indica el año de la muestra.")
+    era_activa = cfg.get("activa") and _clave(cfg["activa"]) == _clave(m["carpeta"])
+    m["carpeta"], m["anio"] = str(Path(nueva)), int(a)
+    if era_activa:
+        cfg["activa"] = m["carpeta"]
+    return cfg
+
+
+def eliminar_muestra(cfg: dict, carpeta) -> dict:
+    """Quita la muestra de la lista. NUNCA borra ficheros. La unica que queda no se puede quitar."""
+    m = buscar_muestra(cfg, carpeta)
+    if m is None:
+        raise ErrorMuestra("La muestra no está en la lista.")
+    if len(cfg["muestras"]) == 1:
+        raise ErrorMuestra("Es la única muestra: añade otra antes de quitarla.")
+    era_activa = cfg.get("activa") and _clave(cfg["activa"]) == _clave(m["carpeta"])
+    cfg["muestras"].remove(m)
+    if era_activa:
+        nueva = _mas_reciente_disponible(cfg)
+        cfg["activa"] = nueva["carpeta"] if nueva else None
+    return cfg
+
+
+def activar_muestra(cfg: dict, carpeta) -> dict:
+    m = buscar_muestra(cfg, carpeta)
+    if m is None:
+        raise ErrorMuestra("La muestra no está en la lista.")
+    if not disponible(m):
+        raise ErrorMuestra("La carpeta de esta muestra no está disponible.")
+    cfg["activa"] = m["carpeta"]
+    return cfg
+
+
+def muestras_con_estado(cfg: dict, activa=None) -> list:
+    activa = activa if activa is not None else cfg.get("activa")
+    filas = [{"carpeta": m["carpeta"], "anio": anio_de(m), "disponible": disponible(m),
+              "activa": bool(activa) and _clave(activa) == _clave(m["carpeta"])} for m in cfg["muestras"]]
+    return sorted(filas, key=lambda f: f["anio"] or 0, reverse=True)
+
+
+def muestra_inicial(cfg: dict):
+    """(muestra, aviso): la activa si esta disponible; si no, la mas reciente disponible con un aviso."""
+    if cfg.get("activa"):
+        m = buscar_muestra(cfg, cfg["activa"])
+        if m is not None and disponible(m):
+            return m, None
+    m = _mas_reciente_disponible(cfg)
+    if m is None:
+        return None, None
+    aviso = f"La última muestra usada no está disponible; se abre la {anio_de(m)}." if cfg.get("activa") else None
+    return m, aviso
+
 
 PUERTO_POR_DEFECTO = 8000
 
