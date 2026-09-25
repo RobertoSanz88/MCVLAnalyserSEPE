@@ -451,15 +451,17 @@ def extraer_grupo_a(con, parquet_folder):
     # categorias real sin documentar. Se excluyen del ranking (like NULL) en vez de listar los
     # codigos concretos vistos hoy, para cubrir tambien claves fuera de rango que aparezcan en
     # futuras ediciones de la MCVL sin tener que tocar este codigo otra vez.
-    # 2026-09-25 (decision explicita del usuario): los grupos 21 y 23 (R.E. Agrario Cuenta Propia,
-    # 0721; 15.117 y 6.347 episodios) se asimilan al 00 NO CONSTA, que es como los trata la guia
-    # (valores fuera de la tabla = "el dato no consta"), en vez de excluirlos del ranking: asi su
-    # tiempo de empleo cuenta en t_tot_grupo_ppal (335 personas con hasta 28,8 anyos de empleo en esos
-    # grupos salian con 0,4 anyos, C-268). El resto de claves fuera de 00-12 (13, 14, 19, 20, 31, 63)
-    # siguen excluidas.
-    _grupo = 'CASE WHEN "03 GRU_COTIZACION" IN (21, 23) THEN 0 ELSE "03 GRU_COTIZACION" END'
+    # 2026-09-25 (decision explicita del usuario): CUALQUIER clave fuera de 00-12 (13, 14, 19, 20, 21, 23, 31,
+    # 63 en la muestra actual; 21 y 23 son del R.E. Agrario Cuenta Propia, 0721) se asimila al 00 NO CONSTA,
+    # como indica la guia (valores fuera de la tabla = "el dato no consta"), en vez de excluirse del
+    # ranking: asi su tiempo de empleo cuenta en t_tot_grupo_ppal (335 personas con hasta 28,8 anyos de
+    # empleo en los grupos 21/23 salian con 0,4 anyos, C-268) y las otras variables de grupo (que ya
+    # decodifican cualquier clave desconocida como NO CONSTA) quedan coherentes con esta. Sobre una muestra de
+    # 29.004 personas solo cambia el grupo principal de 38 (0,13 %), todas a 00. NULL sigue excluido.
+    _grupo = ('CASE WHEN "03 GRU_COTIZACION" IS NULL THEN NULL '
+              'WHEN "03 GRU_COTIZACION" BETWEEN 0 AND 12 THEN "03 GRU_COTIZACION" ELSE 0 END')
     df_grupo = con.execute(_sql_categoria_ppal_fusionada(
-        afiliacion, _grupo, f'({_grupo}) BETWEEN 0 AND 12'
+        afiliacion, _grupo
     ) + """
         SELECT ipf AS "01 IPF", val AS "Grupo_cotiz_ppal", total AS "t_tot_grupo_ppal"
         FROM ranked WHERE rn = 1
