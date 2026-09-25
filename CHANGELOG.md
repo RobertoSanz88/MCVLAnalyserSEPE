@@ -1,5 +1,30 @@
 # Novedades por versión
 
+## Sin versión todavía (cambios de variables tras revisar las reglas de consistencia, 2026-09-25)
+
+- **`ingresos_pension_2024` se renombra a `ingresos_pension_y_bajas_2024`.** La clave B del modelo 190
+  no es solo pensión: incluye también las prestaciones por incapacidad temporal (bajas por enfermedad)
+  abonadas directamente por la Seguridad Social o la mutua y las de mutualidades de funcionarios. De las
+  48.780 personas con este importe y sin pensión en la tabla de pensiones, solo 1.809 tienen 65 años o más.
+  **Cualquier filtro o análisis que use el nombre antiguo hay que actualizarlo.** La app reconoce
+  también un Parquet anterior con el nombre antiguo.
+- **Se elimina `causas_baja_distintas`.** Contaba las causas de baja de todos los episodios, incluidos los de
+  prestación, y no era comparable con las altas de empleo. Se conserva `causa_baja_mas_comun`.
+- **La edad de los fallecidos se calcula a su fecha de fallecimiento.** `edad_actual_fecha_corte` de las
+  18.801 personas fallecidas coincide ahora con `edad_fallecimiento` (antes salían entre 0,25 y 1,25 años
+  más viejos; 528 aparecían con más de 100 años, ahora 385). Además, el final del último empleo de un
+  fallecido no supera su fecha de fallecimiento (`edad_ultimo_empleo`, 14 personas).
+- **Grupo de cotización principal:** cualquier clave fuera de 00-12 (13, 14, 19, 20, 21, 23, 31, 63) cuenta
+  como "00 NO CONSTA", como indica la guía, en vez de excluirse. Cambia el grupo principal de unas 1.800
+  personas (0,13 %) y `t_tot_grupo_ppal` de quienes trabajaron en los grupos 21 y 23 (R.E. Agrario Cuenta
+  Propia).
+- **Codificación común de provincias** (`provincias_dict.csv`): 53 Isla de La Palma, 56 Mar, 66 Extranjero
+  (nacidos fuera) y 98 Extranjero (residencia fiscal fuera). Antes esos valores salían como "NO CONSTA"
+  (220.047 nacidos en el extranjero, 1.564 y 1.020 en provincia fiscal, 503 en provincia de trabajo).
+- **Fusión de tramos de afiliación determinista.** El cálculo cambiaba entre ejecuciones idénticas
+  (hasta 44 años de diferencia en 5.001 personas); ahora es estable. Cambian los tiempos `T_total_*` y sus
+  porcentajes en 2.476 personas y algunos regímenes, grupos, provincias y actividades principales.
+
 ## Sin versión todavía (correcciones de las reglas de consistencia, 2026-09-22)
 
 - **Quien cobra jubilación ya no puede aparecer como "en paro".** `situacion_paro_ocupacion`

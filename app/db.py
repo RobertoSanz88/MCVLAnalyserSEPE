@@ -203,7 +203,11 @@ _PATRON_INGRESOS_LEGACY = re.compile(r"^Ingresos_bruto_anual_(\d{4})$")
 def _columnas_fiscales_pension(existentes: set) -> dict:
     extra = {}
     for raw in existentes:
-        if _PATRON_INGRESOS_RETENCIONES.match(raw):
+        if (m := re.match(r"^ingresos_pension_(\d{4})$", raw)):
+            # 2026-09-25: renombrada a ingresos_pension_y_bajas_AAAA (la clave B del modelo 190 incluye las
+            # bajas por enfermedad, no solo pensiones); se mapea tambien para un Parquet anterior al cambio.
+            extra[raw] = f"ingresos_pension_y_bajas_{m.group(1)}"
+        elif _PATRON_INGRESOS_RETENCIONES.match(raw):
             extra[raw] = raw  # ya en snake_case, mismo nombre crudo y limpio
         elif (m := _PATRON_COBRA_PENSION.match(raw)):
             extra[raw] = f"cobra_pension_{m.group(1)}_{m.group(2)}"

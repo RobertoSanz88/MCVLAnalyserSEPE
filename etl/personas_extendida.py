@@ -1136,7 +1136,13 @@ def extraer_grupo_f(parquet_folder, anio_datos):
     tipo = clave + df["06 SUBCLAVE_PERCEPCION"].fillna("").astype(str).str.strip()
     grupos = {
         f"ingresos_sueldo_{anio_datos}": clave == "A",
-        f"ingresos_pension_{anio_datos}": (clave == "B") | tipo.isin(TIPOS_PENSION_EXENTA),
+        # Renombrada el 2026-09-25 (decision explicita del usuario) de ingresos_pension_{anio} a
+        # ingresos_pension_y_bajas_{anio}: la clave B del modelo 190 incluye, ademas de pensiones y
+        # haberes pasivos, las prestaciones por incapacidad temporal (bajas por enfermedad) abonadas
+        # directamente por la Seguridad Social o la mutua (subclave B01) y las de mutualidades de
+        # funcionarios (B03); 31.358 de las 48.780 personas con "pension" fiscal y sin pension en la tabla
+        # de pensiones tienen menos de 65 anyos y B01.
+        f"ingresos_pension_y_bajas_{anio_datos}": (clave == "B") | tipo.isin(TIPOS_PENSION_EXENTA),
         f"ingresos_prestacion_{anio_datos}": clave == "C",
         f"ingresos_actividad_{anio_datos}": clave.isin(["F", "G", "H"]),
         f"ingresos_otras_exentas_{anio_datos}": (clave == "L") & ~tipo.isin(TIPOS_PENSION_EXENTA),
@@ -1980,6 +1986,10 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     # de df - no estan en NUEVO_ORDEN con un anyo fijo, asi que se anyaden justo despues de
     # "t_tot_act_econ_ppal" (ingresos/retenciones) y "Pension_actual" (Cobra_pension), que es
     # donde vivian antes con el anyo escrito a mano.
+    # Compatibilidad (2026-09-25): un parcial generado antes del renombrado aun trae ingresos_pension_{anio};
+    # se renombra aqui para poder repetir solo el Grupo H (accion grupo_h) sin rehacer los grupos A-G.
+    df.rename(columns={c: c.replace("ingresos_pension_", "ingresos_pension_y_bajas_", 1)
+                       for c in df.columns if re.match(r"^ingresos_pension_\d{4}$", c)}, inplace=True)
     _ingresos_detectados, _cobra_pension_detectada = _columnas_fiscales_pension_presentes(df.columns)
     orden_final = []
     for c in NUEVO_ORDEN:
