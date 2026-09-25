@@ -59,6 +59,22 @@ if any("menor_autorizado" in (r[8] or "") for r in reglas):
           AND (a.reg_cotizacion = 112
                OR a.cnae2009_cc // 10 IN (59, 60, 90, 93, 73)
                OR a.cnae2009_cc IN (781, 742, 855))""")
+# Personas sin modelo 190 esperable (2026-09-25, G15, decision explicita del usuario): el episodio de empleo
+# abierto mas reciente (baja 2099, sin TRL 7xx/400) NO es del regimen general (111: autonomos 521, empleados
+# de hogar 138, etc., que no tienen un modelo 190 de salarios) o su empleador NO es una entidad con NIF/CIF
+# (tipo de identificador distinto de 9: persona fisica, p. ej. hogares o autonomos con un empleado, que no
+# presenta el modelo 190 de sus trabajadores). Los territorios forales (Alava, Guipuzcoa, Navarra y Vizcaya:
+# la AEAT no tiene sus datos fiscales, guia MCVL) se excluyen en la propia regla por prov_trabajo_ppal.
+if any("sin_190_esperable" in (r[8] or "") for r in reglas):
+    con.execute("""CREATE TEMP TABLE sin_190_esperable AS
+        SELECT ipf FROM (
+            SELECT ipf, arg_max(reg_cotizacion, fecha_alta_real_afil) AS reg,
+                        arg_max(empleador_tipo_id, fecha_alta_real_afil) AS tipo_id
+            FROM afiliacion
+            WHERE year(fecha_baja_real_afil) = 2099
+              AND NOT (COALESCE(trl >= 700 AND trl < 800, FALSE) OR COALESCE(trl = 400, FALSE))
+            GROUP BY ipf)
+        WHERE reg <> 111 OR COALESCE(tipo_id, '0') <> '9'""")
 # Personas con alguna pension de orfandad VITALICIA (2026-09-24, C-153): segun la guia MCVL (4.030) es la
 # orfandad de quien tiene incapacidad permanente reconocida, que no tiene limite de edad (art. 224 LGSS).
 # La vista "pensiones" de app/db.py no expone esa columna, asi que se lee directamente del Parquet.
