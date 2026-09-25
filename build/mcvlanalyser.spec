@@ -28,6 +28,8 @@ a_main = Analysis(
     datas=[
         ('..\\app\\templates', 'app\\templates'),
         ('..\\app\\static', 'app\\static'),
+        # README.md: la vista "Acerca de" (v2.2) lo lee de la raiz del paquete (app/routers/muestras.py, _ruta_recurso).
+        ('..\\README.md', '.'),
         ('..\\etl\\metadata\\tipo_contrato_claves_sucesoras.csv', 'etl\\metadata'),
         ('..\\etl\\metadata\\provincias_dict.csv', 'etl\\metadata'),
     ],

@@ -16,20 +16,27 @@ de los datos. **No hay servidor compartido, ni autenticación, ni nube**: los da
 entidad). `data/`, `parquet/` y `*.parquet` están en `.gitignore`. El repositorio contiene solo código.
 Los Parquet se distribuyen por el canal interno del Observatorio; el `.exe` (sin datos) por GitHub Releases.
 
-## Qué hay en la app (v1)
+## Qué hay en la app (v2.2)
 
 1. **Selección de colectivo y filtro global**, con un único interruptor que se aplica a todas las pestañas.
 2. **Explorador de trayectorias individuales:** buscar por IPF y ver la línea temporal de episodios laborales.
 3. **Constructor de colectivos y estadísticas agregadas:** filtros (sexo, edad, provincia, CNAE, tipo de
    contrato, fechas...), recuentos, distribuciones, cruces de variables y trayectorias de colectivo por
    años de vida laboral o por edad. Exportable a Excel y CSV.
+4. **Varias muestras de la MCVL, una a la vez.** El botón de tres rayas de la cabecera abre el menú: una fila
+   por muestra añadida (2024, 2023...), y las opciones Añadir, Editar y Eliminar muestra. Elegir otra muestra
+   recarga la aplicación en su estado inicial (sin colectivo ni filtros de la muestra anterior). Eliminar solo
+   quita la muestra de la lista: nunca borra ficheros.
+5. **Descripción de variables** (Personas extendida y Afiliación extendida, con búsqueda) y **Acerca de** (este
+   texto, con las reglas de consistencia y los casos raros de los datos), desde el mismo menú.
 
 ## Cómo usarla
 
 - **Arranque:** doble clic en `iniciar.bat` (instala las dependencias de `requirements.txt` si faltan y
   abre el navegador cuando el servidor responde). El puerto preferido es el 8000; si está ocupado usa el
-  siguiente libre. La primera vez pide la carpeta de Parquet con un selector; la configuración se guarda
-  en `%APPDATA%`.
+  siguiente libre. La primera vez pide la carpeta de Parquet con un selector y lee el año de la muestra de su
+  `fecha_corte.txt` (si no lo tiene, lo pide). Las muestras y la última usada se guardan en `config.json`,
+  junto a la aplicación; cada arranque abre la última muestra usada.
 - **Ejecutable:** la distribución prevista es un `.exe` autónomo (PyInstaller, modo `--onedir`) generado
   siempre con `build\construir.bat`. Consulta `CLAUDE.md` para el detalle y la advertencia de SmartScreen.
 

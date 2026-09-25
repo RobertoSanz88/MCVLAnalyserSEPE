@@ -1,5 +1,5 @@
 """Prueba de humo por bloques: python tests/smoke.py <bloque>
-bloques: colectivos | cruce_a | cruce_b | cruce_extra | trayectorias
+bloques: colectivos | cruce_a | cruce_b | cruce_extra | trayectorias | muestras
 
 Requiere el servidor ya arrancado en http://127.0.0.1:8000 (uvicorn app.main:app
 --port 8000) y los Parquet reales cargados. Solo hace consultas de lectura.
@@ -284,8 +284,31 @@ def b_trayectorias():
     call("individual colectivo null", "POST", "/trayectorias/individual/aleatorio", expect=(200, 422), json={"colectivo": None})
 
 
+def b_muestras():
+    """Cambio de muestra de verdad: MCVL_MUESTRA_A y MCVL_MUESTRA_B (dos carpetas, p. ej. las sinteticas de
+    tests/muestra_sintetica.py) se activan alternando y se vuelve a la que estaba activa; ademas /variables y /acerca-de."""
+    import os
+    a, b = os.environ.get("MCVL_MUESTRA_A"), os.environ.get("MCVL_MUESTRA_B")
+    r = call("muestras", "GET", "/muestras")
+    original = r.json()["activa"] if r is not None else None
+    if a and b and original:
+        existentes = [m["carpeta"] for m in r.json()["muestras"]]
+        anadidas = []
+        for destino in (a, b):
+            if destino not in existentes:
+                call(f"anadir {destino[-12:]}", "POST", "/muestras/anadir", json={"carpeta": destino, "anio": 2000})
+                anadidas.append(destino)
+        for destino in (a, b, a, b, original):
+            call(f"activar {destino[-14:]}", "POST", "/muestras/activar", json={"carpeta": destino})
+            call("columnas tras cambio", "GET", "/colectivos/columnas")
+        for destino in anadidas:  # deja config.json como estaba
+            call(f"eliminar {destino[-12:]}", "POST", "/muestras/eliminar", json={"carpeta": destino})
+    call("variables", "GET", "/variables")
+    call("acerca-de", "GET", "/acerca-de")
+
+
 BLOQUES = {"colectivos": b_colectivos, "cruce_a": b_cruce_a, "cruce_b": b_cruce_b,
-           "cruce_extra": b_cruce_extra, "trayectorias": b_trayectorias}
+           "cruce_extra": b_cruce_extra, "trayectorias": b_trayectorias, "muestras": b_muestras}
 
 if __name__ == "__main__":
     nombre = sys.argv[1]

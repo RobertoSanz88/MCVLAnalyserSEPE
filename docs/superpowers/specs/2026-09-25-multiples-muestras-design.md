@@ -40,7 +40,7 @@ análisis (siguen usando la vista `personas`).
 - **Año:** `leer_anio(carpeta)` = año de `fecha_corte.txt` menos 1. Si no existe o no es válido, se pide y se guarda
   en la lista (`anio`).
 - **Validación** al añadir o editar: la carpeta tiene `tabla_personas_extendida.parquet` y no está ya en la lista.
-- **Eliminar la activa:** pasa a la muestra disponible más reciente; si no queda ninguna, vuelve al primer arranque.
+- **Eliminar la activa:** pasa a la muestra disponible más reciente. La única muestra que queda no se puede eliminar.
 - **Carpeta que ya no existe:** la muestra sigue en la lista marcada como no disponible. Si la última usada no está al
   arrancar, se abre la más reciente disponible con un aviso.
 - **Primer arranque sin muestras:** selector de carpeta nativo (como hoy), validación, lectura del año, muestra activa.

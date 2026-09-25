@@ -1,5 +1,19 @@
 # Novedades por versión
 
+## v2.2 — varias muestras de la MCVL (2026-09-25)
+
+- **La app maneja varias muestras, una a la vez.** Cada muestra es una carpeta de Parquet; el año sale de su
+  `fecha_corte.txt` (año de corte menos 1). Menú de tres rayas en la cabecera: elegir muestra, Añadir, Editar y
+  Eliminar. Al cambiar de muestra la página se recarga en su estado inicial.
+- **`config.json` cambia de formato:** `{"muestras": [{"carpeta", "anio"}], "activa": ...}`. Un `config.json`
+  antiguo (`parquet_dir`) se migra solo, con esa carpeta como única muestra.
+- **Eliminar solo quita de la lista** y no se puede quitar la única muestra que queda.
+- **Nuevas vistas:** Descripción de variables (71 de Personas y 41 de Afiliación, con búsqueda) y Acerca de (README,
+  reglas de consistencia y casos raros).
+- **Cabecera:** título `MCVLAnalyserSEPE` y "Observatorio de las Ocupaciones" centrados; `Muestra AAAA` junto al menú.
+- Interno: la conexión DuckDB y la fecha de corte salen de la muestra activa (`app.db.estado`); el cambio de
+  muestra es un intercambio atómico. `tools/generar_datos_ayuda.py` genera los JSON de las dos vistas.
+
 ## Sin versión todavía (cambios de variables tras revisar las reglas de consistencia, 2026-09-25)
 
 - **`Grupo_cotiz_ppal`, `Grupo_cotiz_1er_Empleo_Signif` y `Grupo_Ultimo_Empleo` solo tienen una categoría de "no consta":
