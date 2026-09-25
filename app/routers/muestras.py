@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import config
-from app.db import abrir_muestra, estado
+from app.db import _sql_ruta, abrir_muestra, estado
 
 router = APIRouter()
 _bloqueo = threading.Lock()  # serializa las operaciones sobre config.json y el cambio de muestra
@@ -136,7 +136,7 @@ def variables():
     salida = {"anio": m.anio}
     for tabla, fichero in (("personas", "tabla_personas_extendida.parquet"), ("afiliacion", "tabla_afiliacion_extendida.parquet")):
         columnas = [(x[0], x[1]) for x in con.execute(
-            f"DESCRIBE SELECT * FROM read_parquet('{(m.carpeta / fichero).as_posix()}')").fetchall()]
+            f"DESCRIBE SELECT * FROM read_parquet('{_sql_ruta(m.carpeta / fichero)}')").fetchall()]
         filas = []
         for n, t in columnas:
             info = catalogo[tabla].get(_normalizar(n) if tabla == "personas" else n, {})

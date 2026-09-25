@@ -109,3 +109,29 @@ def test_editar_muestra_activa_reabre_la_conexion(cliente, tmp_path):
     assert r.status_code == 200 and _n(c) == 300
     from app.db import estado
     assert estado.muestra.carpeta == movida
+
+
+def test_arranque_salta_a_la_siguiente_si_la_activa_esta_danada(tmp_path, monkeypatch, muestras_sinteticas):
+    a, b = muestras_sinteticas
+    mala = tmp_path / "mala"
+    shutil.copytree(b, mala)
+    (mala / "tabla_afiliacion_extendida.parquet").write_bytes(b"esto no es parquet")
+    f = tmp_path / "config.json"
+    monkeypatch.setattr(config, "CONFIG_FILE", f)
+    f.write_text(json.dumps({"muestras": [{"carpeta": str(mala), "anio": 2030}, {"carpeta": a, "anio": 2024}],
+                             "activa": str(mala)}), encoding="utf-8")
+    from app.main import app
+    with TestClient(app) as c:
+        r = c.get("/muestras").json()
+        assert r["anio"] == 2024 and _n(c) == 300
+        assert "2023" in r["aviso"] and "Se abre la 2024" in r["aviso"]
+
+
+def test_carpeta_con_apostrofo_y_espacios(cliente, tmp_path):
+    c, a, b = cliente
+    ap = tmp_path / "l'año 2023 datos"
+    shutil.copytree(b, ap)
+    assert c.post("/muestras/anadir", json={"carpeta": str(ap)}).status_code == 200
+    r = c.post("/muestras/activar", json={"carpeta": str(ap)})
+    assert r.status_code == 200 and _n(c) == 200
+    assert c.get("/variables").status_code == 200

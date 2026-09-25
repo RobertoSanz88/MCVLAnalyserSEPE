@@ -22,11 +22,24 @@ def startup():
     # Los endpoints NO usan una Connection compartida directamente (peticiones concurrentes la corrompen):
     # cada uno saca su cursor con request.app.state.con.cursor(). app.state.con delega en la muestra activa.
     cfg = config.leer_config()
-    m, aviso = config.muestra_inicial(cfg)
-    if m is None:
+    if not config.muestras_candidatas(cfg):
         cfg = config.pedir_primera_muestra(cfg)
-        m, aviso = config.muestra_inicial(cfg)
-    estado.muestra = abrir_muestra(m["carpeta"], config.anio_de(m))
+    config.completar_anios(cfg, config.pedir_anio_dialogo)  # p. ej. un config.json antiguo sin fecha_corte.txt
+    m, aviso, fallos = None, None, []
+    for candidata in config.muestras_candidatas(cfg):
+        try:
+            estado.muestra = abrir_muestra(candidata["carpeta"], config.anio_de(candidata))
+        except Exception as e:  # falta un Parquet, esta danado, disco a medias...
+            fallos.append(f"{config.anio_de(candidata) or candidata['carpeta']} ({str(e).splitlines()[0][:100]})")
+            continue
+        m = candidata
+        break
+    if m is None:
+        raise RuntimeError("No se pudo abrir ninguna muestra: " + "; ".join(fallos))
+    if fallos:
+        aviso = f"No se pudo abrir la muestra {fallos[0]}. Se abre la {config.anio_de(m)}."
+    else:
+        _, aviso = config.muestra_inicial(cfg)
     estado.aviso_arranque = aviso
     cfg["activa"] = m["carpeta"]
     config.guardar_config(cfg)  # persiste tambien la migracion del config.json antiguo

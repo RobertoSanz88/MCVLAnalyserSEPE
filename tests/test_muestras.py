@@ -126,3 +126,44 @@ def test_guardar_y_releer(cfgfile, tmp_path):
     config.anadir_muestra(cfg, a)
     config.guardar_config(cfg)
     assert config.leer_config() == cfg
+
+
+@pytest.mark.parametrize("contenido", ["", "{no es json", "[]"])
+def test_get_puerto_tolera_config_corrupto(cfgfile, contenido):
+    cfgfile.write_text(contenido, encoding="utf-8")
+    assert config.get_puerto() == config.PUERTO_POR_DEFECTO
+
+
+def test_config_corrupto_se_copia_antes_de_sobrescribir(cfgfile):
+    cfgfile.write_text("{lista de muestras a medias", encoding="utf-8")
+    config.leer_config()
+    copia = cfgfile.with_name(cfgfile.name + ".corrupto")
+    assert copia.exists() and copia.read_text(encoding="utf-8") == "{lista de muestras a medias"
+
+
+def test_guardar_config_no_deja_temporales(cfgfile, tmp_path):
+    config.guardar_config({"muestras": [], "activa": None})
+    assert [p.name for p in tmp_path.iterdir()] == ["config.json"]
+
+
+def test_completar_anios_pregunta_solo_por_las_que_no_lo_tienen(cfgfile, tmp_path):
+    sin = hacer_muestra(tmp_path, "sin")
+    con = hacer_muestra(tmp_path, "con_anio", "2025-05-01")
+    cfgfile.write_text(json.dumps({"muestras": [{"carpeta": sin, "anio": None}, {"carpeta": con, "anio": 2024}],
+                                   "activa": sin}), encoding="utf-8")
+    cfg = config.leer_config()
+    preguntas = []
+    config.completar_anios(cfg, lambda carpeta: preguntas.append(carpeta) or 2019)
+    assert preguntas == [sin]
+    assert config.anio_de(config.buscar_muestra(cfg, sin)) == 2019
+
+
+def test_candidatas_empieza_por_la_activa_y_sigue_por_las_mas_recientes(cfgfile, tmp_path):
+    a = hacer_muestra(tmp_path, "a", "2025-05-01")  # 2024
+    b = hacer_muestra(tmp_path, "b", "2024-05-01")  # 2023
+    c = hacer_muestra(tmp_path, "c", "2023-05-01")  # 2022
+    cfg = config.leer_config()
+    for x in (a, b, c):
+        config.anadir_muestra(cfg, x)
+    config.activar_muestra(cfg, c)
+    assert [m["carpeta"] for m in config.muestras_candidatas(cfg)] == [str(Path(c)), str(Path(a)), str(Path(b))]

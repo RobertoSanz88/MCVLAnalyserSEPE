@@ -219,6 +219,11 @@ def _columnas_fiscales_pension(existentes: set) -> dict:
     return extra
 
 
+def _sql_ruta(ruta) -> str:
+    """Ruta como literal SQL entre comillas simples: escapa el apostrofo (p. ej. una carpeta 'l'any 2023')."""
+    return Path(ruta).as_posix().replace("'", "''")
+
+
 def get_connection(parquet_dir) -> duckdb.DuckDBPyConnection:
     """Abre una conexion DuckDB en memoria y registra una vista por tabla MCVL sobre 'parquet_dir',
     con columnas ya renombradas a snake_case."""
@@ -241,7 +246,7 @@ def get_connection(parquet_dir) -> duckdb.DuckDBPyConnection:
         # _columnas_fiscales_pension) en la vista "personas" - coste minimo, es solo metadatos.
         existentes = {
             fila[0] for fila in con.execute(
-                f"DESCRIBE SELECT * FROM read_parquet('{parquet_path.as_posix()}')"
+                f"DESCRIBE SELECT * FROM read_parquet('{_sql_ruta(parquet_path)}')"
             ).fetchall()
         }
         columns = dict(columns)
@@ -254,7 +259,7 @@ def get_connection(parquet_dir) -> duckdb.DuckDBPyConnection:
         )
         con.execute(
             f"CREATE OR REPLACE VIEW {view_name} AS "
-            f"SELECT {select_list} FROM read_parquet('{parquet_path.as_posix()}') AS src"
+            f"SELECT {select_list} FROM read_parquet('{_sql_ruta(parquet_path)}') AS src"
         )
     return con
 

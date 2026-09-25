@@ -23,6 +23,7 @@ la carpeta).
 import datetime
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -166,10 +167,12 @@ def leer_config() -> dict:
     if CONFIG_FILE.exists():
         try:
             leido = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-            if isinstance(leido, dict):
-                data = leido
+            if not isinstance(leido, dict):
+                raise ValueError("config.json no es un objeto")
+            data = leido
         except (OSError, ValueError):
             data = {}
+            _guardar_copia_del_corrupto()
     if "muestras" not in data:
         antigua = data.pop("parquet_dir", None)
         data["muestras"] = []
@@ -183,9 +186,56 @@ def leer_config() -> dict:
     return data
 
 
+def _guardar_copia_del_corrupto() -> None:
+    """Un config.json corrupto se trata como 'sin muestras', pero antes se copia a config.json.corrupto para que
+    la lista anterior no se pierda en silencio cuando se vuelva a escribir el fichero."""
+    try:
+        shutil.copyfile(CONFIG_FILE, CONFIG_FILE.with_name(CONFIG_FILE.name + ".corrupto"))
+    except OSError:
+        pass
+
+
 def guardar_config(cfg: dict) -> None:
+    """Escritura atomica (fichero temporal + reemplazo): un corte a mitad no deja un JSON truncado."""
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporal = CONFIG_FILE.with_name(CONFIG_FILE.name + ".tmp")
+    temporal.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporal, CONFIG_FILE)
+
+
+def muestras_candidatas(cfg: dict) -> list:
+    """Muestras disponibles en orden de preferencia para arrancar: la activa primero y despues las mas recientes."""
+    disp = sorted((m for m in cfg["muestras"] if disponible(m)), key=lambda m: anio_de(m) or 0, reverse=True)
+    activa = buscar_muestra(cfg, cfg["activa"]) if cfg.get("activa") else None
+    if activa is not None and activa in disp:
+        disp.remove(activa)
+        disp.insert(0, activa)
+    return disp
+
+
+def completar_anios(cfg: dict, preguntar) -> dict:
+    """Pide el anio (con preguntar(carpeta) -> int|None) de las muestras disponibles que no lo tienen: p. ej. un
+    config.json antiguo cuya carpeta no trae fecha_corte.txt."""
+    for m in cfg["muestras"]:
+        if disponible(m) and anio_de(m) is None:
+            a = preguntar(m["carpeta"])
+            if a:
+                m["anio"] = int(a)
+    return cfg
+
+
+def pedir_anio_dialogo(carpeta) -> "int | None":
+    import tkinter as tk
+    from tkinter import simpledialog
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        return simpledialog.askinteger("Año de la muestra", f"La carpeta {carpeta}\nno indica el año de la MCVL.\nAño:",
+                                       minvalue=2004, maxvalue=2100, parent=root)
+    finally:
+        root.destroy()
 
 
 def buscar_muestra(cfg: dict, carpeta):
@@ -288,11 +338,12 @@ def get_puerto() -> int:
     FINAL: si esta ocupado, puerto_libre() busca uno libre a partir de este -
     ver ese docstring para el porque (antes esto exigia editar config.json a
     mano, ahora solo hace falta como override opcional)."""
-    if CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data.get("puerto", PUERTO_POR_DEFECTO)
-    return PUERTO_POR_DEFECTO
+    try:
+        data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        puerto = data.get("puerto", PUERTO_POR_DEFECTO) if isinstance(data, dict) else PUERTO_POR_DEFECTO
+        return puerto if isinstance(puerto, int) else PUERTO_POR_DEFECTO
+    except (OSError, ValueError):  # sin config.json, vacio o corrupto: puerto por defecto
+        return PUERTO_POR_DEFECTO
 
 
 def puerto_libre(preferido: int, intentos: int = 20) -> int:
