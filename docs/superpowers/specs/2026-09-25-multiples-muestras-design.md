@@ -51,8 +51,10 @@ análisis (siguen usando la vista `personas`).
   conexiones y vistas** sobre otra carpeta.
 - `routers/trayectorias.py` fija hoy `PARQUET_DIR` y `FECHA_CORTE_ISO` al importar: pasan a leerse de la muestra activa
   en cada petición (o de un estado compartido que se actualiza al cambiar de muestra).
-- Al activar una muestra, un cerrojo bloquea las peticiones nuevas mientras se recrean las vistas; los endpoints siguen
-  usando `con.cursor()` por petición.
+- Al activar una muestra se abre y valida **primero** la conexión nueva y después se sustituye `app.state.muestra`
+  de golpe (intercambio atómico, sin cerrojo). Las peticiones en curso, incluidas las de streaming, terminan sobre la
+  muestra anterior, cuya conexión se libera sola al soltarse su último cursor; las nuevas usan la nueva. Los endpoints
+  siguen usando `con.cursor()` por petición.
 - Si la muestra elegida no se puede abrir (falta un Parquet, está dañado o el disco no responde), **no se cambia**:
   sigue la anterior y se avisa con el motivo.
 
@@ -113,4 +115,5 @@ raros y de baja calidad. Desde la página de trayectoria individual, las dos vis
 
 - Cualquier módulo que guarde la ruta de Parquet o la fecha de corte al importarse quedaría con la muestra anterior tras
   cambiar (hoy: `routers/trayectorias.py`). Habrá que revisar todos y cubrirlo con una prueba de cambio real.
-- Peticiones largas en curso al cambiar de muestra: el cerrojo las espera; una consulta de 40-110 s puede retrasar el cambio.
+- Peticiones largas en curso al cambiar de muestra: terminan sobre la muestra anterior (la página se recarga y descarta el
+  resultado); la conexión anterior se libera cuando acaban.
