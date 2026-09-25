@@ -1514,9 +1514,18 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     # Edad_Actual_Fecha_Corte: edad a la fecha de corte de esta MCVL (FECHA_CORTE), NUNCA la
     # fecha real del sistema - si no, se desincroniza del resto del snapshot segun cuando se
     # ejecute la app.
+    # 2026-09-25 (decision explicita del usuario): para los FALLECIDOS se calcula a la fecha de
+    # fallecimiento (mes), no a la de corte: un muerto no tiene "edad actual", y asi coincide con
+    # edad_fallecimiento y con el corte de su vida laboral (Tiempo_total_desde_inicio_VL y T_total_* se
+    # cortan en el fallecimiento). Antes, 18.801 fallecidos salian 0,25-1,25 anyos mas viejos y 528
+    # aparecian con mas de 100 anyos (385 por edad al fallecer). Mismo criterio de mes que
+    # _columnas_fallecimiento.
     fecha_nacimiento_completa = df["02 FECHA_NACIMIENTO"].dt.year * 12 + df["02 FECHA_NACIMIENTO"].dt.month
     fecha_corte_completa = FECHA_CORTE.year * 12 + FECHA_CORTE.month
-    df["Edad_Actual_Fecha_Corte"] = (fecha_corte_completa - fecha_nacimiento_completa) / 12
+    _cod_fallec = df["08 FECHA_FALLECIMIENTO"].fillna(0).astype("int64")
+    _fallec_completa = (_cod_fallec // 100) * 12 + (_cod_fallec % 100)
+    _fecha_ref_completa = np.where(_cod_fallec != 0, np.minimum(_fallec_completa, fecha_corte_completa), fecha_corte_completa)
+    df["Edad_Actual_Fecha_Corte"] = (_fecha_ref_completa - fecha_nacimiento_completa) / 12
     # Comprobacion de cordura (2026-09-23): una regeneracion salio con esta columna a 0 para las
     # 1.359.056 personas y no se noto hasta ejecutar las reglas de consistencia, 30 minutos despues.
     # Si no hay ni una edad positiva, parar aqui con un error claro en vez de escribir el Parquet.
