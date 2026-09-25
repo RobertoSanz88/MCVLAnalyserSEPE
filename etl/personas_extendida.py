@@ -1413,6 +1413,16 @@ def grupo_h_final(parquet_folder, provincias_dict_path, cnae_dict_path, paises_d
     df["Fecha_ini_Primer_Empleo_completa"] = df["Fecha_ini_Primer_Empleo"].dt.year * 12 + df["Fecha_ini_Primer_Empleo"].dt.month
     df["Fecha_final_Ultimo_Empleo_completa"] = df["Fecha_final_Ultimo_Empleo"].dt.year * 12 + df["Fecha_final_Ultimo_Empleo"].dt.month
     df["02 FECHA_NACIMIENTO_completa"] = df["02 FECHA_NACIMIENTO"].dt.year * 12 + df["02 FECHA_NACIMIENTO"].dt.month
+    # 2026-09-25 (decision explicita del usuario): el final del ultimo empleo de un FALLECIDO no puede ser
+    # posterior a su fallecimiento. Un episodio aun abierto al morir (baja 2099 sustituida por FECHA_CORTE en
+    # Fase 1, o baja registrada despues) daba Edad_Ultimo_Empleo hasta 1,17 anyos mayor que su edad al
+    # fallecer (14 personas, C-039). Mismo criterio que la correccion de T_total_* y de Edad_Actual_Fecha_Corte.
+    _cod_fallec_ue = df["08 FECHA_FALLECIMIENTO"].fillna(0).astype("int64")
+    _fallec_completa_ue = (_cod_fallec_ue // 100) * 12 + (_cod_fallec_ue % 100)
+    _pasa_del_fallecimiento = (_cod_fallec_ue != 0) & (df["Fecha_final_Ultimo_Empleo_completa"] > _fallec_completa_ue)
+    df["Fecha_final_Ultimo_Empleo_completa"] = df["Fecha_final_Ultimo_Empleo_completa"].where(
+        ~_pasa_del_fallecimiento, _fallec_completa_ue
+    )
 
     # Diagnostico (2026-09-23): una regeneracion dejo Edad_Ultimo_Empleo/Edad_Primer_Empleo_Signif en
     # anyos calendario (2023,5 en vez de 62,6), como si 02 FECHA_NACIMIENTO_completa valiera 0 aqui,
