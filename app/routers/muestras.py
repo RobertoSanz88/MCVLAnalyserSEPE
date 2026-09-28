@@ -141,7 +141,8 @@ def variables():
         for n, t in columnas:
             info = catalogo[tabla].get(_normalizar(n) if tabla == "personas" else n, {})
             filas.append({"nombre": _normalizar(n) if tabla == "personas" else n, "tipo": t,
-                          "origen": info.get("origen", ""), "descripcion": info.get("descripcion") or "sin descripción"})
+                          "origen": info.get("origen", ""), "descripcion": info.get("descripcion") or "sin descripción",
+                          "construccion": info.get("construccion") or "sin información"})
         salida[tabla] = filas
     return salida
 
@@ -151,7 +152,8 @@ _SECCIONES_TESTS = ("## Reglas de consistencia",)
 
 
 def partir_readme(texto: str) -> dict:
-    """Separa el README en el texto principal y los dos desplegables finales (construccion de variables y tests)."""
+    """Separa el README en el texto principal y el desplegable final de tests de consistencia. Las secciones
+    de construccion de variables (solo para el equipo ETL) se quitan enteras: no se devuelven en ningun sitio."""
     trozos, actual = [], []
     for linea in texto.splitlines():
         if linea.startswith("## ") and actual:
@@ -159,10 +161,10 @@ def partir_readme(texto: str) -> dict:
             actual = []
         actual.append(linea)
     trozos.append("\n".join(actual))
-    salida = {"principal": [], "construccion": [], "tests": []}
+    salida = {"principal": [], "tests": []}
     for t in trozos:
         if t.startswith(_SECCIONES_CONSTRUCCION):
-            salida["construccion"].append(t)
+            continue
         elif t.startswith(_SECCIONES_TESTS):
             salida["tests"].append(t)
         else:

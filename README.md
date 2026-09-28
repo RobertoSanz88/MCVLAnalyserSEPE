@@ -19,26 +19,49 @@ Los Parquet se distribuyen por el canal interno del Observatorio; el `.exe` (sin
 ## Qué hay en la app (v2.2)
 
 1. **Selección de colectivo y filtro global**, con un único interruptor que se aplica a todas las pestañas.
-2. **Explorador de trayectorias individuales:** buscar por IPF y ver la línea temporal de episodios laborales.
-3. **Constructor de colectivos y estadísticas agregadas:** filtros (sexo, edad, provincia, CNAE, tipo de
-   contrato, fechas...), recuentos, distribuciones, cruces de variables y trayectorias de colectivo por
-   años de vida laboral o por edad. Exportable a Excel y CSV.
-4. **Varias muestras de la MCVL, una a la vez.** El botón de tres rayas de la cabecera abre el menú: una fila
+2. **Análisis de personas:** estadísticas agregadas del colectivo — numéricas (media, mediana, desviación) y
+   categóricas (recuento y porcentaje por valor) — en tabla o en gráfico, con varios tipos de gráfico
+   disponibles para las categóricas (barras agrupadas, barras apiladas, tarta...).
+3. **Trayectorias de personas:** evolución agregada por año de variables de tres tablas (bases de
+   cotización, pensiones y afiliación) a lo largo de la vida laboral del colectivo, sobre dos ejes de tiempo
+   a elegir: edad o años desde el inicio de la vida laboral.
+4. **Trayectorias individuales:** buscar por IPF y ver la línea temporal de episodios laborales de una
+   persona — altas y bajas, empresas, tipo de contrato, régimen.
+5. **Cruce de variables:** cruzar dos variables cualesquiera del colectivo (densidad, tabla de
+   contingencia, diagrama de cajas...) para explorar su relación.
+6. **Varias muestras de la MCVL, una a la vez.** El botón de tres rayas de la cabecera abre el menú: una fila
    por muestra añadida (2024, 2023...), y las opciones Añadir, Editar y Eliminar muestra. Elegir otra muestra
    recarga la aplicación en su estado inicial (sin colectivo ni filtros de la muestra anterior). Eliminar solo
    quita la muestra de la lista: nunca borra ficheros.
-5. **Descripción de variables** (Personas extendida y Afiliación extendida, con búsqueda) y **Acerca de** (este
-   texto, con las reglas de consistencia y los casos raros de los datos), desde el mismo menú.
+7. **Descripción de variables** (Personas extendida y Afiliación extendida, con búsqueda y con una
+   explicación de cómo se construye cada una) y **Acerca de** (este texto, con las reglas de consistencia y
+   los casos raros de los datos), desde el mismo menú.
+
+Los resultados de Análisis, Trayectorias y Cruce se pueden exportar a Excel y CSV.
 
 ## Cómo usarla
 
-- **Arranque:** doble clic en `iniciar.bat` (instala las dependencias de `requirements.txt` si faltan y
-  abre el navegador cuando el servidor responde). El puerto preferido es el 8000; si está ocupado usa el
-  siguiente libre. La primera vez pide la carpeta de Parquet con un selector y lee el año de la muestra de su
-  `fecha_corte.txt` (si no lo tiene, lo pide). Las muestras y la última usada se guardan en `config.json`,
-  junto a la aplicación; cada arranque abre la última muestra usada.
-- **Ejecutable:** la distribución prevista es un `.exe` autónomo (PyInstaller, modo `--onedir`) generado
-  siempre con `build\construir.bat`. Consulta `CLAUDE.md` para el detalle y la advertencia de SmartScreen.
+La primera vez que alguien la abre (doble clic en `iniciar.bat`), la aplicación pide la carpeta con los
+Parquet de la muestra y arranca en el navegador; en los siguientes arranques abre sola la última muestra
+usada. A partir de ahí, un recorrido típico:
+
+1. **Elige tu colectivo en "Selección de colectivo".** Se define con 2 filtros (Filtro 1 y Filtro 2), cada
+   uno con su contracolectivo automático activado por defecto (el "resto" de ese filtro) — así se obtienen 4
+   subgrupos cruzando los dos filtros (por ejemplo, mujeres/hombres × españoles/extranjeros). Si desactivas
+   el contracolectivo de un filtro, en su lugar defines un segundo filtro independiente (Filtro 3 o Filtro 4)
+   para profundizar más dentro de ese mismo colectivo ya definido por los 2 primeros — por ejemplo, dentro de
+   "hombres españoles", cruzar parados de larga duración/resto × mayores de 45/resto.
+2. **Pulsa "Calcular" y ve a "Análisis de personas"** para ver las estadísticas agregadas de los 4
+   subgrupos: numéricas y categóricas, en tabla o en gráfico.
+3. **En "Trayectorias de personas"**, sigue la evolución de variables de bases de cotización, pensiones y
+   afiliación a lo largo de la vida laboral del colectivo, agregada por año, sobre el eje de tiempo que
+   elijas (edad o años desde el inicio de la vida laboral).
+4. **En "Trayectorias individuales"**, busca una persona por su IPF (o una al azar del colectivo) y ve su
+   línea temporal de episodios laborales.
+5. **En "Cruce de variables"**, cruza dos variables cualesquiera del colectivo para explorar su relación.
+
+El menú de la cabecera (icono de tres rayas) permite cambiar de muestra y consultar la Descripción de
+variables y este mismo texto (Acerca de).
 
 ## Cómo construir los datos (solo equipo ETL)
 

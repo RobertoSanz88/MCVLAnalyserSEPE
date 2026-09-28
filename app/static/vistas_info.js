@@ -32,9 +32,10 @@ function varPintar() {
     const filas = varDatos[varTabla];
     filas.forEach((f, i) => {
         const nombre = f.nombre.replace('AAAA', String(varDatos.anio));
-        if (q && !(nombre.toLowerCase().includes(q) || f.descripcion.toLowerCase().includes(q))) return;
+        if (q && !(nombre.toLowerCase().includes(q) || f.descripcion.toLowerCase().includes(q)
+                   || f.construccion.toLowerCase().includes(q))) return;
         const tr = document.createElement('tr');
-        [String(i + 1), nombre, f.tipo, f.origen, f.descripcion].forEach(t => {
+        [String(i + 1), nombre, f.tipo, f.origen, f.descripcion, f.construccion].forEach(t => {
             const td = document.createElement('td'); td.textContent = t; tr.appendChild(td);
         });
         cuerpo.appendChild(tr);
@@ -60,7 +61,6 @@ async function iniciarVistaAcerca() {
         const d = await r.json();
         cont.innerHTML = marked.parse(d.principal);  // README propio del proyecto (contenido de confianza)
         cont.appendChild(acercaDesplegable('Tests de consistencia', marked.parse(d.tests) + acercaCasos(d.casos)));
-        cont.appendChild(acercaDesplegable('Construcción de variables', marked.parse(d.construccion)));
         acercaCargada = true;
     } catch (e) {
         cabAvisar('No se pudo cargar "Acerca de": ' + e.message, 'error');

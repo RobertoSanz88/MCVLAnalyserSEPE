@@ -1,5 +1,16 @@
 # Novedades por versión
 
+## v2.2 — retoques de "Acerca de" y "Descripción de variables" (2026-09-28)
+
+- **"Qué hay en la app" y "Cómo usarla" del README** (y de "Acerca de") reescritos: describen las pestañas reales
+  (Análisis de personas, Trayectorias de personas, Trayectorias individuales, Cruce de variables) y guían a un
+  usuario nuevo paso a paso, desde elegir el colectivo (2 o 4 filtros) hasta exportar resultados.
+- **"Construcción de variables" desaparece de "Acerca de".** Las secciones del README solo para el equipo ETL
+  (`## Cómo construir los datos`, `## Estructura`) ya no se muestran en la app.
+- **Descripción de variables tiene una columna nueva, "Cómo se construye"**, con un resumen en lenguaje sencillo
+  de cómo calcula el ETL cada una de las 62 variables derivadas de Personas y las 4 de Afiliación; las variables
+  originales llevan la nota "Campo original de la MCVL, tal como viene en el fichero."
+
 ## v2.2 — varias muestras de la MCVL (2026-09-25)
 
 - **La app maneja varias muestras, una a la vez.** Cada muestra es una carpeta de Parquet; el año sale de su
