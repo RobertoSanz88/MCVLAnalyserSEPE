@@ -51,14 +51,18 @@ usada. A partir de ahí, un recorrido típico:
    el contracolectivo de un filtro, en su lugar defines un segundo filtro independiente (Filtro 3 o Filtro 4)
    para profundizar más dentro de ese mismo colectivo ya definido por los 2 primeros — por ejemplo, dentro de
    "hombres españoles", cruzar parados de larga duración/resto × mayores de 45/resto.
-2. **Pulsa "Calcular" y ve a "Análisis de personas"** para ver las estadísticas agregadas de los 4
+2. **Ve a "Análisis de personas" y pulsa "Calcular"** para ver las estadísticas agregadas de los 4
    subgrupos: numéricas y categóricas, en tabla o en gráfico.
-3. **En "Trayectorias de personas"**, sigue la evolución de variables de bases de cotización, pensiones y
-   afiliación a lo largo de la vida laboral del colectivo, agregada por año, sobre el eje de tiempo que
-   elijas (edad o años desde el inicio de la vida laboral).
+3. **En "Trayectorias de personas"**, pincha en la tabla de tu interés (bases de cotización, pensiones o
+   afiliación) y elige la variable a explorar: verás su evolución a lo largo del tiempo, agregada por año,
+   sobre el eje que elijas (edad o años desde el inicio de la vida laboral).
 4. **En "Trayectorias individuales"**, busca una persona por su IPF (o una al azar del colectivo) y ve su
    línea temporal de episodios laborales.
 5. **En "Cruce de variables"**, cruza dos variables cualesquiera del colectivo para explorar su relación.
+
+Si lo que quieres no es analizar un colectivo sino la muestra entera (toda la población), pon a "No" el
+interruptor "Filtro de colectivos" de "Selección de colectivo": las pestañas de Análisis, Trayectorias y
+Cruce dejan de pedir Filtro 1 y Filtro 2 y trabajan sobre toda la MCVL sin filtrar.
 
 El menú de la cabecera (icono de tres rayas) permite cambiar de muestra y consultar la Descripción de
 variables y este mismo texto (Acerca de).
