@@ -7,10 +7,12 @@ para poder llamarse desde un CLI o mas adelante desde la UI con progreso.
 """
 
 import glob
+import io
 import os
 import re
 import time
 import warnings
+from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -242,6 +244,71 @@ def optimize_dataframe_types(
     return df
 
 
+class ColaCorruptaError(Exception):
+    """Un fichero crudo tiene lineas con un ancho distinto al habitual que NO estan confinadas a
+    una cola corta al final: no se adivina cual es la buena, hay que revisarlo a mano."""
+
+
+def _separar_cola_corrupta(ruta):
+    """Investiga un ParserError de pandas leyendo el fichero en binario y contando el ancho (en
+    bytes) de cada linea. Caso real que motiva esto (MCVL 2025, tabla Pensiones): de un fichero de
+    1,4 GB con 5.752.827 lineas, las ultimas 5 (2.037 bytes) tenian un ancho distinto al resto -
+    probablemente un corte en la descarga o exportacion del origen, no datos corruptos repartidos
+    por el fichero (las 5.752.822 lineas anteriores eran perfectamente regulares). Confirmado leyendo
+    el fichero real byte a byte antes de escribir este codigo (ver conversacion 2026-10-02).
+
+    Si las lineas con un ancho distinto al habitual son una tanda CONSECUTIVA que llega hasta el
+    final del fichero, y son pocas (como mucho 1.000 lineas o el 0,1% del fichero, lo que sea
+    mayor), se interpreta como una cola truncada: se devuelven los bytes de las lineas buenas (todo
+    lo anterior a la primera anomalia) y un resumen en texto para loguear. Si la anomalia esta en
+    medio del fichero, o es demasiado grande para ser solo "la cola", no se adivina nada: se lanza
+    ColaCorruptaError, porque descartar eso silenciosamente perderia datos reales sin saberlo.
+
+    Dos pasadas a proposito, en vez de un unico f.readlines() (que en un fichero de 1,4 GB como el
+    que motiva esta funcion mantendria en memoria una lista de millones de objetos bytes, bastante
+    mas pesada que el propio fichero): la primera solo guarda el ANCHO de cada linea (enteros, barato
+    incluso con millones de lineas) para decidir donde esta el corte; la segunda lee de un tiron,
+    con f.read(), solo los bytes hasta ese corte - el mismo volumen que ya haria falta cargar para
+    parsear el fichero si no hubiera tenido ningun problema.
+    """
+    anchos = []
+    with open(ruta, "rb") as f:
+        for linea in f:
+            anchos.append(len(linea))
+
+    ancho_normal, _ = Counter(anchos).most_common(1)[0]
+    anomalas = [i for i, a in enumerate(anchos) if a != ancho_normal]
+
+    n_total = len(anchos)
+    primer_anomalo = anomalas[0]
+    limite = max(1000, n_total // 1000)
+    es_cola_corta = (
+        anomalas == list(range(primer_anomalo, n_total))
+        and (n_total - primer_anomalo) <= limite
+    )
+    if not es_cola_corta:
+        raise ColaCorruptaError(
+            f"{ruta}: {len(anomalas)} linea(s) con un ancho de fichero distinto al habitual "
+            f"({ancho_normal} bytes), y no estan confinadas a una cola corta al final (primera "
+            f"anomalia en la linea {primer_anomalo + 1} de {n_total}). No se adivina: hay que "
+            f"revisar el fichero a mano antes de continuar."
+        )
+
+    offset_corte = sum(anchos[:primer_anomalo])
+    with open(ruta, "rb") as f:
+        bytes_buenos = f.read(offset_corte)
+    n_corruptas = n_total - primer_anomalo
+    bytes_corruptos = sum(anchos[primer_anomalo:])
+    resumen = (
+        f"{ruta}: las ultimas {n_corruptas} lineas ({bytes_corruptos} bytes) no tienen el ancho "
+        f"habitual de {ancho_normal} bytes - se interpreta como una cola truncada o corrupta "
+        f"(probablemente un corte en la descarga/exportacion del origen) y se descartan. "
+        f"Lineas buenas: {primer_anomalo} de {n_total}. El fichero de origen NO se modifica; "
+        f"revisar con quien distribuye la MCVL si esos registros finales deben volver a extraerse."
+    )
+    return bytes_buenos, resumen
+
+
 def _leer_csv_seguro(ruta, column_names):
     """Lee un CSV/TXT con el engine C y dtype nativo (rapido, poca memoria: la mayoria de
     columnas son numericas y se leen directamente como tal).
@@ -257,9 +324,21 @@ def _leer_csv_seguro(ruta, column_names):
     que columnas tuvieron tipos mixtos. Solo esas pocas columnas (normalmente 0-2 de las ~40-50
     de una tabla) se releen aparte forzando dtype=str, mucho mas barato que forzarlo en todas.
     """
+    fuente = ruta
     with warnings.catch_warnings(record=True) as capturados:
         warnings.simplefilter("always", pd.errors.DtypeWarning)
-        df = pd.read_csv(ruta, header=None, names=column_names, sep=";")
+        try:
+            df = pd.read_csv(fuente, header=None, names=column_names, sep=";")
+        except pd.errors.ParserError:
+            # No se adivina a ciegas: _separar_cola_corrupta solo sigue adelante si la anomalia
+            # esta confinada a una cola corta al final (ver su docstring); si no, deja que
+            # ColaCorruptaError se propague tal cual, sin capturarla aqui.
+            print("  Error de parsing leyendo el fichero completo - comprobando si es una cola "
+                  "truncada al final...")
+            bytes_buenos, resumen = _separar_cola_corrupta(ruta)
+            print(f"  AVISO: {resumen}")
+            fuente = io.BytesIO(bytes_buenos)
+            df = pd.read_csv(fuente, header=None, names=column_names, sep=";")
 
     columnas_afectadas = []
     for w in capturados:
@@ -271,8 +350,11 @@ def _leer_csv_seguro(ruta, column_names):
 
     if columnas_afectadas:
         print(f"  Tipos mixtos detectados, releyendo como texto: {columnas_afectadas}")
+        if isinstance(fuente, io.BytesIO):
+            fuente.seek(0)  # la cola corrupta ya se descarto en el primer read; reusar los mismos
+            # bytes buenos en vez de releer 'ruta' (volveria a reventar con el mismo ParserError)
         df_texto = pd.read_csv(
-            ruta, header=None, names=column_names, sep=";",
+            fuente, header=None, names=column_names, sep=";",
             usecols=columnas_afectadas, dtype=str,
         )
         for col in columnas_afectadas:
