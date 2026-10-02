@@ -185,6 +185,12 @@ function fijarBarra(pct) {
     barra.textContent = pct.toFixed(0) + '%';
 }
 
+// Hora local HH:MM:SS, solo para que el log muestre cuando paso cada cosa (y se pueda calcular
+// la duracion real restando la primera y la ultima marca) - no se usa para ninguna logica.
+function horaActual() {
+    return '[' + new Date().toTimeString().slice(0, 8) + ']';
+}
+
 // Coincide con una linea "# NOMBRE" (el separador que imprime ejecutar_paso.py entre tablas
 // al ejecutar "Construir todas") y devuelve el id de tabla si corresponde a una conocida.
 function idTablaEnLinea(linea) {
@@ -216,7 +222,7 @@ function ejecutar(accion) {
     botones.forEach(b => b.disabled = true);
 
     const log = document.getElementById('log');
-    log.textContent = `=== ${accion} ===\n`;
+    log.textContent = `${horaActual()} === ${accion} ===\n`;
 
     const contenedor = document.getElementById('barra-contenedor');
     const barra = document.getElementById('barra');
@@ -252,7 +258,9 @@ function ejecutar(accion) {
     fuenteActual = new EventSource(url);
 
     fuenteActual.onmessage = (ev) => {
-        log.textContent += ev.data + '\n';
+        // La hora solo se añade al texto mostrado en pantalla - el resto del codigo (deteccion de
+        // "# NOMBRE", barra de progreso...) sigue mirando ev.data tal cual, sin la marca de hora.
+        log.textContent += horaActual() + ' ' + ev.data + '\n';
         log.scrollTop = log.scrollHeight;
         actualizarBarraPesada(ev.data);
         if (accion === 'todas') {
@@ -264,7 +272,7 @@ function ejecutar(accion) {
     fuenteActual.addEventListener('fin', (ev) => {
         terminadoLimpio = true;
         if (temporizador) { clearInterval(temporizador); temporizador = null; }
-        log.textContent += (ev.data === 'OK' ? '\n✔ ' : '\n✘ ') + ev.data + '\n';
+        log.textContent += (ev.data === 'OK' ? '\n✔ ' : '\n✘ ') + horaActual() + ' ' + ev.data + '\n';
         log.scrollTop = log.scrollHeight;
         botones.forEach(b => b.disabled = false);
         marcarProcesando(null);
@@ -284,7 +292,7 @@ function ejecutar(accion) {
         // Si ya nos llego el evento 'fin', este error es ese cierre normal, no un fallo real.
         if (terminadoLimpio) return;
         if (temporizador) { clearInterval(temporizador); temporizador = null; }
-        log.textContent += '\n✘ Conexión perdida con el servidor.\n';
+        log.textContent += '\n✘ ' + horaActual() + ' Conexión perdida con el servidor.\n';
         botones.forEach(b => b.disabled = false);
         marcarProcesando(null);
         barra.classList.remove('indeterminada');
