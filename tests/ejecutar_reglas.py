@@ -22,11 +22,17 @@ sys.path.insert(0, RAIZ)
 from openpyxl import load_workbook
 import config
 from app.db import get_connection
+from adaptar_reglas_anio import adaptar_sql_al_anio, sustituciones_para_anio
 
 _m, _ = config.muestra_inicial(config.leer_config())
 if _m is None:
     raise SystemExit("No hay ninguna muestra configurada (config.json).")
 PARQUET_DIR = Path(_m["carpeta"])
+ANIO_ACTIVO = config.anio_de(_m) or 2024
+if sustituciones_para_anio(ANIO_ACTIVO):
+    print(f"Muestra del año {ANIO_ACTIVO}: adaptando las reglas que llevan el año 2024 escrito "
+          f"a fuego (columnas de ingresos/pensión y fechas relativas a la edición) - ver "
+          f"tests/adaptar_reglas_anio.py.")
 
 bloque = sys.argv[1].upper()
 desde = int(sys.argv[2]) if len(sys.argv) > 2 else 1
@@ -94,6 +100,7 @@ total = con.execute("SELECT COUNT(*) FROM personas").fetchone()[0]
 filas, t_bloque = [], time.time()
 for r in reglas:
     id_, familia, regla, conf, sql = r[0], r[2], r[5], r[7], r[8]
+    sql = adaptar_sql_al_anio(sql, ANIO_ACTIVO)
     t0 = time.time()
     try:
         n = con.execute(f"SELECT COUNT(*) FROM personas WHERE {sql}").fetchone()[0]
