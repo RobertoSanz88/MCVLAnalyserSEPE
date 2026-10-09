@@ -446,6 +446,7 @@ CATEGORICAS_COLECTIVOS = [
     {"columna": "tipo_contr_ppal_agrupado", "limite": None},
     {"columna": "tipo_contr_ult_baja", "limite": None},
     {"columna": "causa_ult_baja", "limite": None},
+    {"columna": "causa_baja_mas_comun", "limite": None},
     {"columna": "prov_trabajo_ppal", "limite": 15},
     {"columna": "prov_fiscal_actual", "limite": 15},
     {"columna": "act_econ_ppal", "limite": 15},
