@@ -1181,13 +1181,13 @@ function aplicarFiltro(tipo) {
 
     let filtro;
     if (tipo === 'numerica') {
-        if (!columnaSeleccionadaNumerica) return;
+        if (!columnaSeleccionadaNumerica) { mostrarAviso('Elige antes una variable de la lista de numéricas.', 'error'); return; }
         const operador = document.getElementById('operador-numerico').value;
         const valor = parseFloat(document.getElementById('valor-numerico').value);
         if (isNaN(valor)) { mostrarAviso('Introduce un valor numérico.', 'error'); return; }
         filtro = { columna: columnaSeleccionadaNumerica.nombre, tipo: 'numerica', operador, valor };
     } else {
-        if (!columnaSeleccionadaCategorica) return;
+        if (!columnaSeleccionadaCategorica) { mostrarAviso('Elige antes una variable de la lista de categóricas.', 'error'); return; }
         const marcadas = [...document.querySelectorAll('#lista-valores-categoria input:checked')].map(i => i.value);
         if (marcadas.length === 0) { mostrarAviso('Marca al menos una categoría.', 'error'); return; }
         filtro = { columna: columnaSeleccionadaCategorica.nombre, tipo: 'categorica', categorias: marcadas };
