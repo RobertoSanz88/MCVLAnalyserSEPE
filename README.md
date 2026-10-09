@@ -16,7 +16,7 @@ de los datos. **No hay servidor compartido, ni autenticación, ni nube**: los da
 entidad). `data/`, `parquet/` y `*.parquet` están en `.gitignore`. El repositorio contiene solo código.
 Los Parquet se distribuyen por el canal interno del Observatorio; el `.exe` (sin datos) por GitHub Releases.
 
-## Qué hay en la app (v2.2)
+## Qué hay en la app (v2.3)
 
 1. **Selección de colectivo y filtro global**, con un único interruptor que se aplica a todas las pestañas.
 2. **Análisis de personas:** estadísticas agregadas del colectivo — numéricas (media, mediana, desviación) y

@@ -1,5 +1,16 @@
 # Novedades por versión
 
+## v2.3 — tres categóricas más en Análisis de personas (2026-10-09)
+
+- **`tipo_contr_ult_baja`, `causa_ult_baja` y `act_econ_ult_baja`** (tipo de contrato, causa y actividad
+  económica del episodio más reciente de cada persona) ya se pueden ver y filtrar como categóricas en
+  "Análisis de personas". Antes solo estaban sus equivalentes "principales" (acumulados en toda la carrera:
+  `tipo_contr_ppal_agrupado`, `causa_baja_trab_ppal`, `act_econ_ppal`); `grupo_ultimo_empleo` ya estaba, pero
+  sus hermanas del mismo episodio se habían quedado fuera de `CATEGORICAS_COLECTIVOS` (`config.py`) sin
+  motivo documentado. Detectado analizando edadismo (mayores de 45) sobre la muestra 2025: para estudiar qué
+  contrato le ofrecen *ahora* a alguien, no el acumulado en toda su vida laboral, hace falta la del último
+  episodio, no la principal.
+
 ## v2.2 — retoques de "Acerca de" y "Descripción de variables" (2026-09-28)
 
 - **"Qué hay en la app" y "Cómo usarla" del README** (y de "Acerca de") reescritos: describen las pestañas reales
