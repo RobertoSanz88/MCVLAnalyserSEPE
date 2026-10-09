@@ -1107,14 +1107,21 @@ def _escribir_grid_cruce(ws, fila_inicio: int, titulo_esquina: str, x: list, y: 
 def _escribir_hoja_cruce_subgrupo(ws, sub: dict, variable1: str, variable2: str, tipo: str, tipo_grafico: str, negrita: Font):
     """Una hoja = un subgrupo: cabecera con etiqueta/recuento del subgrupo
     (para saber de que numeros habla la hoja sin volver a la app, mismo
-    espiritu que la hoja 'Colectivos' de _construir_excel) + la tabla de
-    datos a partir de la fila 4."""
+    espiritu que la hoja 'Colectivos' de _construir_excel) + que variables se
+    cruzaron (2026-10-09, bug real detectado por el usuario: el Excel solo
+    decia el subcolectivo y el recuento, no si la tabla era "edad x sexo" o
+    "actividad economica x grupo de cotizacion" - imposible de releer mas
+    tarde sin volver a la app) + la tabla de datos a partir de la fila 6."""
     ws.cell(row=1, column=1, value="Subcolectivo").font = negrita
     ws.cell(row=1, column=2, value=sub["etiqueta"])
     ws.cell(row=2, column=1, value="Personas").font = negrita
     ws.cell(row=2, column=2, value=sub["recuento"])
+    ws.cell(row=3, column=1, value="Variable eje X").font = negrita
+    ws.cell(row=3, column=2, value=variable1)
+    ws.cell(row=4, column=1, value="Variable eje Y").font = negrita
+    ws.cell(row=4, column=2, value=variable2)
 
-    fila_cabecera = 4
+    fila_cabecera = 6
     if tipo == "numerica_categorica" and tipo_grafico == "histograma":
         categorias = list(sub["histograma_por_categoria"].keys())
         valores = [sub["histograma_por_categoria"][cat] for cat in categorias]
@@ -1164,7 +1171,15 @@ def _construir_excel_cruce(payload: CruceExportRequest, con) -> bytes:
         for i, (clave, etiqueta_valor) in enumerate((("z_media", "Media"), ("z_mediana", "Mediana"), ("n", "N"))):
             hoja = ws if i == 0 else wb.create_sheet(etiqueta_valor)
             hoja.title = etiqueta_valor
-            _escribir_grid_cruce(hoja, 1, titulo_esquina, resultado["x"], resultado["y"], resultado[clave], negrita)
+            # Mismo motivo que _escribir_hoja_cruce_subgrupo: indicar las 3
+            # variables del cruce, no solo la etiqueta de la hoja (Media/Mediana/N).
+            hoja.cell(row=1, column=1, value="Variable eje X").font = negrita
+            hoja.cell(row=1, column=2, value=v_x)
+            hoja.cell(row=2, column=1, value="Variable eje Y").font = negrita
+            hoja.cell(row=2, column=2, value=v_y)
+            hoja.cell(row=3, column=1, value="Variable numérica").font = negrita
+            hoja.cell(row=3, column=2, value=payload.variable_central)
+            _escribir_grid_cruce(hoja, 5, titulo_esquina, resultado["x"], resultado["y"], resultado[clave], negrita)
         buffer = io.BytesIO()
         wb.save(buffer)
         return buffer.getvalue()
