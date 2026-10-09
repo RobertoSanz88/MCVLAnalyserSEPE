@@ -160,6 +160,14 @@ pensiones básicas de la Seguridad Social; se cuentan como pensión sin distingu
 | `Asimilado_otros` | 242 | TRL 980 o 400. |
 | `Nunca_ha_cotizado` | 45.631 | Sin ningún episodio de afiliación. |
 
+**`Asimilado_al_alta_subs52` no implica necesariamente tener 52/55 años** (verificado con datos reales,
+MCVL 2025: 203 personas de 20 a 45 años en este valor). La guía MCVL explica que las claves TRL 753/754 se
+usan cuando la entidad gestora tiene obligación de cotizar por el beneficiario del subsidio, lo que ocurre
+"en general" a partir de cierta edad — pero los **trabajadores fijos discontinuos** pueden recibir el mismo
+TRL cobrando el subsidio **entre campañas**, sin haber cumplido esa edad, si acreditan un período mínimo de
+ocupación cotizada. La propia guía reconoce que no se puede distinguir un caso del otro con seguridad solo
+con los datos (sugiere mirar fecha de nacimiento, contrato previo y duración del subsidio).
+
 `Situacion_Paro_Ocupacion`: `Ocupado` (alta), `Pensionista` (baja para pensión, nunca cotizó, **o parado que
 cobra jubilación**), `Parado_LD` / `Parado_NoLD` (parado con más / con menos de 365 días sin empleo), y las
 combinaciones `Ocupado_y_pensionista`, `Parado_LD_pension_no_jubilacion`, `Parado_NoLD_pension_no_jubilacion`
