@@ -1,5 +1,15 @@
 # Novedades por versión
 
+## v2.3 — Selección de colectivo con 1 filtro (2026-10-10)
+
+- **"Selección de colectivo" admite un solo filtro**, además de los 2 habituales: switch de tres posiciones
+  ("Sin filtro", "1 filtro", "2 filtros") donde antes había un Sí/No. Con 1 filtro, el colectivo se reparte en
+  2 subgrupos (lo cumplen / no lo cumplen) en vez de los 4 de siempre; con contracolectivo activado se puede
+  seguir refinando con un filtro secundario, igual que con 2 filtros.
+- Al cambiar entre "1 filtro" y "2 filtros" (en cualquier sentido), Análisis de personas, Trayectorias de
+  personas y Cruce de variables se refrescan a su estado inicial ("Configura Filtro 1 y Filtro 2...") en vez
+  de quedarse con los datos ya calculados del modo anterior.
+
 ## v2.3 — tres categóricas más en Análisis de personas (2026-10-09)
 
 - **`tipo_contr_ult_baja`, `causa_ult_baja` y `act_econ_ult_baja`** (tipo de contrato, causa y actividad
