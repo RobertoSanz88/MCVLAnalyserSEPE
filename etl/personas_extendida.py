@@ -130,7 +130,13 @@ def fase1_afiliacion_extendida_duckdb(con, parquet_folder, output_name="tabla_af
             -- identifican sector publico - P (Corporacion local), Q (Organismo publico), S
             -- (Organo de la Administracion del Estado/CCAA). "SI"/"NO" (no booleano), mismo
             -- criterio de texto ya usado en este fichero para Cobra_pension_*.
-            CASE WHEN UPPER("18 EMPLEADOR_LETRA_NIF") IN ('P', 'Q', 'S') THEN 'SI' ELSE 'NO' END
+            -- AND NOT _no_empleo (2026-10-10, bug real detectado por el usuario al estudiar
+            -- edadismo): sin este filtro, los episodios de prestacion/subsidio (TRL 700-799/400)
+            -- salian como "empleo publico" porque quien paga la prestacion es un organismo
+            -- publico (el SEPE, letra Q) - verificado con datos reales que el 94,94% de esos
+            -- episodios tiene letra Q, frente a un 12,53% en los episodios de empleo real. Cobrar
+            -- el paro no es trabajar en la administracion.
+            CASE WHEN UPPER("18 EMPLEADOR_LETRA_NIF") IN ('P', 'Q', 'S') AND NOT _no_empleo THEN 'SI' ELSE 'NO' END
                 AS "Empleo_publico"
         FROM read_parquet('{}')
     """.replace("__FECHA_CORTE__", _FECHA_CORTE_ISO).format(optimizada))
