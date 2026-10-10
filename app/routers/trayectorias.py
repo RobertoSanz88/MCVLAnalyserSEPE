@@ -21,9 +21,8 @@ from app.db import estado
 from etl import reg_cotizacion_agrupado, tipo_contrato_claves_sucesoras
 from app.routers.colectivos import (
     GRUPO_SIN_FILTRO,
-    ORDEN_SUBGRUPOS,
     SubgruposRequest,
-    calcular_condiciones_subgrupos,
+    condiciones_de_subgrupos,
     condiciones_sin_filtro,
 )
 
@@ -251,7 +250,7 @@ def _trayectorias_bases(con, condiciones: dict) -> dict:
 @router.post("/trayectorias/colectivo/bases")
 def trayectorias_colectivo_bases(request: Request, body: SubgruposRequest):
     con = request.app.state.con.cursor()
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    condiciones = condiciones_de_subgrupos(con, body)
     return _trayectorias_bases(con, condiciones)
 
 
@@ -325,7 +324,7 @@ def _trayectorias_pensiones(con, condiciones: dict) -> dict:
 @router.post("/trayectorias/colectivo/pensiones")
 def trayectorias_colectivo_pensiones(request: Request, body: SubgruposRequest):
     con = request.app.state.con.cursor()
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    condiciones = condiciones_de_subgrupos(con, body)
     return _trayectorias_pensiones(con, condiciones)
 
 
@@ -427,7 +426,7 @@ def _trayectorias_afiliacion(con, condiciones: dict) -> dict:
 @router.post("/trayectorias/colectivo/afiliacion")
 def trayectorias_colectivo_afiliacion(request: Request, body: SubgruposRequest):
     con = request.app.state.con.cursor()
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    condiciones = condiciones_de_subgrupos(con, body)
     return _trayectorias_afiliacion(con, condiciones)
 
 
@@ -481,7 +480,7 @@ def trayectorias_colectivo_categorica(request: Request, body: TrayectoriaCategor
     periodica (una fila por (ipf, anyo) ya dada, como Pensiones) y
     _trayectoria_categorica_afiliacion (episodica, expande primero)."""
     con = request.app.state.con.cursor()
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    condiciones = condiciones_de_subgrupos(con, body)
     info = VARIABLES_CATEGORICAS[body.variable]
 
     if info["tabla"] == "afiliacion":
@@ -908,11 +907,9 @@ def trayectoria_individual_aleatoria(request: Request, body: TrayectoriaAleatori
     if body.colectivo is None:
         ipf = con.execute("SELECT ipf FROM personas USING SAMPLE 1").fetchone()[0]
     else:
-        if body.subgrupo not in ORDEN_SUBGRUPOS:
+        condiciones = condiciones_de_subgrupos(con, body.colectivo)
+        if body.subgrupo not in condiciones:
             raise HTTPException(400, "subgrupo invalido")
-        condiciones = calcular_condiciones_subgrupos(
-            con, body.colectivo.filtro1, body.colectivo.filtro2, body.colectivo.filtro3, body.colectivo.filtro4
-        )
         c = condiciones[body.subgrupo]
         # Subconsulta imprescindible (bug real de DuckDB verificado con datos
         # sinteticos): "SELECT ... WHERE cond USING SAMPLE n" (n filas, no

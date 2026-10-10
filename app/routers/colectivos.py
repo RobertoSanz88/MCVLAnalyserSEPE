@@ -116,7 +116,9 @@ Filtro = FiltroNumerico | FiltroCategorico
 
 class SubgruposRequest(BaseModel):
     filtro1: Filtro
-    filtro2: Filtro
+    # None (v2.3, modo "1 filtro"): usar condiciones_de_subgrupos, nunca calcular_condiciones_subgrupos
+    # directamente con un filtro2 inventado - ver condiciones_de_subgrupos.
+    filtro2: Filtro | None = None
     filtro3: Filtro | None = None  # si se da, sustituye al complementario automatico de filtro1
     filtro4: Filtro | None = None  # si se da, sustituye al complementario automatico de filtro2
 
@@ -406,6 +408,51 @@ def condiciones_sin_filtro() -> dict[str, dict]:
     return {GRUPO_SIN_FILTRO: {"where": "TRUE", "params": [], "etiqueta": "Toda la MCVL"}}
 
 
+# Modo "1 filtro" (v2.3, 2026-10-10, decision explicita del usuario tras
+# brainstorming): solo el eje A (filtro1, o filtro3 con filtro1 fijo) en 2
+# subgrupos, sin cruzar con un eje B - para cuando no hace falta el cruce de
+# 2 filtros y basta con un colectivo/contracolectivo simple. Reutiliza _eje()
+# tal cual (la misma pieza que ya calcula el eje A en calcular_condiciones_
+# subgrupos), asi que el comportamiento de Filtro 1/Filtro 3 es identico al
+# del modo de 2 filtros. Mismo shape {where, params, etiqueta} que los otros
+# 2 modos, para que tablas/graficos/trayectorias/cruce/Excel no necesiten
+# saber si hay 1, 2 o 4 grupos.
+ORDEN_SUBGRUPOS_1F = ["filtro1_si", "filtro1_no"]
+
+
+def condiciones_un_filtro(con, filtro1: Filtro, filtro3: Filtro | None = None) -> dict[str, dict]:
+    columnas_validas = _columnas_personas(con)
+    fijo, (opcion_si, opcion_no) = _eje(con, filtro1, filtro3, columnas_validas)
+
+    condicion_fija, params_fijos, etiqueta_fija = None, [], None
+    if fijo is not None:
+        cond, params = _condicion_sql(fijo, columnas_validas)
+        condicion_fija = f"(({cond}) IS TRUE)"
+        params_fijos = params
+        etiqueta_fija = _etiqueta_filtro(con, fijo, True)
+
+    combos = {"filtro1_si": opcion_si, "filtro1_no": opcion_no}
+    resultado = {}
+    for nombre, (parte, params_parte, etiq) in combos.items():
+        partes_where = ([condicion_fija] if condicion_fija else []) + [parte]
+        where = " AND ".join(partes_where)
+        params = params_fijos + params_parte
+        etiqueta = " + ".join(([etiqueta_fija] if etiqueta_fija else []) + [etiq])
+        resultado[nombre] = {"where": where, "params": params, "etiqueta": etiqueta}
+    return resultado
+
+
+def condiciones_de_subgrupos(con, body: SubgruposRequest) -> dict[str, dict]:
+    """Punto unico que decide 1 filtro (2 subgrupos) o 2 filtros (4 subgrupos)
+    segun si filtro2 viene informado en el body - usado por todos los
+    endpoints que reciben SubgruposRequest (o una subclase), para no repetir
+    esta rama en cada uno. "Sin filtro" (GRUPO_SIN_FILTRO) sigue siendo un
+    camino aparte, los endpoints *-sin-filtro no pasan por aqui."""
+    if body.filtro2 is None:
+        return condiciones_un_filtro(con, body.filtro1, body.filtro3)
+    return calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+
+
 def _calcular_estadisticas(con, condiciones: dict, sin_limite_categorico: bool = False) -> dict:
     """Recuento + estadisticas (numericas y categoricas) de cada grupo de
     `condiciones` (1 o N, ver GRUPO_SIN_FILTRO/calcular_condiciones_subgrupos).
@@ -440,15 +487,18 @@ def _calcular_estadisticas(con, condiciones: dict, sin_limite_categorico: bool =
 def _calcular_subgrupos(
     con,
     filtro1: Filtro,
-    filtro2: Filtro,
+    filtro2: Filtro | None = None,
     filtro3: Filtro | None = None,
     filtro4: Filtro | None = None,
     sin_limite_categorico: bool = False,
 ) -> dict:
-    """Calcula recuento + estadisticas de cada uno de los 4 subgrupos (ver
-    _calcular_estadisticas). Compartido entre el endpoint JSON y el de
-    exportacion a Excel."""
-    condiciones = calcular_condiciones_subgrupos(con, filtro1, filtro2, filtro3, filtro4)
+    """Calcula recuento + estadisticas de cada uno de los subgrupos (2 con 1
+    filtro, 4 con 2 - ver _calcular_estadisticas). Compartido entre el
+    endpoint JSON y el de exportacion a Excel."""
+    if filtro2 is None:
+        condiciones = condiciones_un_filtro(con, filtro1, filtro3)
+    else:
+        condiciones = calcular_condiciones_subgrupos(con, filtro1, filtro2, filtro3, filtro4)
     return _calcular_estadisticas(con, condiciones, sin_limite_categorico)
 
 
@@ -459,7 +509,7 @@ def recuentos(request: Request, body: SubgruposRequest):
     caras de calcular). Pensada para refrescarse en vivo mientras se
     configuran los filtros en el frontend, antes de pulsar Calcular."""
     con = request.app.state.con.cursor()
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    condiciones = condiciones_de_subgrupos(con, body)
     resultado = {}
     for nombre, c in condiciones.items():
         total = con.execute(f"SELECT COUNT(*) FROM personas WHERE {c['where']}", c["params"]).fetchone()[0]
@@ -835,7 +885,7 @@ def cruce(request: Request, body: CruceRequest):
         raise HTTPException(400, f"'{v}' no es una variable valida para cruzar")
 
     tipo1, tipo2 = _tipo(v1), _tipo(v2)
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    condiciones = condiciones_de_subgrupos(con, body)
 
     if tipo1 == "numerica" and tipo2 == "numerica":
         return {
@@ -1002,10 +1052,9 @@ def cruce_puntos(request: Request, body: PuntosRequest):
     numericas_validas = set(numericas) - COLUMNAS_NUMERICAS_EXCLUIDAS
     if body.variable1 not in numericas_validas or body.variable2 not in numericas_validas:
         raise HTTPException(400, "Las 2 variables deben ser numericas")
-    if body.subgrupo not in ORDEN_SUBGRUPOS:
+    condiciones = condiciones_de_subgrupos(con, body)
+    if body.subgrupo not in condiciones:
         raise HTTPException(400, f"Subgrupo desconocido: {body.subgrupo}")
-
-    condiciones = calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
     c = condiciones[body.subgrupo]
     filas = con.execute(
         f"SELECT {body.variable1}, {body.variable2} FROM personas "
@@ -1196,11 +1245,9 @@ def _construir_excel_cruce(payload: CruceExportRequest, con) -> bytes:
         # limite de categorias a partir de los filtros de colectivo que
         # manda el frontend (ya no son WYSIWYG del grafico en pantalla, que
         # sigue truncado a TOP_N_CATEGORICO - ver cabecera del fichero).
-        if payload.filtro1 is None or payload.filtro2 is None:
+        if payload.filtro1 is None:
             raise HTTPException(400, "Faltan los filtros de colectivo para recalcular la exportacion")
-        condiciones = calcular_condiciones_subgrupos(
-            con, payload.filtro1, payload.filtro2, payload.filtro3, payload.filtro4
-        )
+        condiciones = condiciones_de_subgrupos(con, payload)
         if payload.tipo == "categorica_categorica":
             _, _, datos = _cruce_categorica_categorica(
                 con, condiciones, payload.variable1, payload.variable2, top_n=None
@@ -1216,12 +1263,14 @@ def _construir_excel_cruce(payload: CruceExportRequest, con) -> bytes:
             )
             datos = _cruce_numerica_categorica(con, condiciones, v_num, v_cat, top_n=None)
 
-    # Los 3 tipos "normales": una hoja por cada uno de los 4 subgrupos, de un
-    # tiron. "Subgrupo N" (no la etiqueta completa, p.ej. "sexo Hombre +
-    # nacionalidad Espana") porque Excel limita el nombre de hoja a 31
-    # caracteres y no admite ciertos caracteres - la etiqueta completa va
+    # Los 3 tipos "normales": una hoja por cada subgrupo (2 con 1 filtro, 4
+    # con 2), de un tiron. "Subgrupo N" (no la etiqueta completa, p.ej. "sexo
+    # Hombre + nacionalidad Espana") porque Excel limita el nombre de hoja a
+    # 31 caracteres y no admite ciertos caracteres - la etiqueta completa va
     # dentro de la propia hoja (fila 1), no hace falta acortarla ahi.
-    for i, nombre in enumerate(ORDEN_SUBGRUPOS):
+    # datos.keys() (no ORDEN_SUBGRUPOS a secas) para que tambien funcione con
+    # los 2 subgrupos del modo "1 filtro" - mismo orden en que se construyeron.
+    for i, nombre in enumerate(datos.keys()):
         hoja = ws if i == 0 else wb.create_sheet()
         hoja.title = f"Subgrupo {i + 1}"
         _escribir_hoja_cruce_subgrupo(
@@ -1348,7 +1397,7 @@ def _construir_excel(resultados: dict, grupos: list[str] = ORDEN_SUBGRUPOS) -> b
 def exportar(request: Request, body: SubgruposRequest):
     con = request.app.state.con.cursor()
     resultados = _calcular_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4, sin_limite_categorico=True)
-    contenido = _construir_excel(resultados)
+    contenido = _construir_excel(resultados, grupos=list(resultados.keys()))
     return StreamingResponse(
         io.BytesIO(contenido),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
