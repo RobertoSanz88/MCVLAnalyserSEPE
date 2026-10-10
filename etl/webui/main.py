@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-app = FastAPI(title="MCVL ETL")
+app = FastAPI(title="MCVLRefinery")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 ACCIONES = [
