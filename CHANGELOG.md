@@ -1,5 +1,13 @@
 # Novedades por versión
 
+## v2.3 — exportar el gráfico de Trayectorias de personas (2026-10-10)
+
+- **El gráfico de línea de "Trayectorias de personas" (variable numérica) ya se puede descargar como PNG**,
+  igual que los gráficos principales de "Cruce de variables": al pasar el ratón por encima aparece la barra de
+  herramientas nativa de Plotly, con el botón de la cámara. Las rejillas de mini-gráficos (una variable
+  categórica desglosada por subcolectivo o por categoría) se quedan sin ese botón a propósito, igual que los
+  mini-histogramas de Cruce de variables.
+
 ## v2.3 — Selección de colectivo con 1 filtro (2026-10-10)
 
 - **"Selección de colectivo" admite un solo filtro**, además de los 2 habituales: switch de tres posiciones
