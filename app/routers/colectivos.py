@@ -121,6 +121,11 @@ class SubgruposRequest(BaseModel):
     filtro2: Filtro | None = None
     filtro3: Filtro | None = None  # si se da, sustituye al complementario automatico de filtro1
     filtro4: Filtro | None = None  # si se da, sustituye al complementario automatico de filtro2
+    # Modo "1 filtro" (v2.3, 2026-10-11): sin esto, "filtro2 informado" por si
+    # solo ya no basta para distinguir el cruce de 2 ejes (filtro2 = eje B) de
+    # una CADENA de hasta 4 filtros (filtro2 = segundo eslabon) - ver
+    # condiciones_de_subgrupos.
+    un_filtro: bool = False
 
 
 def _columnas_personas(con) -> dict[str, str]:
@@ -408,49 +413,59 @@ def condiciones_sin_filtro() -> dict[str, dict]:
     return {GRUPO_SIN_FILTRO: {"where": "TRUE", "params": [], "etiqueta": "Toda la MCVL"}}
 
 
-# Modo "1 filtro" (v2.3, 2026-10-10, decision explicita del usuario tras
-# brainstorming): solo el eje A (filtro1, o filtro3 con filtro1 fijo) en 2
-# subgrupos, sin cruzar con un eje B - para cuando no hace falta el cruce de
-# 2 filtros y basta con un colectivo/contracolectivo simple. Reutiliza _eje()
-# tal cual (la misma pieza que ya calcula el eje A en calcular_condiciones_
-# subgrupos), asi que el comportamiento de Filtro 1/Filtro 3 es identico al
-# del modo de 2 filtros. Mismo shape {where, params, etiqueta} que los otros
-# 2 modos, para que tablas/graficos/trayectorias/cruce/Excel no necesiten
-# saber si hay 1, 2 o 4 grupos.
+# Modo "1 filtro" (v2.3, decision explicita del usuario 2026-10-11 tras un
+# primer intento el 2026-10-10 que no encajaba con lo que queria): CADENA de
+# 1 a 4 filtros, no un cruce de ejes. Cada filtro de la cadena salvo el
+# ultimo queda fijo (se exige cumplido a todo el colectivo); el ultimo es el
+# que varia en si/no - por eso siempre hay exactamente 2 subgrupos, sea cual
+# sea la longitud de la cadena. En el frontend, el contracolectivo automatico
+# de cada filtro decide si la cadena se para ahi (activo, por defecto) o
+# sigue con el siguiente filtro (desactivado) - ver toggleContracolectivo en
+# colectivos.html. Mismo shape {where, params, etiqueta} que los otros 2
+# modos, para que tablas/graficos/trayectorias/cruce/Excel no necesiten saber
+# cuantos filtros hay en la cadena.
 ORDEN_SUBGRUPOS_1F = ["filtro1_si", "filtro1_no"]
 
 
-def condiciones_un_filtro(con, filtro1: Filtro, filtro3: Filtro | None = None) -> dict[str, dict]:
+def condiciones_un_filtro(con, cadena: list[Filtro]) -> dict[str, dict]:
+    """cadena: de 1 a 4 filtros ya en orden (sin huecos). Los primeros
+    len(cadena)-1 quedan fijos (AND de "cumplido"); el ultimo es el que
+    reparte en si/no."""
     columnas_validas = _columnas_personas(con)
-    fijo, (opcion_si, opcion_no) = _eje(con, filtro1, filtro3, columnas_validas)
+    *fijos, final = cadena
 
-    condicion_fija, params_fijos, etiqueta_fija = None, [], None
-    if fijo is not None:
-        cond, params = _condicion_sql(fijo, columnas_validas)
-        condicion_fija = f"(({cond}) IS TRUE)"
-        params_fijos = params
-        etiqueta_fija = _etiqueta_filtro(con, fijo, True)
+    condiciones_fijas, params_fijos, etiquetas_fijas = [], [], []
+    for filtro_fijo in fijos:
+        cond, params = _condicion_sql(filtro_fijo, columnas_validas)
+        condiciones_fijas.append(f"(({cond}) IS TRUE)")
+        params_fijos += params
+        etiquetas_fijas.append(_etiqueta_filtro(con, filtro_fijo, True))
 
+    opcion_si, opcion_no = _lado_filtro(con, final, columnas_validas)
     combos = {"filtro1_si": opcion_si, "filtro1_no": opcion_no}
     resultado = {}
     for nombre, (parte, params_parte, etiq) in combos.items():
-        partes_where = ([condicion_fija] if condicion_fija else []) + [parte]
-        where = " AND ".join(partes_where)
+        where = " AND ".join(condiciones_fijas + [parte])
         params = params_fijos + params_parte
-        etiqueta = " + ".join(([etiqueta_fija] if etiqueta_fija else []) + [etiq])
+        etiqueta = " + ".join(etiquetas_fijas + [etiq])
         resultado[nombre] = {"where": where, "params": params, "etiqueta": etiqueta}
     return resultado
 
 
 def condiciones_de_subgrupos(con, body: SubgruposRequest) -> dict[str, dict]:
-    """Punto unico que decide 1 filtro (2 subgrupos) o 2 filtros (4 subgrupos)
-    segun si filtro2 viene informado en el body - usado por todos los
-    endpoints que reciben SubgruposRequest (o una subclase), para no repetir
-    esta rama en cada uno. "Sin filtro" (GRUPO_SIN_FILTRO) sigue siendo un
-    camino aparte, los endpoints *-sin-filtro no pasan por aqui."""
-    if body.filtro2 is None:
-        return condiciones_un_filtro(con, body.filtro1, body.filtro3)
-    return calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    """Punto unico que decide cruce de 2 filtros (4 subgrupos) o cadena de 1
+    a 4 filtros (siempre 2 subgrupos) - usado por todos los endpoints que
+    reciben SubgruposRequest (o una subclase), para no repetir esta rama en
+    cada uno. "Sin filtro" (GRUPO_SIN_FILTRO) sigue siendo un camino aparte,
+    los endpoints *-sin-filtro no pasan por aqui.
+
+    body.un_filtro distingue "filtro2 informado" como eje B (cruce, False,
+    por defecto) de "filtro2 informado" como segundo eslabon de una cadena
+    (True) - sin esto no se podrian distinguir ambos casos."""
+    if body.filtro2 is not None and not body.un_filtro:
+        return calcular_condiciones_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4)
+    cadena = [f for f in (body.filtro1, body.filtro2, body.filtro3, body.filtro4) if f is not None]
+    return condiciones_un_filtro(con, cadena)
 
 
 def _calcular_estadisticas(con, condiciones: dict, sin_limite_categorico: bool = False) -> dict:
@@ -484,21 +499,12 @@ def _calcular_estadisticas(con, condiciones: dict, sin_limite_categorico: bool =
     return resultados
 
 
-def _calcular_subgrupos(
-    con,
-    filtro1: Filtro,
-    filtro2: Filtro | None = None,
-    filtro3: Filtro | None = None,
-    filtro4: Filtro | None = None,
-    sin_limite_categorico: bool = False,
-) -> dict:
-    """Calcula recuento + estadisticas de cada uno de los subgrupos (2 con 1
-    filtro, 4 con 2 - ver _calcular_estadisticas). Compartido entre el
+def _calcular_subgrupos(con, body: SubgruposRequest, sin_limite_categorico: bool = False) -> dict:
+    """Calcula recuento + estadisticas de cada uno de los subgrupos (2 con
+    cadena de 1-4 filtros, 4 con el cruce de 2 ejes - ver
+    condiciones_de_subgrupos y _calcular_estadisticas). Compartido entre el
     endpoint JSON y el de exportacion a Excel."""
-    if filtro2 is None:
-        condiciones = condiciones_un_filtro(con, filtro1, filtro3)
-    else:
-        condiciones = calcular_condiciones_subgrupos(con, filtro1, filtro2, filtro3, filtro4)
+    condiciones = condiciones_de_subgrupos(con, body)
     return _calcular_estadisticas(con, condiciones, sin_limite_categorico)
 
 
@@ -523,7 +529,7 @@ def subgrupos(request: Request, body: SubgruposRequest):
     return {
         "filtro1": body.filtro1,
         "filtro2": body.filtro2,
-        "subgrupos": _calcular_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4),
+        "subgrupos": _calcular_subgrupos(con, body),
     }
 
 
@@ -1131,6 +1137,7 @@ class CruceExportRequest(BaseModel):
     filtro2: Filtro | None = None
     filtro3: Filtro | None = None
     filtro4: Filtro | None = None
+    un_filtro: bool = False  # ver SubgruposRequest.un_filtro
 
 
 def _escribir_grid_cruce(ws, fila_inicio: int, titulo_esquina: str, x: list, y: list, valores: list, negrita: Font):
@@ -1396,7 +1403,7 @@ def _construir_excel(resultados: dict, grupos: list[str] = ORDEN_SUBGRUPOS) -> b
 @router.post("/colectivos/exportar")
 def exportar(request: Request, body: SubgruposRequest):
     con = request.app.state.con.cursor()
-    resultados = _calcular_subgrupos(con, body.filtro1, body.filtro2, body.filtro3, body.filtro4, sin_limite_categorico=True)
+    resultados = _calcular_subgrupos(con, body, sin_limite_categorico=True)
     contenido = _construir_excel(resultados, grupos=list(resultados.keys()))
     return StreamingResponse(
         io.BytesIO(contenido),

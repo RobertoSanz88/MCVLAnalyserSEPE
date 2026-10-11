@@ -557,7 +557,7 @@
                                     <span class="destino-titulo">Asignar a:</span>
                                     <div class="destino-fila">
                                         <label><input type="radio" name="destino-num" value="1" checked> Filtro 1</label>
-                                        <label id="label-destino-num-2"><input type="radio" name="destino-num" value="2"> Filtro 2</label>
+                                        <label id="label-destino-num-2"><input type="radio" name="destino-num" value="2" id="radio-destino-num-2"> Filtro 2</label>
                                     </div>
                                     <div class="destino-fila">
                                         <label><input type="radio" name="destino-num" value="3" id="radio-destino-num-3" disabled> Filtro 3</label>
@@ -580,7 +580,7 @@
                                     <span class="destino-titulo">Asignar a:</span>
                                     <div class="destino-fila">
                                         <label><input type="radio" name="destino-cat" value="1" checked> Filtro 1</label>
-                                        <label id="label-destino-cat-2"><input type="radio" name="destino-cat" value="2"> Filtro 2</label>
+                                        <label id="label-destino-cat-2"><input type="radio" name="destino-cat" value="2" id="radio-destino-cat-2"> Filtro 2</label>
                                     </div>
                                     <div class="destino-fila">
                                         <label><input type="radio" name="destino-cat" value="3" id="radio-destino-cat-3" disabled> Filtro 3</label>
@@ -611,11 +611,17 @@
                                 </label>
                             </div>
                             <div id="bloque-filtro3-contenedor" style="display:none">
-                                <h3>Filtro 3 <span class="nota-eje">(nuevo eje; Filtro 1 queda fijo)</span></h3>
+                                <h3>Filtro 3 <span class="nota-eje" id="nota-eje-3">(nuevo eje; Filtro 1 queda fijo)</span></h3>
                                 <div id="resumen-filtro3" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
+                                <div id="contenedor-contracolectivo-3" style="display:none">
+                                    <label class="check-contracolectivo">
+                                        <input type="checkbox" id="contracolectivo-3" checked onchange="toggleContracolectivo(3)">
+                                        Contracolectivo automático
+                                    </label>
+                                </div>
                             </div>
                             <div id="bloque-filtro4-contenedor" style="display:none">
-                                <h3>Filtro 4 <span class="nota-eje">(nuevo eje; Filtro 2 queda fijo)</span></h3>
+                                <h3>Filtro 4 <span class="nota-eje" id="nota-eje-4">(nuevo eje; Filtro 2 queda fijo)</span></h3>
                                 <div id="resumen-filtro4" class="bloque-filtro"><span class="vacio">Sin configurar</span></div>
                             </div>
                         </div>
@@ -881,9 +887,14 @@ let columnaSeleccionadaNumerica = null; // { nombre } o null
 let columnaSeleccionadaCategorica = null; // { nombre } o null
 let valoresPorColumna = {}; // columna -> lista de valores distintos (para el label del complementario)
 let filtros = { 1: null, 2: null, 3: null, 4: null }; // Filtro tal cual lo espera el backend
-// Eje A = Filtro 1 (+ Filtro 3 si se desactiva su contracolectivo automatico).
-// Eje B = Filtro 2 (+ Filtro 4 si se desactiva su contracolectivo automatico).
-let contracolectivo = { 1: true, 2: true };
+// Significado de contracolectivo[n] segun el modo (ver actualizarVisibilidadFiltros):
+// - "2 filtros": eje A = Filtro 1 (+ Filtro 3 si se desactiva contracolectivo[1]);
+//   eje B = Filtro 2 (+ Filtro 4 si se desactiva contracolectivo[2]). Sin cambios desde antes de v2.3.
+// - "1 filtro" (cadena, v2.3): contracolectivo[n] activo para el ultimo
+//   eslabon de la cadena es "parar aqui" (complementario automatico);
+//   desactivarlo abre Filtro n+1 como siguiente eslabon. contracolectivo[3]
+//   solo existe para este modo (Filtro 4 es siempre terminal, no tiene uno propio).
+let contracolectivo = { 1: true, 2: true, 3: true };
 
 // Switch "Filtro de colectivos" de la pestana "Seleccion de colectivo"
 // (2026-09-09, extendido a 3 vias en v2.3): UNICO en toda la app -
@@ -906,7 +917,7 @@ let filtroColectivoGlobal = true;
 
 const NOTA_MODO_COLECTIVO = {
     sin_filtro: 'Se estudia toda la MCVL sin filtrar.',
-    un_filtro: 'Con "1 filtro", Filtro 1 (con su contracolectivo) da 2 subcolectivos.',
+    un_filtro: 'Con "1 filtro", Filtro 1 da 2 subcolectivos. Si quitas su contracolectivo automático, se encadena con Filtro 2 (y así hasta Filtro 4) - siempre 2 subcolectivos al final de la cadena.',
     dos_filtros: 'Con "2 filtros", se cruzan Filtro 1 y Filtro 2 en 4 subcolectivos.',
 };
 
@@ -923,7 +934,7 @@ function _aplicarModoColectivoUI(modo) {
         btn.classList.toggle('activa', modoBoton === modo);
     });
     document.getElementById('nota-filtro-global').textContent = NOTA_MODO_COLECTIVO[modo];
-    actualizarVisibilidadFiltro2();
+    actualizarVisibilidadFiltros();
 }
 
 function cambiarModoColectivo(modo) {
@@ -941,17 +952,45 @@ function cambiarModoColectivo(modo) {
     resetearFiltrosColectivo();
 }
 
-// Oculta/deshabilita todo lo relacionado con Filtro 2 (su bloque de resumen,
-// la opcion "Filtro 2"/"Filtro 4" en "Asignar a") cuando el modo activo es
-// "1 filtro" - Filtro 2/4 solo tienen sentido cruzando con un eje B, que no
-// existe en ese modo. Filtro 3 SI se mantiene disponible (depende solo del
-// eje A, ver _eje() en colectivos.py).
-function actualizarVisibilidadFiltro2() {
+// Unico punto que decide que bloques Filtro 2/3/4 se ven y que opciones
+// "Asignar a" estan habilitadas - se llama tras cualquier cambio de modo o
+// de contracolectivo[1-3] (ver toggleContracolectivo, _aplicarModoColectivoUI,
+// resetearFiltrosColectivo). Logica distinta segun el modo:
+// - "2 filtros" (sin cambios desde antes de v2.3): Filtro 2 siempre
+//   disponible (eje B independiente de Filtro 1); Filtro 3 disponible si se
+//   apaga contracolectivo[1]; Filtro 4 si se apaga contracolectivo[2].
+// - "1 filtro" (cadena, v2.3): Filtro 2 disponible solo si se apaga
+//   contracolectivo[1]; Filtro 3 solo si ADEMAS se apaga contracolectivo[2];
+//   Filtro 4 solo si ADEMAS se apaga contracolectivo[3] - terminal, sin
+//   checkbox propio, no se puede seguir encadenando.
+function actualizarVisibilidadFiltros() {
     const unFiltro = modoColectivo === 'un_filtro';
-    document.getElementById('bloque-filtro2-contenedor').style.display = unFiltro ? 'none' : 'block';
+    const disponible = unFiltro
+        ? { 2: !contracolectivo[1], 3: !contracolectivo[1] && !contracolectivo[2], 4: !contracolectivo[1] && !contracolectivo[2] && !contracolectivo[3] }
+        : { 2: true, 3: !contracolectivo[1], 4: !contracolectivo[2] };
+    // A que radio "Asignar a" volver si se deshabilita uno que estaba
+    // marcado (se cierra ese hueco justo cuando el usuario reactiva el
+    // contracolectivo automatico que lo abria) - el filtro "dueño" de cada
+    // eslabon segun el modo.
+    const dueño = unFiltro ? { 2: 1, 3: 2, 4: 3 } : { 2: 1, 3: 1, 4: 2 };
+
+    document.getElementById('bloque-filtro2-contenedor').style.display = disponible[2] ? 'block' : 'none';
+    document.getElementById('bloque-filtro3-contenedor').style.display = disponible[3] ? 'block' : 'none';
+    document.getElementById('bloque-filtro4-contenedor').style.display = disponible[4] ? 'block' : 'none';
+    document.getElementById('contenedor-contracolectivo-3').style.display = (unFiltro && disponible[3]) ? 'block' : 'none';
+    // '' (no 'inline'/'block') para no pisar el display:block que ya fija
+    // el CSS (h3 .nota-eje) cuando esta visible.
+    document.getElementById('nota-eje-3').style.display = unFiltro ? 'none' : '';
+    document.getElementById('nota-eje-4').style.display = unFiltro ? 'none' : '';
+
     for (const grupo of GRUPOS_DESTINO) {
-        document.getElementById(`label-${grupo}-2`).style.display = unFiltro ? 'none' : 'inline';
-        document.getElementById(`label-${grupo}-4`).style.display = unFiltro ? 'none' : 'inline';
+        for (const n of [2, 3, 4]) {
+            const radio = document.getElementById(`radio-${grupo}-${n}`);
+            radio.disabled = !disponible[n];
+            if (!disponible[n] && radio.checked) {
+                document.querySelector(`input[name=${grupo}][value="${dueño[n]}"]`).checked = true;
+            }
+        }
     }
 }
 
@@ -965,15 +1004,15 @@ function actualizarVisibilidadFiltro2() {
 // Filtro N).
 function resetearFiltrosColectivo() {
     filtros = { 1: null, 2: null, 3: null, 4: null };
-    contracolectivo = { 1: true, 2: true };
+    contracolectivo = { 1: true, 2: true, 3: true };
     document.getElementById('contracolectivo-1').checked = true;
     document.getElementById('contracolectivo-2').checked = true;
+    document.getElementById('contracolectivo-3').checked = true;
     for (const grupo of GRUPOS_DESTINO) {
-        document.getElementById(`radio-${grupo}-3`).disabled = true;
-        document.getElementById(`radio-${grupo}-4`).disabled = true;
         const radio1 = document.querySelector(`input[name=${grupo}][value="1"]`);
         if (radio1) radio1.checked = true;
     }
+    actualizarVisibilidadFiltros();
     subgrupoSeleccionadoIndividual = gruposActivos()[0];
     subgrupoSeleccionadoCruce = gruposActivos()[0];
     for (let n = 1; n <= 4; n++) renderizarResumenFiltro(n);
@@ -1083,10 +1122,25 @@ function actualizarBotonCalcular() {
 // Misma condicion que ya usaba Calcular: cruce de ejes completo -> ya hay una
 // lista de IPFs por subcolectivo, aunque no se haya pulsado Calcular.
 function filtrosListos() {
+    if (modoColectivo === 'un_filtro') return cadenaUnFiltroLista();
     const ejeA = filtros[1] && (contracolectivo[1] || filtros[3]);
-    if (modoColectivo === 'un_filtro') return !!ejeA;
     const ejeB = filtros[2] && (contracolectivo[2] || filtros[4]);
     return !!(ejeA && ejeB);
+}
+
+// Modo "1 filtro": la cadena esta lista cuando el ultimo eslabon ABIERTO (el
+// mas profundo cuyo contracolectivo automatico sigue activo, o Filtro 4 si
+// se llego hasta el) esta el mismo configurado. Si un eslabon intermedio no
+// lo esta, el siguiente nunca se pudo abrir (misma logica que ya impide
+// avanzar "Asignar a" sin aplicar el filtro anterior, ver siguienteDestino).
+function cadenaUnFiltroLista() {
+    if (!filtros[1]) return false;
+    if (contracolectivo[1]) return true;
+    if (!filtros[2]) return false;
+    if (contracolectivo[2]) return true;
+    if (!filtros[3]) return false;
+    if (contracolectivo[3]) return true;
+    return !!filtros[4];
 }
 
 // Grupos de radios "Asignar a" duplicados (2026-09-09): uno por flujo
@@ -1100,20 +1154,11 @@ const GRUPOS_DESTINO = ['destino-num', 'destino-cat'];
 function toggleContracolectivo(n) {
     const activo = document.getElementById('contracolectivo-' + n).checked;
     contracolectivo[n] = activo;
-    const extra = n === 1 ? 3 : 4;
-
-    for (const grupo of GRUPOS_DESTINO) {
-        const radioExtra = document.getElementById(`radio-${grupo}-${extra}`);
-        radioExtra.disabled = activo;
-        if (activo && radioExtra.checked) {
-            document.querySelector(`input[name=${grupo}][value="${n}"]`).checked = true;
-        }
-    }
-    document.getElementById('bloque-filtro' + extra + '-contenedor').style.display = activo ? 'none' : 'block';
+    actualizarVisibilidadFiltros();
 
     if (!activo) {
-        // Se desactiva: si Filtro 1 y 2 ya estan aplicados, el hueco que se
-        // acaba de abrir (Filtro 3 o 4) es el siguiente destino logico -
+        // Se desactiva: el hueco que se acaba de abrir (ver
+        // actualizarVisibilidadFiltros) es el siguiente destino logico -
         // permite encadenar la siguiente seleccion de columna sin tocar el radio.
         avanzarDestino();
     }
@@ -1280,9 +1325,18 @@ function aplicarFiltro(tipo) {
 // seleccionando columna + Seleccionar sin tener que tocar el radio a mano.
 function siguienteDestino() {
     if (!filtros[1]) return '1';
-    if (modoColectivo !== 'un_filtro' && !filtros[2]) return '2';
+    if (modoColectivo === 'un_filtro') {
+        if (contracolectivo[1]) return null;
+        if (!filtros[2]) return '2';
+        if (contracolectivo[2]) return null;
+        if (!filtros[3]) return '3';
+        if (contracolectivo[3]) return null;
+        if (!filtros[4]) return '4';
+        return null;
+    }
+    if (!filtros[2]) return '2';
     if (!contracolectivo[1] && !filtros[3]) return '3';
-    if (modoColectivo !== 'un_filtro' && !contracolectivo[2] && !filtros[4]) return '4';
+    if (!contracolectivo[2] && !filtros[4]) return '4';
     return null;
 }
 
@@ -1341,11 +1395,19 @@ function renderizarResumenFiltro(n) {
     if (!filtro) { cont.innerHTML = '<span class="vacio">Sin configurar</span>'; return; }
 
     let html = `<div class="colectivo"><b>Colectivo:</b> ${etiquetaFiltro(filtro, true)}</div>`;
-    // Filtro 1/2 con el contracolectivo desactivado pasan a ser un filtro fijo
-    // (se aplican siempre, sin variar) y el eje lo define Filtro 3/4 en su
-    // lugar - estos ultimos si tienen su propio contracolectivo automatico.
-    if ((n === 1 || n === 2) && !contracolectivo[n]) {
-        html += `<div class="colectivo"><i>Filtro fijo: se aplica a todo el colectivo. El eje pasa a Filtro ${n + 2}.</i></div>`;
+    // Un filtro con su contracolectivo desactivado pasa a ser un eslabon fijo
+    // (se aplica siempre, sin variar) y lo que varia es el siguiente filtro
+    // de la cadena ("2 filtros": Filtro 1/2 -> Filtro 3/4, salto fijo al
+    // eje correspondiente; "1 filtro": Filtro 1/2/3 -> el siguiente numero,
+    // ver contracolectivo[3] solo existe en ese modo) - el ultimo filtro de
+    // cada cadena/eje si tiene su propio contracolectivo automatico.
+    const esEslabonFijo = modoColectivo === 'un_filtro'
+        ? (n === 1 || n === 2 || n === 3) && !contracolectivo[n]
+        : (n === 1 || n === 2) && !contracolectivo[n];
+    if (esEslabonFijo) {
+        const siguiente = modoColectivo === 'un_filtro' ? n + 1 : n + 2;
+        const texto = modoColectivo === 'un_filtro' ? 'La cadena sigue en' : 'El eje pasa a';
+        html += `<div class="colectivo"><i>Filtro fijo: se aplica a todo el colectivo. ${texto} Filtro ${siguiente}.</i></div>`;
     } else {
         html += `<div class="colectivo"><b>Contracolectivo:</b> ${etiquetaFiltro(filtro, false)}</div>`;
     }
@@ -1401,18 +1463,32 @@ function actualizarModoAnalisis() {
     actualizarBotonExportar();
 }
 
-// Filtro 3/4 solo viajan al backend si su eje tiene el contracolectivo
-// automatico desactivado; si no, el backend calcula el complementario solo.
+// "2 filtros": Filtro 3/4 solo viajan al backend si su eje tiene el
+// contracolectivo automatico desactivado; si no, el backend calcula el
+// complementario solo. "1 filtro": Filtro 2/3/4 solo viajan si TODOS los
+// eslabones anteriores de la cadena tienen su contracolectivo desactivado
+// (ver condiciones_de_subgrupos en colectivos.py).
 function cuerpoPeticion() {
     const body = { filtro1: filtros[1] };
-    if (!contracolectivo[1]) body.filtro3 = filtros[3];
-    // Modo "1 filtro": filtro2 NO viaja (ni filtro4, que depende de el) - su
-    // ausencia es la senyal que lee condiciones_de_subgrupos en el backend
-    // para dar 2 subgrupos en vez de 4.
-    if (modoColectivo !== 'un_filtro') {
-        body.filtro2 = filtros[2];
-        if (!contracolectivo[2]) body.filtro4 = filtros[4];
+    if (modoColectivo === 'un_filtro') {
+        // Cadena (ver condiciones_de_subgrupos en colectivos.py): un_filtro=true
+        // es la senyal que distingue "filtro2 informado = segundo eslabon" de
+        // "filtro2 informado = eje B" (modo "2 filtros"). Cada filtro solo
+        // viaja si el anterior de la cadena tiene el contracolectivo
+        // desactivado - igual que ya pasaba con filtro3 en el modo de 2 filtros.
+        body.un_filtro = true;
+        if (!contracolectivo[1]) {
+            body.filtro2 = filtros[2];
+            if (!contracolectivo[2]) {
+                body.filtro3 = filtros[3];
+                if (!contracolectivo[3]) body.filtro4 = filtros[4];
+            }
+        }
+        return body;
     }
+    body.filtro2 = filtros[2];
+    if (!contracolectivo[1]) body.filtro3 = filtros[3];
+    if (!contracolectivo[2]) body.filtro4 = filtros[4];
     return body;
 }
 
