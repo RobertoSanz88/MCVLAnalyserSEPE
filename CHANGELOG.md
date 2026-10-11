@@ -8,12 +8,14 @@
   categórica desglosada por subcolectivo o por categoría) se quedan sin ese botón a propósito, igual que los
   mini-histogramas de Cruce de variables.
 
-## v2.3 — Selección de colectivo con 1 filtro (2026-10-10)
+## v2.3 — Selección de colectivo con 1 filtro (2026-10-10, ajustado 2026-10-11)
 
 - **"Selección de colectivo" admite un solo filtro**, además de los 2 habituales: switch de tres posiciones
-  ("Sin filtro", "1 filtro", "2 filtros") donde antes había un Sí/No. Con 1 filtro, el colectivo se reparte en
-  2 subgrupos (lo cumplen / no lo cumplen) en vez de los 4 de siempre; con contracolectivo activado se puede
-  seguir refinando con un filtro secundario, igual que con 2 filtros.
+  ("Sin filtro", "1 filtro", "2 filtros") donde antes había un Sí/No. Con 1 filtro, el colectivo siempre se
+  reparte en 2 subgrupos (lo cumplen / no lo cumplen), pero quitar el contracolectivo automático de un filtro
+  no da el complementario: encadena con el siguiente (Filtro 1 → 2 → 3 → 4), cada eslabón menos el último
+  queda fijo para todo el colectivo. Ej.: mayores de 45 → (quitando contracolectivo) hombres → latinos →
+  autónomos/no autónomos como split final. Filtro 4 es siempre el último eslabón posible.
 - Al cambiar entre "1 filtro" y "2 filtros" (en cualquier sentido), Análisis de personas, Trayectorias de
   personas y Cruce de variables se refrescan a su estado inicial ("Configura Filtro 1 y Filtro 2...") en vez
   de quedarse con los datos ya calculados del modo anterior.
