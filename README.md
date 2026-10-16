@@ -33,8 +33,9 @@ Los Parquet se distribuyen por el canal interno del Observatorio; el `.exe` (sin
    por muestra añadida (2024, 2023...), y las opciones Añadir, Editar y Eliminar muestra. Elegir otra muestra
    recarga la aplicación en su estado inicial (sin colectivo ni filtros de la muestra anterior). Eliminar solo
    quita la muestra de la lista: nunca borra ficheros.
-7. **Descripción de variables** (Personas extendida y Afiliación extendida, con búsqueda y con una
-   explicación de cómo se construye cada una) y **Acerca de** (este texto, con las reglas de consistencia y
+7. **Descripción de variables** (Personas extendida y Afiliación extendida, con búsqueda, con una
+   explicación de cómo se construye cada una y, en las variables con categorías calculadas, una tabla de cómo
+   se asigna cada categoría) y **Acerca de** (este texto, con las reglas de consistencia y
    los casos raros de los datos), desde el mismo menú.
 
 Los resultados de Análisis, Trayectorias y Cruce se pueden exportar a Excel y CSV.

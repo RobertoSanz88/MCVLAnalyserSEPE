@@ -1,5 +1,22 @@
 # Novedades por versión
 
+## v2.3 — cómo se asigna cada categoría, en Descripción de variables (2026-10-16)
+
+- **15 variables de Personas llevan ahora una tabla desplegable "categoría / cómo se asigna"** en la vista
+  "Descripción de variables" (enlace "▸ Ver cómo se asigna cada categoría" en la celda "Cómo se construye").
+  Son las variables cuyas categorías se calculan con reglas, no solo se traducen de un diccionario:
+  `Situacion_actual_afiliacion`, `Situacion_Paro_Ocupacion`, `Nacionalidad_agrupado`, `Pais_nacim_agrupado`,
+  `Tipo_Contr_ppal_Agrupado`, `tipo_contr_ult_baja`, `Reg_cotiz_ppal_Agrupado`, `Pension_actual`,
+  `Pension_todas_cobradas`, los tres `Grupo_cotiz_*` y las tres `Discap_*`. Algunas llevan además una nota (p. ej.
+  la de que `Asimilado_al_alta_subs52` sale del TRL 753/754 y también lo usan fijos discontinuos más jóvenes).
+- El buscador de esa vista también mira dentro de estas tablas: buscar "N24" encuentra las variables de nacionalidad.
+- Las reglas se escriben en `tools/categorias_variables.py` (los grupos de países, las etiquetas de grupo de
+  cotización, de tipo de contrato y de régimen se importan del propio ETL, para que no se desincronicen) y
+  `tests/test_variables.py` comprueba que las categorías documentadas cubren los valores reales de la muestra.
+- Al leer la tabla de nacionalidades se ve algo que conviene saber: `paises_lejanos` incluye Ucrania, el resto de
+  países europeos, "otros países y territorios" y el código 99 ("No consta"), no solo Asia y Pacífico. Es una
+  decisión del ETL anterior, no se ha tocado.
+
 ## v2.3 — exportar el gráfico de Trayectorias de personas (2026-10-10)
 
 - **El gráfico de línea de "Trayectorias de personas" (variable numérica) ya se puede descargar como PNG**,
