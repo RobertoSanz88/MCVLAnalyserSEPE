@@ -15,3 +15,16 @@
 #acerca-cuerpo pre { background: #f2f6f4; padding: 0.6rem; overflow: auto; }
 #acerca-cuerpo details { border: 1px solid #b9cfc6; border-radius: 6px; margin: 0.8rem 0; padding: 0.4rem 0.9rem; }
 #acerca-cuerpo summary { cursor: pointer; font-weight: 800; padding: 0.3rem 0; }
+.var-ver-categorias { margin-top: 0.4rem; padding: 0.2rem 0.6rem; border: 1px solid #2f7d5b; border-radius: 5px;
+                      background: #fff; color: #2f7d5b; cursor: pointer; font-size: 0.8rem; font-weight: 700; }
+.var-ver-categorias:hover { background: #e8f1ed; }
+.var-detalle > td { background: #f6faf8; padding: 0.6rem 0.8rem 0.9rem 1rem; }
+.var-detalle-contenido { position: sticky; left: 1rem; width: min(900px, 70vw); }
+/* Prefijo #var-tabla a proposito: sin el, las reglas de la tabla principal (celda 2 en monoespaciado y sin
+   salto de linea, cabecera pegajosa) ganan por especificidad tambien dentro de la mini-tabla anidada. */
+#var-tabla .var-categorias { border-collapse: collapse; width: 100%; font-size: 0.82rem; background: #fff; }
+#var-tabla .var-categorias th { background: #dfeae5; text-align: left; padding: 0.3rem 0.6rem; position: static; }
+#var-tabla .var-categorias td { padding: 0.3rem 0.6rem; border-top: 1px solid #dfe9e4; vertical-align: top;
+                                font-family: inherit; white-space: normal; font-weight: 400; }
+#var-tabla .var-categorias td:first-child { font-family: var(--mono, monospace); white-space: nowrap; font-weight: 700; }
+.var-categorias-nota { margin: 0.6rem 0 0; font-size: 0.8rem; color: #4d6b5e; font-style: italic; }

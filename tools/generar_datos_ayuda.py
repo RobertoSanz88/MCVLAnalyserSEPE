@@ -225,13 +225,17 @@ def _esquema(carpeta: Path, fichero: str):
 def generar_variables(carpeta: Path) -> dict:
     md = _descripciones_md()
     md.update({normalizar_nombre(k): v for k, v in DESCRIPCIONES_EXTRA.items()})
+    from categorias_variables import categorias_personas  # tablas "como se asigna cada categoria" (v2.3)
+    categorias = categorias_personas()
     personas = {}
     for i, (n, t) in enumerate(_esquema(carpeta, "tabla_personas_extendida.parquet")):
         clave = normalizar_nombre(n)
         es_original = n in PERSONAS_ORIGINALES
+        cat = categorias.get(clave, {"filas": [], "nota": ""})
         personas[clave] = {"orden": i + 1, "tipo": t, "origen": "original" if es_original else "derivada",
                            "descripcion": md.get(clave, ""),
-                           "construccion": TEXTO_ORIGINAL if es_original else CONSTRUCCION_PERSONAS.get(clave, "")}
+                           "construccion": TEXTO_ORIGINAL if es_original else CONSTRUCCION_PERSONAS.get(clave, ""),
+                           "categorias": cat["filas"], "categorias_nota": cat["nota"]}
     afiliacion = {}
     for i, (n, t) in enumerate(_esquema(carpeta, "tabla_afiliacion_extendida.parquet")):
         if i < len(AFILIACION_ORIGINALES):

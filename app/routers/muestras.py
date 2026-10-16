@@ -142,7 +142,9 @@ def variables():
             info = catalogo[tabla].get(_normalizar(n) if tabla == "personas" else n, {})
             filas.append({"nombre": _normalizar(n) if tabla == "personas" else n, "tipo": t,
                           "origen": info.get("origen", ""), "descripcion": info.get("descripcion") or "sin descripción",
-                          "construccion": info.get("construccion") or "sin información"})
+                          "construccion": info.get("construccion") or "sin información",
+                          "categorias": info.get("categorias", []),
+                          "categorias_nota": info.get("categorias_nota", "")})
         salida[tabla] = filas
     return salida
 
