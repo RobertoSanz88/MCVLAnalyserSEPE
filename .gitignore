@@ -11,3 +11,6 @@ __pycache__/
 log_etl.txt
 .tmp/
 MCVLGuia20260707.pdf
+
+# Detalles del entorno corporativo (no versionar)
+CLAUDE.md
